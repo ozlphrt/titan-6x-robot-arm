@@ -1211,8 +1211,10 @@ export class BallInterceptor {
         }
       } else if (ap.throwState === 'RETRIEVE_CARRY') {
         // Smoothly lift and carry ball over into the home circle (r <= 0.85m < 1.35m)
+        robot.getTCPWorldPosition(tcpPos);
         if (ap.heldBall && ap.heldBall.mesh) {
           ap.heldBall.velocity.set(0, 0, 0);
+          ap.heldBall.mesh.position.copy(tcpPos);
         }
         robot.setGripper(1.0);
 
@@ -1224,7 +1226,7 @@ export class BallInterceptor {
         const carryT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / cDuration));
         // Quintic smoothstep for horizontal carry trajectory
         const pCarry = carryT * carryT * carryT * (carryT * (carryT * 6.0 - 15.0) + 10.0);
-        const arcY = 0.16 + Math.sin(carryT * Math.PI) * 0.28;
+        const arcY = 0.20 + Math.sin(carryT * Math.PI) * 0.28;
         ap.pursuitTarget.set(
           ap.graspStartPos.x + (sanctuaryPos.x - ap.graspStartPos.x) * pCarry,
           arcY,
@@ -1240,8 +1242,10 @@ export class BallInterceptor {
         }
       } else if (ap.throwState === 'RETRIEVE_PLACE') {
         // Lower down smoothly and gently place inside home circle
+        robot.getTCPWorldPosition(tcpPos);
         if (ap.heldBall && ap.heldBall.mesh) {
           ap.heldBall.velocity.set(0, 0, 0);
+          ap.heldBall.mesh.position.copy(tcpPos);
         }
         const angle = ((ap.retainsCount || 0) * 1.35) % (Math.PI * 2);
         const rIn = 0.55 + ((ap.retainsCount || 0) % 3) * 0.14;
@@ -1260,6 +1264,7 @@ export class BallInterceptor {
           this.audio.playPneumatic(false);
 
           if (ap.heldBall && ap.heldBall.mesh) {
+            ap.heldBall.mesh.position.copy(tcpPos);
             ap.heldBall.isHeld = false;
             // Gentle inward settling nudge towards circle center
             const dirIn = new THREE.Vector3(ap.basePos.x - ap.heldBall.mesh.position.x, 0, ap.basePos.z - ap.heldBall.mesh.position.z).normalize();
@@ -1556,9 +1561,12 @@ export class BallInterceptor {
             newPos.copy(originalTo);
             ap.pursuitVelocity.set(0, 0, 0);
           }
-          ap.pursuitPos.copy(newPos);
-
           kinematics.solveIK(ap.pursuitPos, 18, 0.002, false, ap.currentWristRoll, ap.currentWristPitch);
+          robot.getTCPWorldPosition(tcpPos);
+          if (ap.heldBall && ap.heldBall.mesh) {
+            ap.heldBall.mesh.position.copy(tcpPos);
+            ap.heldBall.velocity.set(0, 0, 0);
+          }
           continue;
         }
 
