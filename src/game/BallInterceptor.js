@@ -607,7 +607,7 @@ export class BallInterceptor {
           strikePos.z = basePos.z + (sDz / sH) * 1.35;
         }
         
-        strikePos.y = Math.max(floorAtPos.y + 0.052 + yOffset, Math.min(simPos.y + yOffset, 0.40));
+        strikePos.y = Math.max(floorAtPos.y + ball.radius + yOffset, Math.min(simPos.y + yOffset, 0.40));
 
         const distFromTcp = currentTcp.distanceTo(strikePos);
         const timeNeeded = distFromTcp / armSpeed;
@@ -631,7 +631,7 @@ export class BallInterceptor {
       fallbackPos.z = basePos.z + (offset.z / fbH) * safeH;
     }
     const fbFloor = this.getFloorInfo(fallbackPos.x, fallbackPos.z);
-    fallbackPos.y = Math.max(fbFloor.y + ball.radius * 0.75 + yOffset, Math.min(1.40, fallbackPos.y));
+    fallbackPos.y = Math.max(fbFloor.y + ball.radius + yOffset, Math.min(1.40, fallbackPos.y));
 
     const strikeFallback = fallbackPos.clone().addScaledVector(rotatedAttackDir, ball.radius * 0.15);
     const sfDx = strikeFallback.x - basePos.x;
@@ -641,7 +641,7 @@ export class BallInterceptor {
       strikeFallback.x = basePos.x + (sfDx / sfH) * 1.35;
       strikeFallback.z = basePos.z + (sfDz / sfH) * 1.35;
     }
-    strikeFallback.y = Math.max(fbFloor.y + 0.052 + yOffset, strikeFallback.y);
+    strikeFallback.y = Math.max(fbFloor.y + ball.radius + yOffset, strikeFallback.y);
 
     return {
       interceptPos: strikeFallback,
@@ -965,17 +965,19 @@ export class BallInterceptor {
           ap.throwMode = 'EJECT';
           ap.throwState = 'IDLE';
         } else {
-          // Track directly onto ammo ball center
+          // Track directly onto ammo ball center at exact spherical equator
           const ballPos = ap.throwBall.mesh.position;
-          ap.pursuitTarget.set(ballPos.x, Math.max(0.040, ballPos.y), ballPos.z);
+          const floorInfo = this.getFloorInfo(ballPos.x, ballPos.z);
+          ap.pursuitTarget.set(ballPos.x, Math.max(floorInfo.y + ap.throwBall.radius, ballPos.y), ballPos.z);
 
           const distToBall = tcpPos.distanceTo(ballPos);
-          if (distToBall <= ap.throwBall.radius + 0.13) {
+          if (distToBall <= ap.throwBall.radius + 0.08) {
             // CLAMP / GRASP!
             robot.setGripper(1.0);
             ap.heldBall = ap.throwBall;
             ap.heldBall.isHeld = true;
             ap.heldBall.velocity.set(0, 0, 0);
+            ap.heldBall.mesh.position.copy(tcpPos);
             this.audio.playPneumatic(true);
             ap.throwState = 'WINDUP';
             ap.throwTimer = 0.26;

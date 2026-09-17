@@ -631,61 +631,61 @@ export class RobotModel {
     this.gripperGroup = new THREE.Group();
     this.gripperGroup.name = 'ServoGripper';
 
-    // Sculpted Pneumatic Actuator Body with wider clearance for ball grasping
-    const gBaseGeo = createRoundedBoxGeometry(0.19, 0.055, 0.075, 0.018, 3);
+    // Heavy Industrial Actuator Body with wide guide span for effortless ball grasping
+    const gBaseGeo = createRoundedBoxGeometry(0.25, 0.055, 0.080, 0.016, 3);
     const gBase = new THREE.Mesh(gBaseGeo, this.materials.darkMetal);
     gBase.position.y = 0.028;
     gBase.castShadow = true;
     this.gripperGroup.add(gBase);
 
     // Dual Hardened Chrome Linear Guide Rails
-    [-0.018, 0.018].forEach(z => {
-      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.18, 16), this.materials.chromePiston);
+    [-0.020, 0.020].forEach(z => {
+      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.25, 16), this.materials.chromePiston);
       rail.rotateZ(Math.PI / 2);
       rail.position.set(0, 0.03, z);
       this.gripperGroup.add(rail);
     });
 
-    // Finger Left with Radiused Edges & Grooved Friction Pads
+    // Finger Left with Radiused Edges & Ergonomic High-Traction Rubber Pads
     this.fingerLeft = new THREE.Group();
-    this.fingerLeft.position.set(-0.085, 0.055, 0);
+    this.fingerLeft.position.set(-0.115, 0.055, 0);
 
-    const fingerLGeo = createRoundedBoxGeometry(0.016, 0.095, 0.042, 0.004, 2);
+    const fingerLGeo = createRoundedBoxGeometry(0.018, 0.135, 0.048, 0.004, 2);
     const fingerLMesh = new THREE.Mesh(fingerLGeo, this.materials.primaryPaint);
-    fingerLMesh.position.y = 0.0475;
+    fingerLMesh.position.y = 0.0675;
     fingerLMesh.castShadow = true;
     this.fingerLeft.add(fingerLMesh);
 
     const padL = new THREE.Mesh(
-      new THREE.BoxGeometry(0.006, 0.075, 0.038),
+      new THREE.BoxGeometry(0.010, 0.110, 0.044),
       this.materials.rubberPads
     );
-    padL.position.set(0.01, 0.05, 0);
+    padL.position.set(0.011, 0.0675, 0);
     this.fingerLeft.add(padL);
     this.gripperGroup.add(this.fingerLeft);
 
-    // Finger Right with Radiused Edges & Grooved Friction Pads
+    // Finger Right with Radiused Edges & Ergonomic High-Traction Rubber Pads
     this.fingerRight = new THREE.Group();
-    this.fingerRight.position.set(0.085, 0.055, 0);
+    this.fingerRight.position.set(0.115, 0.055, 0);
 
-    const fingerRGeo = createRoundedBoxGeometry(0.016, 0.095, 0.042, 0.004, 2);
+    const fingerRGeo = createRoundedBoxGeometry(0.018, 0.135, 0.048, 0.004, 2);
     const fingerRMesh = new THREE.Mesh(fingerRGeo, this.materials.primaryPaint);
-    fingerRMesh.position.y = 0.0475;
+    fingerRMesh.position.y = 0.0675;
     fingerRMesh.castShadow = true;
     this.fingerRight.add(fingerRMesh);
 
     const padR = new THREE.Mesh(
-      new THREE.BoxGeometry(0.006, 0.075, 0.038),
+      new THREE.BoxGeometry(0.010, 0.110, 0.044),
       this.materials.rubberPads
     );
-    padR.position.set(-0.01, 0.05, 0);
+    padR.position.set(-0.011, 0.0675, 0);
     this.fingerRight.add(padR);
     this.gripperGroup.add(this.fingerRight);
 
-    // Gripper TCP Center Point Marker
+    // Gripper TCP Center Point Marker: perfectly centered within rubber grasping cradle
     this.tcpMarker = new THREE.Object3D();
     this.tcpMarker.name = 'TCP_Marker';
-    this.tcpMarker.position.y = 0.15;
+    this.tcpMarker.position.y = 0.125;
     this.gripperGroup.add(this.tcpMarker);
 
     this.toolsGroup.add(this.gripperGroup);
@@ -776,9 +776,9 @@ export class RobotModel {
 
   setGripper(val) {
     this.gripperPosition = Math.max(0, Math.min(1, val));
-    // When val = 0 (open): stroke = 0.088m (finger separation = 0.176m, easily holds ball)
-    // When val = 1 (clamped): stroke = 0.035m (firm clamp)
-    const stroke = 0.088 - this.gripperPosition * 0.053;
+    // When val = 0 (open wide): stroke = 0.115m (finger separation = 0.230m, plenty of clearance to encircle ball smoothly)
+    // When val = 1 (clamped): stroke = 0.055m (finger separation = 0.110m, snug rubber-padded clamp onto ball)
+    const stroke = 0.115 - this.gripperPosition * 0.060;
     this.fingerLeft.position.x = -stroke;
     this.fingerRight.position.x = stroke;
   }
