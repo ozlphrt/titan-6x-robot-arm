@@ -146,6 +146,11 @@ export class BallInterceptor {
         defaultRestPos: restPos.clone(),
         currentTargetBall: null,
         lockedTargetBall: null,
+        throwState: 'IDLE', // 'IDLE', 'APPROACH', 'CLAMP', 'WINDUP', 'RELEASE'
+        throwBall: null,
+        heldBall: null,
+        throwTimer: 0,
+        targetThrowDir: new THREE.Vector3(0, 0, 0),
         ejectionsCount: 0,
         retainsCount: 0
       };
@@ -354,7 +359,7 @@ export class BallInterceptor {
       // 1. Single Ball Integration: Gravity, Velocity, Floor & Perimeter Wall Bounces
       for (let i = 0; i < numBalls; i++) {
         const b = this.balls[i];
-        if (!b || !b.mesh) continue;
+        if (!b || !b.mesh || b.isHeld) continue;
 
         const pos = b.mesh.position;
 
@@ -423,13 +428,13 @@ export class BallInterceptor {
       // 2. Pairwise Elastic Ball-to-Ball Collisions (with Fast Bounding Box Early Exit)
       for (let i = 0; i < numBalls; i++) {
         const b1 = this.balls[i];
-        if (!b1 || !b1.mesh) continue;
+        if (!b1 || !b1.mesh || b1.isHeld) continue;
         const p1 = b1.mesh.position;
         const r1 = b1.radius;
 
         for (let j = i + 1; j < numBalls; j++) {
           const b2 = this.balls[j];
-          if (!b2 || !b2.mesh) continue;
+          if (!b2 || !b2.mesh || b2.isHeld) continue;
           const p2 = b2.mesh.position;
           const minDist = r1 + b2.radius;
 
@@ -620,7 +625,7 @@ export class BallInterceptor {
       }
     }
 
-    // 3. Multi-Arm Push Contact & Circle Strategy (Keep Own Color / Eject Opponents)
+    // 3. Multi-Arm Push Contact, Grab & Throw for Stuck Balls
     for (let rIdx = 0; rIdx < this.robots.length; rIdx++) {
       const robot = this.robots[rIdx];
       const ap = this.armPursuits[rIdx];
@@ -632,108 +637,208 @@ export class BallInterceptor {
       robot.getTCPWorldPosition(tcpPos);
       const armColliders = robot.getArmColliders();
 
+      // Check stuck status for all opponent balls in this arm's zone
       for (let i = 0; i < this.balls.length; i++) {
         const b = this.balls[i];
-        if (!b || !b.mesh) continue;
+        if (!b || !b.mesh || b.isHeld) continue;
         const pos = b.mesh.position;
 
         const isOwnColor = (b.teamId === armTeam);
-
-        // Distance from this arm base
         const dxBase = pos.x - basePos.x;
         const dzBase = pos.z - basePos.z;
         const distBase = Math.hypot(dxBase, dzBase);
 
-        // --- Active Gripper / TCP Push Contact Zone ---
-        const distToTcp = pos.distanceTo(tcpPos);
-        const pushThreshold = b.radius + 0.085;
-        const canBePushed = (now - b.lastPushTime) > 240;
-
-        if (distToTcp <= pushThreshold && pos.y > 0.04 && canBePushed) {
-          b.lastPushTime = now;
-
-          let pushDir;
-          let pushForce;
-
-          if (!isOwnColor) {
-            // EJECT OPPONENT BALL: push towards opponent's home base or out toward center
-            const oppBase = this.armPursuits[b.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
-            const dxOpp = oppBase.x - pos.x;
-            const dzOpp = oppBase.z - pos.z;
-            const dOpp = Math.hypot(dxOpp, dzOpp);
-
-            if (dOpp > 0.1) {
-              pushDir = new THREE.Vector3(dxOpp / dOpp, 0, dzOpp / dOpp);
-            } else {
-              pushDir = distBase > 0.001 ? new THREE.Vector3(dxBase / distBase, 0, dzBase / distBase) : new THREE.Vector3(1, 0, 0);
-            }
-            pushForce = 2.4 + Math.random() * 0.7;
-            ap.ejectionsCount++;
-            this.score += 50;
+        // Stuck detection: opponent ball lingering in circle without leaving
+        if (!isOwnColor && distBase <= 1.30) {
+          const speed = b.velocity.length();
+          if (speed < 0.50) {
+            b.stuckTime = (b.stuckTime || 0) + deltaTime;
           } else {
-            // RETAIN OWN BALL: if near/past perimeter, push back INWARD toward station base!
-            const dxIn = basePos.x - pos.x;
-            const dzIn = basePos.z - pos.z;
-            const dIn = Math.hypot(dxIn, dzIn);
-            pushDir = dIn > 0.001 ? new THREE.Vector3(dxIn / dIn, 0, dzIn / dIn) : new THREE.Vector3(0, 0, 0);
-            pushForce = 1.2 + Math.random() * 0.4;
-            ap.retainsCount++;
-            this.score += 20;
+            b.stuckTime = Math.max(0, (b.stuckTime || 0) - deltaTime * 0.4);
           }
 
-          // Impart push velocity
-          b.velocity.x = pushDir.x * pushForce;
-          b.velocity.z = pushDir.z * pushForce;
-          b.velocity.y = 0.45 + Math.random() * 0.30;
-          b.bounces++;
+          // If ball has been stuck for > 0.4s, and arm is idle, initiate Grab & Throw!
+          if (b.stuckTime > 0.40 && ap.throwState === 'IDLE') {
+            ap.throwState = 'APPROACH';
+            ap.throwBall = b;
+            ap.throwTimer = 0;
+            robot.setGripper(0.0); // Open wide!
+          }
+        }
 
-          this.pushCount++;
-          this.combo++;
-          this.lastPushTime = now;
+        // --- Active Gripper / TCP Push Contact Zone (Normal Non-Stuck Pushes) ---
+        if (ap.throwState === 'IDLE') {
+          const distToTcp = pos.distanceTo(tcpPos);
+          const pushThreshold = b.radius + 0.085;
+          const canBePushed = (now - b.lastPushTime) > 240;
 
-          // Trigger outward ripple shockwave & tactile sound
-          this.createPushRippleEffect(pos, b.color, b.radius, pushDir);
+          if (distToTcp <= pushThreshold && pos.y > 0.04 && canBePushed) {
+            b.lastPushTime = now;
 
-          // Cycle gripper jaws for active swatting motion
-          robot.setGripper(0.85);
-          setTimeout(() => robot.setGripper(0.0), 160);
+            let pushDir;
+            let pushForce;
+
+            if (!isOwnColor) {
+              // EJECT OPPONENT BALL
+              const oppBase = this.armPursuits[b.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
+              const dxOpp = oppBase.x - pos.x;
+              const dzOpp = oppBase.z - pos.z;
+              const dOpp = Math.hypot(dxOpp, dzOpp);
+
+              if (dOpp > 0.1) {
+                pushDir = new THREE.Vector3(dxOpp / dOpp, 0, dzOpp / dOpp);
+              } else {
+                pushDir = distBase > 0.001 ? new THREE.Vector3(dxBase / distBase, 0, dzBase / distBase) : new THREE.Vector3(1, 0, 0);
+              }
+              pushForce = 2.4 + Math.random() * 0.7;
+              ap.ejectionsCount++;
+              this.score += 50;
+            } else {
+              // RETAIN OWN BALL
+              const dxIn = basePos.x - pos.x;
+              const dzIn = basePos.z - pos.z;
+              const dIn = Math.hypot(dxIn, dzIn);
+              pushDir = dIn > 0.001 ? new THREE.Vector3(dxIn / dIn, 0, dzIn / dIn) : new THREE.Vector3(0, 0, 0);
+              pushForce = 1.2 + Math.random() * 0.4;
+              ap.retainsCount++;
+              this.score += 20;
+            }
+
+            b.velocity.x = pushDir.x * pushForce;
+            b.velocity.z = pushDir.z * pushForce;
+            b.velocity.y = 0.45 + Math.random() * 0.30;
+            b.bounces++;
+
+            this.pushCount++;
+            this.combo++;
+            this.lastPushTime = now;
+
+            this.createPushRippleEffect(pos, b.color, b.radius, pushDir);
+            robot.setGripper(0.85);
+            setTimeout(() => robot.setGripper(0.0), 160);
+          }
         }
 
         // --- Physical Robot Arm Segment Collisions & Deflections ---
-        for (const col of armColliders) {
-          let closestPoint = null;
-          const colRadius = col.radius;
+        if (!b.isHeld) {
+          for (const col of armColliders) {
+            let closestPoint = null;
+            const colRadius = col.radius;
 
-          if (col.type === 'sphere') {
-            closestPoint = col.center;
-          } else if (col.type === 'capsule') {
-            const ab = new THREE.Vector3().subVectors(col.p2, col.p1);
-            const apVec = new THREE.Vector3().subVectors(pos, col.p1);
-            const abLenSq = ab.lengthSq();
-            const t = abLenSq > 0.0001 ? Math.max(0, Math.min(1, apVec.dot(ab) / abLenSq)) : 0;
-            closestPoint = new THREE.Vector3().copy(col.p1).addScaledVector(ab, t);
-          }
+            if (col.type === 'sphere') {
+              closestPoint = col.center;
+            } else if (col.type === 'capsule') {
+              const ab = new THREE.Vector3().subVectors(col.p2, col.p1);
+              const apVec = new THREE.Vector3().subVectors(pos, col.p1);
+              const abLenSq = ab.lengthSq();
+              const t = abLenSq > 0.0001 ? Math.max(0, Math.min(1, apVec.dot(ab) / abLenSq)) : 0;
+              closestPoint = new THREE.Vector3().copy(col.p1).addScaledVector(ab, t);
+            }
 
-          if (closestPoint) {
-            const diff = new THREE.Vector3().subVectors(pos, closestPoint);
-            const dist = diff.length();
-            const minDist = colRadius + b.radius;
+            if (closestPoint) {
+              const diff = new THREE.Vector3().subVectors(pos, closestPoint);
+              const dist = diff.length();
+              const minDist = colRadius + b.radius;
 
-            if (dist < minDist && dist > 0.0001) {
-              const normal = diff.clone().normalize();
-              pos.copy(closestPoint).addScaledVector(normal, minDist + 0.006);
-              b.mesh.position.copy(pos);
+              if (dist < minDist && dist > 0.0001) {
+                const normal = diff.clone().normalize();
+                pos.copy(closestPoint).addScaledVector(normal, minDist + 0.006);
+                b.mesh.position.copy(pos);
 
-              const outBaseDir = distBase > 0.001 ? new THREE.Vector3(dxBase / distBase, 0, dzBase / distBase) : normal;
-              const vDotN = b.velocity.dot(normal);
-              if (vDotN < 0) {
-                b.velocity.addScaledVector(normal, -(1.0 + b.restitution) * vDotN);
+                const outBaseDir = distBase > 0.001 ? new THREE.Vector3(dxBase / distBase, 0, dzBase / distBase) : normal;
+                const vDotN = b.velocity.dot(normal);
+                if (vDotN < 0) {
+                  b.velocity.addScaledVector(normal, -(1.0 + b.restitution) * vDotN);
+                }
+                b.velocity.addScaledVector(outBaseDir, 0.65 + Math.random() * 0.30);
+                b.bounces++;
+                this.audio.playClick();
               }
-              b.velocity.addScaledVector(outBaseDir, 0.65 + Math.random() * 0.30);
-              b.bounces++;
-              this.audio.playClick();
             }
           }
+        }
+      }
+
+      // --- GRAB & THROW STATE MACHINE FOR THIS ARM ---
+      if (ap.throwState === 'APPROACH') {
+        robot.setGripper(0.0); // Open wide!
+
+        if (!ap.throwBall || !ap.throwBall.mesh || ap.throwBall.isHeld) {
+          ap.throwState = 'IDLE';
+        } else {
+          // Track directly above/onto ball center
+          const ballPos = ap.throwBall.mesh.position;
+          ap.pursuitTarget.set(ballPos.x, Math.max(0.09, ballPos.y + 0.015), ballPos.z);
+
+          const distToBall = tcpPos.distanceTo(ballPos);
+          if (distToBall <= ap.throwBall.radius + 0.08) {
+            // CLAMP / GRASP!
+            robot.setGripper(1.0);
+            ap.heldBall = ap.throwBall;
+            ap.heldBall.isHeld = true;
+            ap.heldBall.velocity.set(0, 0, 0);
+            this.audio.playClick();
+            ap.throwState = 'WINDUP';
+            ap.throwTimer = 0.28;
+
+            // Compute throw direction toward opponent station
+            const oppBase = this.armPursuits[ap.heldBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
+            ap.targetThrowDir.set(oppBase.x - ap.basePos.x, 0, oppBase.z - ap.basePos.z).normalize();
+            if (ap.targetThrowDir.lengthSq() < 0.001) {
+              ap.targetThrowDir.set(-ap.basePos.x, 0, -ap.basePos.z).normalize();
+            }
+          }
+        }
+      } else if (ap.throwState === 'WINDUP') {
+        // Cock arm back and up into high wind-up position
+        if (ap.heldBall && ap.heldBall.mesh) {
+          ap.heldBall.mesh.position.copy(tcpPos);
+          ap.heldBall.velocity.set(0, 0, 0);
+        }
+
+        const windUpPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.95, 0)).addScaledVector(ap.targetThrowDir, -0.35);
+        ap.pursuitTarget.copy(windUpPos);
+
+        ap.throwTimer -= deltaTime;
+        if (ap.throwTimer <= 0) {
+          // Transition to forward power swing
+          ap.throwState = 'RELEASE';
+          ap.throwTimer = 0.14;
+        }
+      } else if (ap.throwState === 'RELEASE') {
+        if (ap.heldBall && ap.heldBall.mesh) {
+          ap.heldBall.mesh.position.copy(tcpPos);
+          ap.heldBall.velocity.set(0, 0, 0);
+        }
+
+        const swingPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.65, 0)).addScaledVector(ap.targetThrowDir, 1.05);
+        ap.pursuitTarget.copy(swingPos);
+
+        ap.throwTimer -= deltaTime;
+        if (ap.throwTimer <= 0) {
+          // POWER THROW RELEASE!
+          robot.setGripper(0.0); // Open wide to release!
+
+          if (ap.heldBall && ap.heldBall.mesh) {
+            const throwPower = 5.2 + Math.random() * 0.8;
+            ap.heldBall.velocity.x = ap.targetThrowDir.x * throwPower;
+            ap.heldBall.velocity.z = ap.targetThrowDir.z * throwPower;
+            ap.heldBall.velocity.y = 1.25 + Math.random() * 0.35; // Lofty catapult arc!
+            ap.heldBall.bounces++;
+            ap.heldBall.stuckTime = 0;
+            ap.heldBall.isHeld = false;
+            ap.heldBall.lastPushTime = now + 600;
+
+            this.createPushRippleEffect(tcpPos, ap.heldBall.color, ap.heldBall.radius, ap.targetThrowDir);
+            this.audio.playPuff();
+            ap.ejectionsCount++;
+            this.pushCount++;
+            this.score += 100;
+          }
+
+          ap.heldBall = null;
+          ap.throwBall = null;
+          ap.throwState = 'IDLE';
         }
       }
     }
@@ -750,6 +855,41 @@ export class BallInterceptor {
         const tcpPos = new THREE.Vector3();
         robot.getTCPWorldPosition(tcpPos);
         robot.group.getWorldPosition(ap.basePos);
+
+        // If arm is currently performing Grab & Throw, skip regular targeting pursuit
+        if (ap.throwState !== 'IDLE') {
+          // Smooth tracking towards throw waypoints
+          const smoothTime = ap.throwState === 'RELEASE' ? 0.035 : 0.055;
+          const maxSpeed = ap.throwState === 'RELEASE' ? 8.5 : 6.5;
+
+          const omega = 2.0 / smoothTime;
+          const x = omega * deltaTime;
+          const exp = 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x);
+
+          const change = new THREE.Vector3().subVectors(ap.pursuitPos, ap.pursuitTarget);
+          const originalTo = ap.pursuitTarget.clone();
+
+          const maxChange = maxSpeed * smoothTime;
+          change.clampLength(0, maxChange);
+          const clampedTarget = ap.pursuitPos.clone().sub(change);
+
+          const temp = new THREE.Vector3().addVectors(
+            ap.pursuitVelocity,
+            change.clone().multiplyScalar(omega)
+          ).multiplyScalar(deltaTime);
+
+          ap.pursuitVelocity.sub(temp.clone().multiplyScalar(omega)).multiplyScalar(exp);
+          const newPos = clampedTarget.clone().add(change.add(temp).multiplyScalar(exp));
+
+          if (originalTo.clone().sub(ap.pursuitPos).dot(newPos.clone().sub(originalTo)) > 0) {
+            newPos.copy(originalTo);
+            ap.pursuitVelocity.set(0, 0, 0);
+          }
+          ap.pursuitPos.copy(newPos);
+
+          kinematics.solveIK(ap.pursuitPos, 18, 0.002, false);
+          continue;
+        }
 
         // Validate locked target for this arm
         if (ap.lockedTargetBall) {
@@ -768,6 +908,7 @@ export class BallInterceptor {
 
         for (let i = 0; i < this.balls.length; i++) {
           const b = this.balls[i];
+          if (b.isHeld) continue;
           const pos = b.mesh.position;
           const hDist = Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z);
 
@@ -781,29 +922,21 @@ export class BallInterceptor {
           let priorityWeight = 1.0;
 
           if (!isOwnColor) {
-            // OPPONENT BALL: Must eject if inside circle (r <= 1.35m)
-            if (hDist > 1.38) continue; // Ignore opponent balls that are already outside
+            if (hDist > 1.38) continue;
 
-            // Eject toward opponent's base station
             const oppBase = this.armPursuits[b.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
             const dxOpp = oppBase.x - pos.x;
             const dzOpp = oppBase.z - pos.z;
             const dOpp = Math.hypot(dxOpp, dzOpp);
             targetDir = dOpp > 0.001 ? new THREE.Vector3(dxOpp / dOpp, 0, dzOpp / dOpp) : new THREE.Vector3(1, 0, 0);
-
-            // Highest priority: threat increases as opponent ball gets closer to base center
             priorityWeight = 0.5 + (hDist / 1.35) * 0.8;
           } else {
-            // OWN BALL: If safely inside core circle (r <= 0.85m), do NOT disturb!
             if (hDist <= 0.85) continue;
 
-            // If escaping perimeter (0.85m < r <= 1.50m), pull / nudge back INWARD
             const dxIn = ap.basePos.x - pos.x;
             const dzIn = ap.basePos.z - pos.z;
             const dIn = Math.hypot(dxIn, dzIn);
             targetDir = dIn > 0.001 ? new THREE.Vector3(dxIn / dIn, 0, dzIn / dIn) : new THREE.Vector3(0, 0, 0);
-
-            // Medium priority for keeping own balls in
             priorityWeight = 1.4 + (1.35 - hDist) * 0.5;
           }
 
@@ -811,7 +944,6 @@ export class BallInterceptor {
           if (prediction) {
             let score = prediction.time * 1.5 + prediction.dist * 1.2 + priorityWeight;
 
-            // Lock-on hysteresis
             if (b === ap.lockedTargetBall) {
               score -= 0.45;
             }
@@ -835,7 +967,6 @@ export class BallInterceptor {
         } else {
           ap.currentTargetBall = null;
           ap.lockedTargetBall = null;
-          // Guard rest position: hovering defensively inside circle perimeter facing center
           const dirToCenter = new THREE.Vector3(-ap.basePos.x, 0, -ap.basePos.z).normalize();
           const restX = ap.basePos.x + dirToCenter.x * 0.45;
           const restZ = ap.basePos.z + dirToCenter.z * 0.45;
@@ -872,10 +1003,8 @@ export class BallInterceptor {
         }
         ap.pursuitPos.copy(newPos);
 
-        // Solve IK target configuration smoothly into targetAngles for this arm
         kinematics.solveIK(ap.pursuitPos, 16, 0.002, false);
 
-        // Keep gripper jaws open ready to push/swat
         if (ap.currentTargetBall) {
           robot.setGripper(0.0);
         }

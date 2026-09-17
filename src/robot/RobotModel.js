@@ -607,8 +607,8 @@ export class RobotModel {
     this.gripperGroup = new THREE.Group();
     this.gripperGroup.name = 'ServoGripper';
 
-    // Sculpted Pneumatic Actuator Body with rounded corners
-    const gBaseGeo = createRoundedBoxGeometry(0.13, 0.055, 0.075, 0.018, 3);
+    // Sculpted Pneumatic Actuator Body with wider clearance for ball grasping
+    const gBaseGeo = createRoundedBoxGeometry(0.19, 0.055, 0.075, 0.018, 3);
     const gBase = new THREE.Mesh(gBaseGeo, this.materials.darkMetal);
     gBase.position.y = 0.028;
     gBase.castShadow = true;
@@ -616,7 +616,7 @@ export class RobotModel {
 
     // Dual Hardened Chrome Linear Guide Rails
     [-0.018, 0.018].forEach(z => {
-      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.12, 16), this.materials.chromePiston);
+      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.18, 16), this.materials.chromePiston);
       rail.rotateZ(Math.PI / 2);
       rail.position.set(0, 0.03, z);
       this.gripperGroup.add(rail);
@@ -624,37 +624,37 @@ export class RobotModel {
 
     // Finger Left with Radiused Edges & Grooved Friction Pads
     this.fingerLeft = new THREE.Group();
-    this.fingerLeft.position.set(-0.045, 0.055, 0);
+    this.fingerLeft.position.set(-0.085, 0.055, 0);
 
-    const fingerLGeo = createRoundedBoxGeometry(0.015, 0.085, 0.038, 0.004, 2);
+    const fingerLGeo = createRoundedBoxGeometry(0.016, 0.095, 0.042, 0.004, 2);
     const fingerLMesh = new THREE.Mesh(fingerLGeo, this.materials.primaryPaint);
-    fingerLMesh.position.y = 0.0425;
+    fingerLMesh.position.y = 0.0475;
     fingerLMesh.castShadow = true;
     this.fingerLeft.add(fingerLMesh);
 
     const padL = new THREE.Mesh(
-      new THREE.BoxGeometry(0.005, 0.065, 0.034),
+      new THREE.BoxGeometry(0.006, 0.075, 0.038),
       this.materials.rubberPads
     );
-    padL.position.set(0.01, 0.045, 0);
+    padL.position.set(0.01, 0.05, 0);
     this.fingerLeft.add(padL);
     this.gripperGroup.add(this.fingerLeft);
 
     // Finger Right with Radiused Edges & Grooved Friction Pads
     this.fingerRight = new THREE.Group();
-    this.fingerRight.position.set(0.045, 0.055, 0);
+    this.fingerRight.position.set(0.085, 0.055, 0);
 
-    const fingerRGeo = createRoundedBoxGeometry(0.015, 0.085, 0.038, 0.004, 2);
+    const fingerRGeo = createRoundedBoxGeometry(0.016, 0.095, 0.042, 0.004, 2);
     const fingerRMesh = new THREE.Mesh(fingerRGeo, this.materials.primaryPaint);
-    fingerRMesh.position.y = 0.0425;
+    fingerRMesh.position.y = 0.0475;
     fingerRMesh.castShadow = true;
     this.fingerRight.add(fingerRMesh);
 
     const padR = new THREE.Mesh(
-      new THREE.BoxGeometry(0.005, 0.065, 0.034),
+      new THREE.BoxGeometry(0.006, 0.075, 0.038),
       this.materials.rubberPads
     );
-    padR.position.set(-0.01, 0.045, 0);
+    padR.position.set(-0.01, 0.05, 0);
     this.fingerRight.add(padR);
     this.gripperGroup.add(this.fingerRight);
 
@@ -752,7 +752,9 @@ export class RobotModel {
 
   setGripper(val) {
     this.gripperPosition = Math.max(0, Math.min(1, val));
-    const stroke = 0.045 - this.gripperPosition * 0.032;
+    // When val = 0 (open): stroke = 0.088m (finger separation = 0.176m, easily holds ball)
+    // When val = 1 (clamped): stroke = 0.035m (firm clamp)
+    const stroke = 0.088 - this.gripperPosition * 0.053;
     this.fingerLeft.position.x = -stroke;
     this.fingerRight.position.x = stroke;
   }
