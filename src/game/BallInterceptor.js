@@ -332,7 +332,7 @@ export class BallInterceptor {
     const numBalls = this.balls.length;
     const subSteps = 2; // High-precision sub-stepping for smooth 80-ball physics
     const dt = deltaTime / subSteps;
-    const maxSpeedLimit = 8.0;
+    const maxSpeedLimit = 3.6;
 
     for (let step = 0; step < subSteps; step++) {
       // 1. Single Ball Integration: Gravity, Velocity, Floor & Perimeter Wall Bounces
@@ -417,17 +417,17 @@ export class BallInterceptor {
               pos.x = basePos.x + nx * minSolidDist;
               pos.z = basePos.z + nz * minSolidDist;
 
-              // Elastic velocity bounce off base cylinder
+              // Elastic velocity bounce off base cylinder (damped to prevent violent rebound)
               const vDotN = b.velocity.x * nx + b.velocity.z * nz;
               if (vDotN < 0) {
-                const restitution = Math.max(0.60, b.restitution * 0.85);
+                const restitution = Math.max(0.38, b.restitution * 0.55);
                 const impulse = -(1.0 + restitution) * vDotN;
                 b.velocity.x += impulse * nx;
                 b.velocity.z += impulse * nz;
 
                 // Deflect outward slightly vertically if rolling against flange
                 if (pos.y < 0.10) {
-                  b.velocity.y = Math.max(b.velocity.y, Math.abs(vDotN) * 0.20);
+                  b.velocity.y = Math.max(b.velocity.y, Math.abs(vDotN) * 0.15);
                 }
 
                 b.bounces++;
@@ -440,7 +440,7 @@ export class BallInterceptor {
             // Landing on top of shoulder/turntable horizontal shelf
             pos.y = 0.65 + b.radius;
             if (b.velocity.y < -0.3) {
-              b.velocity.y = Math.abs(b.velocity.y) * 0.50;
+              b.velocity.y = Math.abs(b.velocity.y) * 0.40;
               b.bounces++;
               this.audio.playBallBounce(0.35);
             }
@@ -450,24 +450,24 @@ export class BallInterceptor {
         // Arena Perimeter Wall Bounces (Firm rubbery damping)
         if (pos.x < this.bounds.minX + b.radius) {
           pos.x = this.bounds.minX + b.radius;
-          b.velocity.x = Math.abs(b.velocity.x) * 0.45;
+          b.velocity.x = Math.abs(b.velocity.x) * 0.30;
         } else if (pos.x > this.bounds.maxX - b.radius) {
           pos.x = this.bounds.maxX - b.radius;
-          b.velocity.x = -Math.abs(b.velocity.x) * 0.45;
+          b.velocity.x = -Math.abs(b.velocity.x) * 0.30;
         }
 
         if (pos.z < this.bounds.minZ + b.radius) {
           pos.z = this.bounds.minZ + b.radius;
-          b.velocity.z = Math.abs(b.velocity.z) * 0.45;
+          b.velocity.z = Math.abs(b.velocity.z) * 0.30;
         } else if (pos.z > this.bounds.maxZ - b.radius) {
           pos.z = this.bounds.maxZ - b.radius;
-          b.velocity.z = -Math.abs(b.velocity.z) * 0.45;
+          b.velocity.z = -Math.abs(b.velocity.z) * 0.30;
         }
 
         // Ceiling bounce
         if (pos.y > this.bounds.maxY - b.radius) {
           pos.y = this.bounds.maxY - b.radius;
-          b.velocity.y = -Math.abs(b.velocity.y) * 0.40;
+          b.velocity.y = -Math.abs(b.velocity.y) * 0.30;
         }
 
         // Air drag
@@ -858,7 +858,7 @@ export class BallInterceptor {
                 ).normalize();
               }
 
-              pushForce = 3.5 + Math.random() * 0.8;
+              pushForce = 2.1 + Math.random() * 0.35;
               ap.ejectionsCount++;
               this.score += 50;
             } else {
@@ -869,14 +869,14 @@ export class BallInterceptor {
               const dzS = sanctuaryPos.z - pos.z;
               const dS = Math.hypot(dxS, dzS);
               pushDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
-              pushForce = 1.6 + Math.random() * 0.35;
+              pushForce = 1.0 + Math.random() * 0.25;
               ap.retainsCount++;
               this.score += 20;
             }
 
             b.velocity.x = pushDir.x * pushForce;
             b.velocity.z = pushDir.z * pushForce;
-            b.velocity.y = 0.45 + Math.random() * 0.30;
+            b.velocity.y = 0.28 + Math.random() * 0.15;
             b.bounces++;
 
             // Successful contact: reset retry counter & orientation
@@ -928,7 +928,7 @@ export class BallInterceptor {
                 if (vDotN < 0) {
                   b.velocity.addScaledVector(normal, -(1.0 + b.restitution) * vDotN);
                 }
-                b.velocity.addScaledVector(outBaseDir, 0.70 + Math.random() * 0.35);
+                b.velocity.addScaledVector(outBaseDir, 0.30 + Math.random() * 0.15);
                 b.bounces++;
                 if (Math.abs(vDotN) > 0.4) {
                   this.audio.playBallBounce(Math.min(1.0, Math.abs(vDotN) / 2.0));
@@ -948,8 +948,8 @@ export class BallInterceptor {
         if (!ap.throwBall || !ap.throwBall.mesh || ap.throwBall.isHeld || ap.throwTimer > 1.2) {
           if (ap.throwBall && ap.throwBall.mesh) {
             const outDir = new THREE.Vector3(ap.throwBall.mesh.position.x - basePos.x, 0, ap.throwBall.mesh.position.z - basePos.z).normalize();
-            ap.throwBall.velocity.addScaledVector(outDir, 2.6);
-            ap.throwBall.velocity.y = 0.55;
+            ap.throwBall.velocity.addScaledVector(outDir, 1.4);
+            ap.throwBall.velocity.y = 0.35;
             ap.throwBall.stuckTime = 0;
           }
           ap.throwBall = null;
@@ -1042,7 +1042,7 @@ export class BallInterceptor {
               if (strikeDist > 0.001) strikeVector.normalize();
               else strikeVector.copy(ap.targetThrowDir);
 
-              const strikeSpeed = 7.6; // High precision kinetic bowling speed
+              const strikeSpeed = 3.2; // Controlled kinetic bowling speed
               ap.heldBall.mesh.position.set(tcpPos.x, 0.065, tcpPos.z);
               ap.heldBall.velocity.set(strikeVector.x * strikeSpeed, 0.02, strikeVector.z * strikeSpeed);
 
@@ -1054,8 +1054,8 @@ export class BallInterceptor {
               if (oppVector.lengthSq() > 0.001) oppVector.normalize();
               else oppVector.copy(ap.targetThrowDir);
 
-              const throwPower = 5.8;
-              ap.heldBall.velocity.set(oppVector.x * throwPower, 1.35, oppVector.z * throwPower);
+              const throwPower = 2.6;
+              ap.heldBall.velocity.set(oppVector.x * throwPower, 0.65, oppVector.z * throwPower);
             }
 
             ap.heldBall.bounces++;
