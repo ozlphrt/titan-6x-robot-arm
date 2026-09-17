@@ -474,13 +474,34 @@
           </button>
 
           <div class="accordion-content" id="acc-content-ballbuster">
+            <!-- 4-Team Territory Defense Scores -->
+            <div class="menu-section-label" style="margin-top: 0;"><span>4-STATION CIRCLE DEFENSE // BALLS HELD IN HOME BASE</span></div>
+            <div class="drawer-arm-grid" style="margin-bottom: 10px;">
+              <div class="metric-card" style="padding: 6px 10px; border-left: 3px solid #ffb700;">
+                <span class="metric-name" style="color: #ffb700; font-weight: 700;">🟡 ARM 1 (ALPHA)</span>
+                <span class="metric-val" id="team-score-0" style="font-size: 16px;">0 IN CIRCLE</span>
+              </div>
+              <div class="metric-card" style="padding: 6px 10px; border-left: 3px solid #ff5500;">
+                <span class="metric-name" style="color: #ff5500; font-weight: 700;">🟠 ARM 2 (BETA)</span>
+                <span class="metric-val" id="team-score-1" style="font-size: 16px;">0 IN CIRCLE</span>
+              </div>
+              <div class="metric-card" style="padding: 6px 10px; border-left: 3px solid #f8fafc;">
+                <span class="metric-name" style="color: #cbd5e1; font-weight: 700;">⚪ ARM 3 (GAMMA)</span>
+                <span class="metric-val" id="team-score-2" style="font-size: 16px;">0 IN CIRCLE</span>
+              </div>
+              <div class="metric-card" style="padding: 6px 10px; border-left: 3px solid #00e5ff;">
+                <span class="metric-name" style="color: #00e5ff; font-weight: 700;">🔵 ARM 4 (DELTA)</span>
+                <span class="metric-val" id="team-score-3" style="font-size: 16px;">0 IN CIRCLE</span>
+              </div>
+            </div>
+
             <div class="telemetry-metrics-grid" style="margin-bottom: 8px;">
               <div class="metric-card">
-                <span class="metric-name">DEFENSE SCORE</span>
+                <span class="metric-name">MATCH DEFENSE SCORE</span>
                 <span class="metric-val" id="drawer-score-val">0</span>
               </div>
               <div class="metric-card">
-                <span class="metric-name">BALLS PUSHED</span>
+                <span class="metric-name">TOTAL BALLS PUSHED</span>
                 <span class="metric-val" id="drawer-burst-val">0</span>
               </div>
             </div>
@@ -496,12 +517,12 @@
 
             <div class="speed-control-row">
               <span class="speed-lbl">BALL POPULATION</span>
-              <input type="range" id="ball-spawn-rate-slider" min="1" max="10" step="1" value="5" />
-              <span class="speed-val" id="ball-spawn-rate-val">5 BALLS</span>
+              <input type="range" id="ball-spawn-rate-slider" min="20" max="120" step="10" value="80" />
+              <span class="speed-val" id="ball-spawn-rate-val">80 BALLS</span>
             </div>
 
             <div class="ik-hint" style="margin-top: 8px;">
-              💡 <strong>Circle Defense Rule:</strong> Each robot arm actively protects its 1.35m station perimeter. When a ball enters an arm's circle, the arm calculates an outward strike vector, swings behind the ball, and pushes/deflects it outward toward the arena center.
+              💡 <strong>4-Team Circle Defense:</strong> 80 balls match the 4 robot arms' team colors. Each arm defends its home circle: keeping its own color balls safely inside while actively swatting and ejecting opponent balls toward their home stations!
             </div>
           </div>
         </div>

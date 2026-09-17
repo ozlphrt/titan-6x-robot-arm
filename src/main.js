@@ -1072,6 +1072,15 @@ class RobotApp {
         if (scoreBurst) scoreBurst.textContent = stats.pushCount ?? stats.burstCount;
         if (drawerScore) drawerScore.textContent = stats.score;
         if (drawerBurst) drawerBurst.textContent = stats.pushCount ?? stats.burstCount;
+
+        if (stats.territoryCounts) {
+          for (let t = 0; t < 4; t++) {
+            const teamEl = document.getElementById(`team-score-${t}`);
+            if (teamEl) {
+              teamEl.textContent = `${stats.territoryCounts[t]} HELD`;
+            }
+          }
+        }
       }
 
       // 0.5. Smooth Robotic Servo Motors (Joint-by-Joint Continuous Movement across all 4 arms)
