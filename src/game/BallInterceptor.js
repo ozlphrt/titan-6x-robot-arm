@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { evaluateArenaTerrain } from '../scene/ArenaTerrain.js';
 
 export class BallInterceptor {
   constructor(scene, robots, kinematicsList, audio) {
@@ -290,46 +291,15 @@ export class BallInterceptor {
   }
 
   /**
-   * Returns precise floor elevation and surface normal across the arena,
-   * including the smooth convex center dome (r <= 0.82m, height = 0.038m).
+   * Returns precise floor elevation, surface normal, and slope gradients across the arena,
+   * including the high-convexity center dome and inter-station corridor ridges.
    */
   getFloorInfo(x, z) {
-    const r = Math.hypot(x, z);
-    const domeRadius = 0.82;
-    const domeHeight = 0.038;
-
-    if (r <= domeRadius) {
-      const angle = (Math.PI * r) / domeRadius;
-      // Convex mound profile: y = +(domeHeight / 2) * (1 + cos(angle))
-      const yFloor = (domeHeight / 2) * (1 + Math.cos(angle));
-      // Radial slope magnitude
-      const slope = (domeHeight * Math.PI) / (2 * domeRadius) * Math.sin(angle);
-      // For a convex dome, outward slope tilts outward away from center (+x, +z)
-      const nx = r > 0.0001 ? (slope * x / r) : 0;
-      const nz = r > 0.0001 ? (slope * z / r) : 0;
-      const ny = 1.0;
-      const len = Math.hypot(nx, ny, nz);
-
-      return {
-        y: yFloor,
-        normal: new THREE.Vector3(nx / len, ny / len, nz / len),
-        slope: slope,
-        inDome: true,
-        r: r
-      };
-    }
-
-    return {
-      y: 0.0,
-      normal: new THREE.Vector3(0, 1, 0),
-      slope: 0,
-      inDome: false,
-      r: r
-    };
+    return evaluateArenaTerrain(x, z);
   }
 
   /**
-   * Fast, Optimized 80-Ball Bouncing Physics with True Spherical Integrity & Convex Center Dome
+   * Fast, Optimized 80-Ball Bouncing Physics with True Spherical Integrity & Convex Terrain Slopes
    */
   updateBallPhysics(deltaTime) {
     const numBalls = this.balls.length;
@@ -358,13 +328,14 @@ export class BallInterceptor {
         const floor = this.getFloorInfo(pos.x, pos.z);
         const contactY = floor.y + b.radius;
 
-        // Convex Dome Gravitational Outward Roll Acceleration
-        if (floor.inDome && floor.r > 0.001) {
-          const outwardDirX = pos.x / floor.r;
-          const outwardDirZ = pos.z / floor.r;
-          const aOutward = Math.abs(this.gravity) * floor.slope * 1.30;
-          b.velocity.x += outwardDirX * aOutward * dt;
-          b.velocity.z += outwardDirZ * aOutward * dt;
+        // Active Gravitational Downhill Roll Acceleration on Central Dome & Corridor Ridges:
+        // Automatically prevents any balls from getting stuck in center or inter-arm dead-zones!
+        if (floor.isElevated) {
+          const gMag = Math.abs(this.gravity);
+          const aX = -gMag * floor.gradX * 1.85;
+          const aZ = -gMag * floor.gradZ * 1.85;
+          b.velocity.x += aX * dt;
+          b.velocity.z += aZ * dt;
         }
 
         // Floor Contact & Damped Rubbery Bouncing

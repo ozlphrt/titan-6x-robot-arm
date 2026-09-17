@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { evaluateArenaTerrain } from './ArenaTerrain.js';
 
 export class WorkcellScene {
   constructor(scene) {
@@ -129,26 +130,16 @@ export class WorkcellScene {
   }
 
   createCenterConvexDome() {
-    const domeRadius = 0.82;
-    const domeHeight = 0.038;
-
-    // Create smooth high-tessellation convex dome geometry
-    const geom = new THREE.PlaneGeometry(domeRadius * 2, domeRadius * 2, 72, 72);
+    // 1. Full Arena Convex Terrain Surface Mesh (Central Dome + 4 Inter-Arm Corridor Ridges)
+    const geom = new THREE.PlaneGeometry(5.2, 5.2, 110, 110);
     geom.rotateX(-Math.PI / 2);
 
     const posAttr = geom.attributes.position;
     for (let i = 0; i < posAttr.count; i++) {
       const x = posAttr.getX(i);
       const z = posAttr.getZ(i);
-      const r = Math.hypot(x, z);
-
-      if (r <= domeRadius) {
-        // Smooth C1 cosine convex dome elevation
-        const y = (domeHeight / 2) * (1 + Math.cos((Math.PI * r) / domeRadius));
-        posAttr.setY(i, y);
-      } else {
-        posAttr.setY(i, 0);
-      }
+      const info = evaluateArenaTerrain(x, z);
+      posAttr.setY(i, info.y);
     }
     geom.computeVertexNormals();
 
@@ -163,20 +154,21 @@ export class WorkcellScene {
     this.centerDishMesh.receiveShadow = true;
     this.ringsGroup.add(this.centerDishMesh);
 
-    // Decorative Concentric Contour Elevation Rings indicating convex elevation
-    const contourRadii = [0.25, 0.50, 0.75, 0.82];
+    // 2. Decorative Concentric Contour Elevation Rings on the Central Convex Dome
+    const contourRadii = [0.35, 0.65, 0.95, 1.15];
     this.contourRings = [];
 
     contourRadii.forEach(r => {
       const ringGeo = new THREE.RingGeometry(r - 0.007, r + 0.007, 64);
       ringGeo.rotateX(-Math.PI / 2);
 
-      const y = (domeHeight / 2) * (1 + Math.cos((Math.PI * r) / domeRadius)) + 0.0015;
+      const info = evaluateArenaTerrain(r, 0);
+      const y = info.y + 0.0015;
 
       const ringMat = new THREE.MeshBasicMaterial({
         color: 0x0284c7,
         transparent: true,
-        opacity: r === 0.82 ? 0.75 : 0.28,
+        opacity: r === 1.15 ? 0.75 : 0.28,
         side: THREE.DoubleSide,
         depthWrite: false
       });
@@ -185,6 +177,34 @@ export class WorkcellScene {
       ringMesh.position.y = y;
       this.ringsGroup.add(ringMesh);
       this.contourRings.push(ringMesh);
+    });
+
+    // 3. Decorative Corridor Elevation Ridge Lines along cardinal directions (+X, -X, +Z, -Z)
+    const corridorAxes = [
+      { dir: new THREE.Vector3(1, 0, 0), rotY: 0 },
+      { dir: new THREE.Vector3(-1, 0, 0), rotY: Math.PI },
+      { dir: new THREE.Vector3(0, 0, 1), rotY: -Math.PI / 2 },
+      { dir: new THREE.Vector3(0, 0, -1), rotY: Math.PI / 2 }
+    ];
+
+    corridorAxes.forEach(ax => {
+      [1.35, 1.70, 2.05].forEach(dist => {
+        const segGeo = new THREE.PlaneGeometry(0.012, 1.10);
+        segGeo.rotateX(-Math.PI / 2);
+        const segMat = new THREE.MeshBasicMaterial({
+          color: 0x0284c7,
+          transparent: true,
+          opacity: 0.25,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        });
+        const segMesh = new THREE.Mesh(segGeo, segMat);
+        const pt = ax.dir.clone().multiplyScalar(dist);
+        const info = evaluateArenaTerrain(pt.x, pt.z);
+        segMesh.position.set(pt.x, info.y + 0.0018, pt.z);
+        segMesh.rotation.y = ax.rotY;
+        this.ringsGroup.add(segMesh);
+      });
     });
   }
 
