@@ -196,8 +196,8 @@ export class BallInterceptor {
 
     // Uniform spherical ball size (0.064m - 0.074m)
     const ballRadius = 0.064 + Math.random() * 0.010;
-    // Damped dense rubber elasticity (less hyper-bouncy, natural tactile settle)
-    const baseRestitution = 0.42 + Math.random() * 0.05;
+    // Damped dense rubber elasticity (low bounciness, natural tactile dead-drop & roll)
+    const baseRestitution = 0.16 + Math.random() * 0.04;
     const mass = Math.pow(ballRadius / 0.070, 3) * 0.08;
 
     // Gentle vertical initial drop
@@ -344,19 +344,21 @@ export class BallInterceptor {
           const normal = floor.normal;
           const vDotN = b.velocity.dot(normal);
 
-          if (vDotN < -0.15) {
-            b.velocity.addScaledVector(normal, -(1.0 + b.restitution * 0.80) * vDotN);
-            b.velocity.x *= 0.93;
-            b.velocity.z *= 0.93;
+          if (vDotN < -0.20) {
+            // Highly damped low-elasticity rebound (absorbs ~85% of vertical kinetic energy)
+            b.velocity.addScaledVector(normal, -(1.0 + b.restitution * 0.40) * vDotN);
+            b.velocity.x *= 0.82;
+            b.velocity.z *= 0.82;
             b.bounces++;
 
-            if (Math.abs(vDotN) > 1.4) {
+            if (Math.abs(vDotN) > 1.2) {
               this.audio.playBallBounce(Math.min(1.0, Math.abs(vDotN) / 3.2));
             }
           } else {
-            b.velocity.y = (normal.y - 1.0) * 0.08;
-            b.velocity.x *= (1.0 - dt * 2.6);
-            b.velocity.z *= (1.0 - dt * 2.6);
+            // Rolling / resting contact on floor with smooth tactile friction
+            b.velocity.y = (normal.y - 1.0) * 0.04;
+            b.velocity.x *= (1.0 - dt * 3.8);
+            b.velocity.z *= (1.0 - dt * 3.8);
           }
         }
 
@@ -391,20 +393,18 @@ export class BallInterceptor {
               pos.x = basePos.x + nx * minSolidDist;
               pos.z = basePos.z + nz * minSolidDist;
 
-              // Elastic velocity bounce off base cylinder
+              // Low-elasticity cushioned bounce off base cylinder
               const vDotN = b.velocity.x * nx + b.velocity.z * nz;
               if (vDotN < 0) {
-                const restitution = Math.max(0.38, b.restitution * 0.55);
+                const restitution = b.restitution * 0.30;
                 const impulse = -(1.0 + restitution) * vDotN;
                 b.velocity.x += impulse * nx;
                 b.velocity.z += impulse * nz;
-
-                if (pos.y < 0.10) {
-                  b.velocity.y = Math.max(b.velocity.y, Math.abs(vDotN) * 0.15);
-                }
+                b.velocity.x *= 0.75;
+                b.velocity.z *= 0.75;
 
                 b.bounces++;
-                if (Math.abs(vDotN) > 1.5) {
+                if (Math.abs(vDotN) > 1.2) {
                   this.audio.playBallBounce(Math.min(1.0, Math.abs(vDotN) / 3.2));
                 }
               }
@@ -412,27 +412,27 @@ export class BallInterceptor {
           }
         }
 
-        // Arena Perimeter Wall Bounces (Firm rubbery damping)
+        // Arena Perimeter Wall Bounces (Firm dead-cushion rubber damping)
         if (pos.x < this.bounds.minX + b.radius) {
           pos.x = this.bounds.minX + b.radius;
-          b.velocity.x = Math.abs(b.velocity.x) * 0.30;
+          b.velocity.x = Math.abs(b.velocity.x) * 0.16;
         } else if (pos.x > this.bounds.maxX - b.radius) {
           pos.x = this.bounds.maxX - b.radius;
-          b.velocity.x = -Math.abs(b.velocity.x) * 0.30;
+          b.velocity.x = -Math.abs(b.velocity.x) * 0.16;
         }
 
         if (pos.z < this.bounds.minZ + b.radius) {
           pos.z = this.bounds.minZ + b.radius;
-          b.velocity.z = Math.abs(b.velocity.z) * 0.30;
+          b.velocity.z = Math.abs(b.velocity.z) * 0.16;
         } else if (pos.z > this.bounds.maxZ - b.radius) {
           pos.z = this.bounds.maxZ - b.radius;
-          b.velocity.z = -Math.abs(b.velocity.z) * 0.30;
+          b.velocity.z = -Math.abs(b.velocity.z) * 0.16;
         }
 
         // Ceiling bounce
         if (pos.y > this.bounds.maxY - b.radius) {
           pos.y = this.bounds.maxY - b.radius;
-          b.velocity.y = -Math.max(0.6, Math.abs(b.velocity.y) * 0.40);
+          b.velocity.y = -Math.max(0.3, Math.abs(b.velocity.y) * 0.20);
         }
 
         // Air drag
@@ -497,10 +497,10 @@ export class BallInterceptor {
             // Normal relative speed
             const vNormal = vRelX * nx + vRelY * ny + vRelZ * nz;
 
-            // Damped rubbery impulse between balls
+            // Damped rubbery impulse between balls (absorbs energy instead of ricocheting)
             if (vNormal < 0) {
-              const restitution = Math.min(b1.restitution, b2.restitution) * 0.45;
-              const impulse = -(1.0 + restitution) * vNormal / (1.0 / b1.mass + 1.0 / b2.mass) * 0.65;
+              const restitution = Math.min(b1.restitution, b2.restitution) * 0.25;
+              const impulse = -(1.0 + restitution) * vNormal / (1.0 / b1.mass + 1.0 / b2.mass) * 0.45;
 
               b1.velocity.x += (impulse / b1.mass) * nx;
               b1.velocity.y += (impulse / b1.mass) * ny;
@@ -509,6 +509,10 @@ export class BallInterceptor {
               b2.velocity.x -= (impulse / b2.mass) * nx;
               b2.velocity.y -= (impulse / b2.mass) * ny;
               b2.velocity.z -= (impulse / b2.mass) * nz;
+
+              // Tangential slight damping on ball collision
+              b1.velocity.multiplyScalar(0.96);
+              b2.velocity.multiplyScalar(0.96);
 
               // Clamp post-collision speed
               const s1 = b1.velocity.length();
@@ -877,11 +881,12 @@ export class BallInterceptor {
 
                 const vDotN = b.velocity.dot(normal);
                 if (vDotN < 0) {
-                  // Pure realistic elastic deflection along collision normal (no artificial repulsion field)
-                  b.velocity.addScaledVector(normal, -(1.0 + b.restitution) * vDotN);
+                  // Low-elasticity cushioned deflection along collision normal
+                  b.velocity.addScaledVector(normal, -(1.0 + b.restitution * 0.35) * vDotN);
+                  b.velocity.multiplyScalar(0.85);
                 }
                 b.bounces++;
-                if (Math.abs(vDotN) > 1.4) {
+                if (Math.abs(vDotN) > 1.2) {
                   this.audio.playBallBounce(Math.min(1.0, Math.abs(vDotN) / 3.0));
                 }
               }
@@ -923,8 +928,8 @@ export class BallInterceptor {
             ap.throwState = 'CLAMPING';
             ap.throwTimer = 0.08;
             ap.graspStartPos = tcpPos.clone();
-            ap.graspJointAngles = [...robot.jointAngles];
-            ap.graspTele = robot.telescope;
+            ap.graspJointAngles = [...robot.angles];
+            ap.graspTele = robot.telescopeExtension;
 
             if (ap.throwMode === 'CENTER_STRIKE') {
               const targetPos = (ap.centerTargetBall && ap.centerTargetBall.mesh) ? ap.centerTargetBall.mesh.position : new THREE.Vector3(0, 0.065, 0);
@@ -945,9 +950,9 @@ export class BallInterceptor {
               }
             }
 
-            // Proportional distance scaling: compute distance to target arm
+            // Proportional distance scaling: compute distance to target arm (0.8m to 4.2m range)
             const distToTarget = Math.hypot(ap.targetThrowPos.x - tcpPos.x, ap.targetThrowPos.z - tcpPos.z);
-            ap.throwPowerRatio = Math.max(0.15, Math.min(1.0, (distToTarget - 1.0) / 2.8));
+            ap.throwPowerRatio = Math.max(0.12, Math.min(1.0, (distToTarget - 0.8) / 3.4));
           } else if (ap.throwTimer > 0.85) {
             // CLUSTER JAM BREAKER: If obstructed or unable to clamp inside dense ball pile, execute dynamic kinetic swat/sweep
             const oppBase = this.armPursuits[ap.throwBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
@@ -982,8 +987,8 @@ export class BallInterceptor {
           } else {
             // Step 3: Transition to smooth vertical LIFT
             ap.throwState = 'LIFT';
-            ap.throwTimer = 0.20;
-            ap.liftDuration = 0.20;
+            ap.throwTimer = 0.18;
+            ap.liftDuration = 0.18;
           }
         }
       } else if (ap.throwState === 'LIFT') {
@@ -991,15 +996,15 @@ export class BallInterceptor {
         const startJ = ap.graspJointAngles || [0, -0.45, -0.55, 0, 0.60, 0];
         const startTele = (ap.graspTele !== undefined) ? ap.graspTele : 0.40;
 
-        const lDuration = ap.liftDuration || 0.20;
+        const lDuration = ap.liftDuration || 0.18;
         const liftT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / lDuration));
         // Quintic smoothstep for ultra-smooth vertical lift
         const p = liftT * liftT * liftT * (liftT * (liftT * 6.0 - 15.0) + 10.0);
 
-        const liftJ2 = startJ[1] + 0.24;
-        const liftJ3 = startJ[2] - 0.22;
+        const liftJ2 = startJ[1] + 0.20;
+        const liftJ3 = startJ[2] - 0.18;
         const liftJ5 = 0.65;
-        const liftTele = Math.max(0.12, startTele - 0.15);
+        const liftTele = Math.max(0.08, startTele - 0.20);
 
         const j1 = startJ[0];
         const j2 = startJ[1] + (liftJ2 - startJ[1]) * p;
@@ -1027,7 +1032,7 @@ export class BallInterceptor {
           ap.liftEndAngles = [j1, j2, j3, j4, j5, j6];
           ap.liftEndTele = tele;
           const alpha = ap.throwPowerRatio || 0.5;
-          ap.throwTimer = 0.24 + 0.10 * alpha; // Proportional windup time
+          ap.throwTimer = 0.16 + 0.16 * alpha; // Proportional windup time (0.18s for flick, 0.32s for deep cocking)
           ap.windupDuration = ap.throwTimer;
         }
       } else if (ap.throwState === 'RETRIEVE_CARRY') {
@@ -1117,13 +1122,15 @@ export class BallInterceptor {
           targetJ2 = -0.20;
           targetJ3 = -0.95;
           targetJ5 = 0.75;
-          targetTele = 0.10;
+          targetTele = 0.05;
         } else {
-          // Dynamic cocking pose proportional to aimed distance and speed
-          targetJ2 = -0.20 + 0.15 * (1.0 - alpha);
-          targetJ3 = -0.90 - 0.40 * alpha;
-          targetJ5 = 0.68 + 0.20 * alpha;
-          targetTele = 0.40 - 0.35 * alpha;
+          // Dynamic cocking pose strictly proportional to distance (alpha):
+          // Short toss: minimal shallow backswing (J2=-0.38, J3=-0.40)
+          // Long pitch: deep athletic power windup (J2=-0.10, J3=-1.25)
+          targetJ2 = -0.38 + 0.28 * alpha;
+          targetJ3 = -0.40 - 0.85 * alpha;
+          targetJ5 = 0.50 + 0.35 * alpha;
+          targetTele = 0.05;
         }
 
         const j2 = startJ[1] + (targetJ2 - startJ[1]) * p;
@@ -1148,7 +1155,7 @@ export class BallInterceptor {
         if (ap.throwTimer <= 0) {
           // Step 5: Transition to FORWARD SWING & APEX RELEASE
           ap.throwState = 'SWING_THROW';
-          const swingDuration = 0.28 + 0.10 * alpha; // Proportional forward pitch duration
+          const swingDuration = 0.18 + 0.16 * alpha; // Proportional pitch duration (0.20s flick -> 0.34s full whip)
           ap.throwTimer = swingDuration;
           ap.swingDuration = swingDuration;
         }
@@ -1159,7 +1166,7 @@ export class BallInterceptor {
         localDir.applyQuaternion(invRot);
         const j1 = Math.atan2(localDir.x, localDir.z);
 
-        const sDuration = ap.swingDuration || 0.30;
+        const sDuration = ap.swingDuration || 0.26;
         const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / sDuration));
         // Single monotonic forward power whip curve (0 -> 1 smoothly)
         const p = Math.sin(swingT * Math.PI * 0.5);
@@ -1172,18 +1179,20 @@ export class BallInterceptor {
           j2 = -0.20 + (-0.85 - (-0.20)) * p;
           j3 = -0.95 + (-0.15 - (-0.95)) * p;
           j5 = 0.75 + (0.25 - 0.75) * p;
-          tele = 0.10 + 0.75 * p;
+          tele = 0.05 + 0.75 * p;
         } else {
-          // Forward extension and elevation smoothly reaching peak at target azimuth
-          const startJ2 = -0.20 + 0.15 * (1.0 - alpha);
-          const startJ3 = -0.90 - 0.40 * alpha;
-          const startJ5 = 0.68 + 0.20 * alpha;
-          const startTele = 0.40 - 0.35 * alpha;
+          // Dynamic forward stroke strictly proportional to distance:
+          // Short toss: gentle compact flick (J2: -0.38 -> -0.42, J3: -0.40 -> -0.22, tele: 0.05 -> 0.16)
+          // Long pitch: full athletic power whip (J2: -0.10 -> -0.65, J3: -1.25 -> +0.16, tele: 0.05 -> 0.80)
+          const startJ2 = -0.38 + 0.28 * alpha;
+          const startJ3 = -0.40 - 0.85 * alpha;
+          const startJ5 = 0.50 + 0.35 * alpha;
+          const startTele = 0.05;
 
-          const endJ2 = -0.45 - 0.18 * alpha;
-          const endJ3 = 0.02 + 0.12 * alpha;
-          const endJ5 = 0.28 - 0.10 * alpha;
-          const endTele = 0.48 + 0.37 * alpha;
+          const endJ2 = -0.42 - 0.23 * alpha;
+          const endJ3 = -0.22 + 0.38 * alpha;
+          const endJ5 = 0.40 - 0.25 * alpha;
+          const endTele = 0.08 + 0.72 * alpha;
 
           j2 = startJ2 + (endJ2 - startJ2) * p;
           j3 = startJ3 + (endJ3 - startJ3) * p;
@@ -1196,21 +1205,21 @@ export class BallInterceptor {
         robot.group.updateMatrixWorld(true);
         robot.getTCPWorldPosition(tcpPos);
 
-        // Step 6: APEX RELEASE AT 75% OF SWING
-        if (swingT < 0.75) {
+        // Step 6: APEX RELEASE TOWARDS THE END OF SWING (at 90% forward extension)
+        if (swingT < 0.90) {
           robot.setGripper(1.0);
           if (ap.heldBall && ap.heldBall.mesh) {
             ap.heldBall.velocity.set(0, 0, 0);
             ap.heldBall.mesh.position.copy(tcpPos);
           }
         } else if (ap.heldBall && ap.heldBall.mesh) {
-          // RELEASE BALL CLEANLY WITH BALLISTIC SPEED VECTOR
+          // RELEASE BALL CLEANLY WITH BALLISTIC SPEED VECTOR RIGHT AT PEAK EXTENSION
           robot.setGripper(0.0);
           this.audio.playPneumatic(false);
 
           // Position ball cleanly ahead of gripper along throw vector
-          ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(ap.targetThrowDir, ap.heldBall.radius + 0.16);
-          ap.heldBall.mesh.position.y += 0.04;
+          ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(ap.targetThrowDir, ap.heldBall.radius + 0.12);
+          ap.heldBall.mesh.position.y += 0.02;
 
           if (ap.throwMode === 'CENTER_STRIKE') {
             const strikeSpeed = 7.2;

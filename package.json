@@ -1,7 +1,7 @@
 {
   "name": "titan-6x-robot-arm",
   "private": true,
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "TITAN-6X Industrial 3D Robot Arm Digital Twin with Telescoping Forearm, Quad-Arm Defense Arena, Convex Terrain Dynamics, and Multi-Schema Acoustics",
   "type": "module",
   "scripts": {
