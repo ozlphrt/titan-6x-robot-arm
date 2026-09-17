@@ -128,13 +128,10 @@ export class WorkcellScene {
     // Render initial pie chart decals
     this.renderTacticalHUD(false);
 
-    // 5. Central Shared Interaction Arena - Smooth Convex Dome & Corridor Ridges
+    // 5. Central Shared Interaction Arena - Smooth Convex Dome & Contour Rings
     this.createCenterConvexDome();
 
-    // 6. 4 Outer Corner Convex Banking Ramps (Rolls trapped corner balls back into circles)
-    this.createCornerConvexSlopes();
-
-    // 7. Quad-Station Safety Enclosure Perimeter Walls (Containment boundary near arms)
+    // 6. Quad-Station Safety Enclosure Perimeter Walls (Containment boundary near arms)
     this.wallsVisible = true;
     this.createPerimeterEnclosure();
 
@@ -420,96 +417,6 @@ export class WorkcellScene {
       this.ringsGroup.add(ringMesh);
       this.contourRings.push(ringMesh);
     });
-  }
-
-  /**
-   * Creates 3D banking ramps and elevation contour lines in all 4 outer corner dead-zones
-   * to visually and physically guide balls back into each robot arm's defense circle.
-   */
-  createCornerConvexSlopes() {
-    this.cornerRampsGroup = new THREE.Group();
-    this.cornerRampsGroup.name = 'CornerConvexRampsGroup';
-
-    const cornerConfigs = [
-      { bx: 1.4, bz: -1.4, cx: 2.75, cz: -2.75, color: 0xffcb05, name: 'AlphaRamp' },
-      { bx: -1.4, bz: -1.4, cx: -2.75, cz: -2.75, color: 0xe65100, name: 'BetaRamp' },
-      { bx: -1.4, bz: 1.4, cx: -2.75, cz: 2.75, color: 0x10b981, name: 'GammaRamp' },
-      { bx: 1.4, bz: 1.4, cx: 2.75, cz: 2.75, color: 0x2563eb, name: 'DeltaRamp' }
-    ];
-
-    this.cornerRampMat = new THREE.MeshStandardMaterial({
-      color: 0xe2e8f0,
-      roughness: 0.35,
-      metalness: 0.25,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1
-    });
-
-    cornerConfigs.forEach(cfg => {
-      const segments = 24;
-      const minX = Math.min(cfg.bx, cfg.cx);
-      const maxX = Math.max(cfg.bx, cfg.cx);
-      const minZ = Math.min(cfg.bz, cfg.cz);
-      const maxZ = Math.max(cfg.bz, cfg.cz);
-      const sizeX = Math.abs(cfg.cx - cfg.bx);
-      const sizeZ = Math.abs(cfg.cz - cfg.bz);
-
-      const geo = new THREE.PlaneGeometry(sizeX, sizeZ, segments, segments);
-      geo.rotateX(-Math.PI / 2);
-
-      const posAttr = geo.attributes.position;
-      const centerX = (minX + maxX) / 2;
-      const centerZ = (minZ + maxZ) / 2;
-
-      for (let i = 0; i < posAttr.count; i++) {
-        const worldX = posAttr.getX(i) + centerX;
-        const worldZ = posAttr.getZ(i) + centerZ;
-        const info = evaluateArenaTerrain(worldX, worldZ);
-        posAttr.setY(i, info.y);
-      }
-      geo.computeVertexNormals();
-
-      const mesh = new THREE.Mesh(geo, this.cornerRampMat);
-      mesh.position.set(centerX, 0, centerZ);
-      mesh.receiveShadow = true;
-      this.cornerRampsGroup.add(mesh);
-
-      // Add 3 concentric contour elevation lines in the corner (outside the circle track rails)
-      const arcRadii = [1.48, 1.65, 1.82];
-      arcRadii.forEach(r => {
-        const points = [];
-        let startAng = 0;
-        if (cfg.cx > 0 && cfg.cz < 0) startAng = -Math.PI / 2;
-        else if (cfg.cx < 0 && cfg.cz < 0) startAng = -Math.PI;
-        else if (cfg.cx < 0 && cfg.cz > 0) startAng = Math.PI / 2;
-        else if (cfg.cx > 0 && cfg.cz > 0) startAng = 0;
-
-        const endAng = startAng + Math.PI / 2;
-        const steps = 24;
-        for (let s = 0; s <= steps; s++) {
-          const theta = startAng + (s / steps) * (endAng - startAng);
-          const px = cfg.bx + Math.cos(theta) * r;
-          const pz = cfg.bz + Math.sin(theta) * r;
-          if (px >= minX - 0.05 && px <= maxX + 0.05 && pz >= minZ - 0.05 && pz <= maxZ + 0.05) {
-            const info = evaluateArenaTerrain(px, pz);
-            points.push(new THREE.Vector3(px, info.y + 0.002, pz));
-          }
-        }
-        if (points.length > 1) {
-          const curveGeo = new THREE.BufferGeometry().setFromPoints(points);
-          const lineMat = new THREE.LineBasicMaterial({
-            color: cfg.color,
-            transparent: true,
-            opacity: 0.40
-          });
-          const line = new THREE.Line(curveGeo, lineMat);
-          this.cornerRampsGroup.add(line);
-        }
-      });
-    });
-
-    this.scene.add(this.cornerRampsGroup);
   }
 
   /**
