@@ -214,28 +214,29 @@ export class BallInterceptor {
       y = 0.9 + Math.random() * 0.5;
     }
 
-    // 2. Variable Size & Mass
-    // Size distribution: Small superballs (r ~ 0.04m), medium sports balls (r ~ 0.065m), heavy large balls (r ~ 0.095m)
+    // 2. Increased Variable Sizes & Reduced Lightweight Masses
+    // Size distribution: Min radius ~0.068m (13.6cm diam), Medium ~0.095m (19cm diam), Large ~0.135m (27cm diam)
     const sizeRoll = Math.random();
     let ballRadius;
     let baseRestitution;
     
     if (sizeRoll < 0.35) {
-      // Small agile superball
-      ballRadius = 0.038 + Math.random() * 0.015; // 0.038m - 0.053m
-      baseRestitution = 0.92 + Math.random() * 0.04; // Highly elastic
+      // Small agile ball (min size increased to ~0.068m)
+      ballRadius = 0.068 + Math.random() * 0.018; // 0.068m - 0.086m
+      baseRestitution = 0.94 + Math.random() * 0.03; // Ultra bouncy & elastic
     } else if (sizeRoll < 0.75) {
-      // Medium rubber playground ball
-      ballRadius = 0.058 + Math.random() * 0.020; // 0.058m - 0.078m
-      baseRestitution = 0.86 + Math.random() * 0.05;
+      // Medium playground ball (average size increased to ~0.095m)
+      ballRadius = 0.090 + Math.random() * 0.024; // 0.090m - 0.114m
+      baseRestitution = 0.89 + Math.random() * 0.04;
     } else {
-      // Large heavy rubber ball
-      ballRadius = 0.082 + Math.random() * 0.024; // 0.082m - 0.106m
-      baseRestitution = 0.80 + Math.random() * 0.05;
+      // Large beach / playground ball (~0.120m - 0.152m)
+      ballRadius = 0.120 + Math.random() * 0.032; // 0.120m - 0.152m
+      baseRestitution = 0.84 + Math.random() * 0.05;
     }
 
-    // Mass scales with volume: m = density * (4/3 * pi * r^3)
-    const mass = Math.pow(ballRadius / 0.060, 3) * 0.35;
+    // Reduced lightweight masses (light, floaty, highly responsive to collisions)
+    // Small ~0.04kg, Medium ~0.09kg, Large ~0.24kg
+    const mass = Math.pow(ballRadius / 0.095, 3) * 0.09;
 
     // 3. ZERO initial horizontal speed - pure downward vertical gravity fall!
     const vx = 0.0;
@@ -626,7 +627,7 @@ export class BallInterceptor {
 
         // --- Precise Physical Contact Check: ONLY BURSTS WHEN GRIPPER TOUCHES THE BALL ---
         const distToTcp = pos.distanceTo(tcpPos);
-        const touchThreshold = b.radius + 0.058; // Physical pinch contact zone with gripper jaws
+        const touchThreshold = b.radius + 0.070; // Physical pinch contact zone with gripper jaws
 
         if (distToTcp <= touchThreshold && pos.y > 0.05) {
           // BURST THE BALL!
