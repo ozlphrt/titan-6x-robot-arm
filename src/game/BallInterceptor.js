@@ -100,8 +100,8 @@ export class BallInterceptor {
     this.balls = [];
     this.particles = [];
 
-    // Gravity constant (m/s^2) - tuned for floaty, responsive, elastic physics
-    this.gravity = -7.2;
+    // Gravity constant (m/s^2) - gentle, floaty, pleasant industrial simulation
+    this.gravity = -3.8;
 
     // Arena boundary limits (3D bounding envelope covering all 4 quad stations)
     this.bounds = {
@@ -192,7 +192,7 @@ export class BallInterceptor {
     for (let i = 0; i < count; i++) {
       setTimeout(() => {
         this.spawnBall(true);
-      }, i * 320);
+      }, i * 400);
     }
   }
 
@@ -204,44 +204,42 @@ export class BallInterceptor {
     // 1. Center Circle Spawn Coordinates (purely centered above the center ground disc)
     let x = (Math.random() - 0.5) * 0.08;
     let z = (Math.random() - 0.5) * 0.08;
-    let y = 1.45 + Math.random() * 0.45; // Dropping vertically from 1.45m - 1.90m height
+    let y = 1.30 + Math.random() * 0.40; // Dropping vertically from 1.30m - 1.70m height
 
     if (!dropAtCenter) {
       const angle = Math.random() * Math.PI * 2;
       const dist = 0.3 + Math.random() * 0.4;
       x = Math.cos(angle) * dist;
       z = Math.sin(angle) * dist;
-      y = 0.9 + Math.random() * 0.5;
+      y = 0.8 + Math.random() * 0.4;
     }
 
     // 2. Increased Variable Sizes & Reduced Lightweight Masses
-    // Size distribution: Min radius ~0.068m (13.6cm diam), Medium ~0.095m (19cm diam), Large ~0.135m (27cm diam)
     const sizeRoll = Math.random();
     let ballRadius;
     let baseRestitution;
     
     if (sizeRoll < 0.35) {
-      // Small agile ball (min size increased to ~0.068m)
+      // Small agile ball
       ballRadius = 0.068 + Math.random() * 0.018; // 0.068m - 0.086m
-      baseRestitution = 0.94 + Math.random() * 0.03; // Ultra bouncy & elastic
+      baseRestitution = 0.78 + Math.random() * 0.04;
     } else if (sizeRoll < 0.75) {
-      // Medium playground ball (average size increased to ~0.095m)
+      // Medium playground ball
       ballRadius = 0.090 + Math.random() * 0.024; // 0.090m - 0.114m
-      baseRestitution = 0.89 + Math.random() * 0.04;
+      baseRestitution = 0.73 + Math.random() * 0.04;
     } else {
-      // Large beach / playground ball (~0.120m - 0.152m)
-      ballRadius = 0.120 + Math.random() * 0.032; // 0.120m - 0.152m
-      baseRestitution = 0.84 + Math.random() * 0.05;
+      // Large playground ball
+      ballRadius = 0.120 + Math.random() * 0.030; // 0.120m - 0.150m
+      baseRestitution = 0.68 + Math.random() * 0.04;
     }
 
-    // Reduced lightweight masses (light, floaty, highly responsive to collisions)
-    // Small ~0.04kg, Medium ~0.09kg, Large ~0.24kg
+    // Reduced lightweight masses
     const mass = Math.pow(ballRadius / 0.095, 3) * 0.09;
 
-    // 3. ZERO initial horizontal speed - pure downward vertical gravity fall!
+    // 3. ZERO initial horizontal speed - gentle downward drop!
     const vx = 0.0;
     const vz = 0.0;
-    const vy = -0.2 - Math.random() * 0.6; // Downward vertical velocity
+    const vy = -0.15; // Gentle downward initial release velocity
 
     const themeIndex = Math.floor(Math.random() * this.ballColorThemes.length);
     const theme = this.ballColorThemes[themeIndex];
@@ -294,13 +292,13 @@ export class BallInterceptor {
       const pMesh = new THREE.Mesh(particleGeo, particleMat.clone());
       pMesh.position.copy(pos);
 
-      const speed = 1.4 + Math.random() * 3.0;
+      const speed = 1.0 + Math.random() * 2.0;
       const phi = Math.random() * Math.PI * 2;
       const theta = Math.random() * Math.PI;
 
       const vel = new THREE.Vector3(
         Math.sin(theta) * Math.cos(phi) * speed,
-        Math.sin(theta) * Math.sin(phi) * speed + 0.3,
+        Math.sin(theta) * Math.sin(phi) * speed + 0.2,
         Math.cos(theta) * speed
       );
 
@@ -309,7 +307,7 @@ export class BallInterceptor {
         mesh: pMesh,
         vel: vel,
         life: 1.0,
-        decay: 1.6 + Math.random() * 1.2
+        decay: 1.8 + Math.random() * 1.0
       });
     }
 
@@ -334,15 +332,15 @@ export class BallInterceptor {
       decay: 2.8
     });
 
-    // Scatter nearby balls with pressure blast
+    // Scatter nearby balls gently
     for (const other of this.balls) {
       if (other.burst) continue;
       const d = other.mesh.position.distanceTo(pos);
-      if (d < 1.15 && d > 0.01) {
+      if (d < 1.0 && d > 0.01) {
         const scatterDir = new THREE.Vector3().subVectors(other.mesh.position, pos).normalize();
-        const impulse = (1.15 - d) * 2.8 / (other.mass || 0.35);
-        other.velocity.addScaledVector(scatterDir, impulse);
-        other.squash = 0.72;
+        const impulse = (1.0 - d) * 1.2 / (other.mass || 0.10);
+        other.velocity.addScaledVector(scatterDir, Math.min(impulse, 1.2));
+        other.squash = 0.82;
       }
     }
 
@@ -356,6 +354,7 @@ export class BallInterceptor {
     const numBalls = this.balls.length;
     const subSteps = 3;
     const dt = deltaTime / subSteps;
+    const maxSpeedLimit = 1.35; // Controlled, smooth maximum speed limit
 
     for (let step = 0; step < subSteps; step++) {
       // 1. Single Ball Integration: Gravity, Velocity, Floor & Perimeter Wall Bounces
@@ -365,8 +364,11 @@ export class BallInterceptor {
 
         const pos = b.mesh.position;
 
-        // Apply Gravity
+        // Apply Gentle Gravity
         b.velocity.y += this.gravity * dt;
+
+        // Clamp maximum downward fall speed
+        if (b.velocity.y < -2.2) b.velocity.y = -2.2;
 
         // Integrate Position
         pos.addScaledVector(b.velocity, dt);
@@ -374,58 +376,64 @@ export class BallInterceptor {
         // Floor Contact & Elastic Bouncing (pos.y <= b.radius)
         if (pos.y <= b.radius) {
           pos.y = b.radius;
-          if (b.velocity.y < -0.12) {
+          if (b.velocity.y < -0.10) {
             // Pure vertical elastic bounce
             b.velocity.y = -b.velocity.y * b.restitution;
             // Floor rolling friction
-            b.velocity.x *= 0.988;
-            b.velocity.z *= 0.988;
+            b.velocity.x *= 0.97;
+            b.velocity.z *= 0.97;
 
             // Elastic squash deformation
-            b.squash = Math.max(0.55, 1.0 - Math.abs(b.velocity.y) * 0.06);
+            b.squash = Math.max(0.65, 1.0 - Math.abs(b.velocity.y) * 0.08);
             b.bounces++;
 
-            if (Math.abs(b.velocity.y) > 0.9) {
+            if (Math.abs(b.velocity.y) > 0.6) {
               this.audio.playClick();
             }
           } else {
             // Resting / rolling on floor
             b.velocity.y = 0;
-            b.velocity.x *= (1.0 - dt * 0.9);
-            b.velocity.z *= (1.0 - dt * 0.9);
+            b.velocity.x *= (1.0 - dt * 1.8);
+            b.velocity.z *= (1.0 - dt * 1.8);
           }
         }
 
         // Arena Perimeter Wall Bounces (Keep balls bouncing within active workcell arena)
         if (pos.x < this.bounds.minX + b.radius) {
           pos.x = this.bounds.minX + b.radius;
-          b.velocity.x = Math.abs(b.velocity.x) * b.restitution;
-          b.squash = 0.78;
+          b.velocity.x = Math.abs(b.velocity.x) * 0.75;
+          b.squash = 0.82;
         } else if (pos.x > this.bounds.maxX - b.radius) {
           pos.x = this.bounds.maxX - b.radius;
-          b.velocity.x = -Math.abs(b.velocity.x) * b.restitution;
-          b.squash = 0.78;
+          b.velocity.x = -Math.abs(b.velocity.x) * 0.75;
+          b.squash = 0.82;
         }
 
         if (pos.z < this.bounds.minZ + b.radius) {
           pos.z = this.bounds.minZ + b.radius;
-          b.velocity.z = Math.abs(b.velocity.z) * b.restitution;
-          b.squash = 0.78;
+          b.velocity.z = Math.abs(b.velocity.z) * 0.75;
+          b.squash = 0.82;
         } else if (pos.z > this.bounds.maxZ - b.radius) {
           pos.z = this.bounds.maxZ - b.radius;
-          b.velocity.z = -Math.abs(b.velocity.z) * b.restitution;
-          b.squash = 0.78;
+          b.velocity.z = -Math.abs(b.velocity.z) * 0.75;
+          b.squash = 0.82;
         }
 
         // Ceiling bounce
         if (pos.y > this.bounds.maxY - b.radius) {
           pos.y = this.bounds.maxY - b.radius;
-          b.velocity.y = -Math.abs(b.velocity.y) * b.restitution;
+          b.velocity.y = -Math.abs(b.velocity.y) * 0.70;
         }
 
         // Air drag
-        b.velocity.x *= (1.0 - dt * 0.03);
-        b.velocity.z *= (1.0 - dt * 0.03);
+        b.velocity.x *= (1.0 - dt * 0.15);
+        b.velocity.z *= (1.0 - dt * 0.15);
+
+        // Overall speed clamp
+        const currentSpeed = b.velocity.length();
+        if (currentSpeed > maxSpeedLimit) {
+          b.velocity.multiplyScalar(maxSpeedLimit / currentSpeed);
+        }
       }
 
       // 2. Ball-to-Ball Elastic & Inelastic Collision Physics with Conservation of Momentum
@@ -476,8 +484,8 @@ export class BallInterceptor {
 
             // Only apply impulse if balls are moving toward each other
             if (vNormal < 0) {
-              const restitution = Math.min(b1.restitution, b2.restitution);
-              const impulse = -(1.0 + restitution) * vNormal / (1.0 / b1.mass + 1.0 / b2.mass);
+              const restitution = Math.min(b1.restitution, b2.restitution) * 0.70;
+              const impulse = -(1.0 + restitution) * vNormal / (1.0 / b1.mass + 1.0 / b2.mass) * 0.75;
 
               b1.velocity.x += (impulse / b1.mass) * nx;
               b1.velocity.y += (impulse / b1.mass) * ny;
@@ -487,12 +495,18 @@ export class BallInterceptor {
               b2.velocity.y -= (impulse / b2.mass) * ny;
               b2.velocity.z -= (impulse / b2.mass) * nz;
 
+              // Clamp post-collision speed
+              const s1 = b1.velocity.length();
+              if (s1 > maxSpeedLimit) b1.velocity.multiplyScalar(maxSpeedLimit / s1);
+              const s2 = b2.velocity.length();
+              if (s2 > maxSpeedLimit) b2.velocity.multiplyScalar(maxSpeedLimit / s2);
+
               // Elastic deformation / squash
               const squashAmt = Math.max(0.65, 1.0 - Math.abs(vNormal) * 0.08);
               b1.squash = Math.min(b1.squash, squashAmt);
               b2.squash = Math.min(b2.squash, squashAmt);
 
-              if (Math.abs(vNormal) > 0.7) {
+              if (Math.abs(vNormal) > 0.5) {
                 this.audio.playClick();
               }
             }
