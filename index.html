@@ -25,6 +25,25 @@
         </div>
       </div>
 
+      <!-- Arm Selection Group -->
+      <div class="floating-arm-selector" id="top-arm-selector">
+        <button class="arm-select-btn active" data-arm="0" id="btn-top-arm-0" title="Select Arm 1 [Alpha - Fanuc Yellow] (Key: 1)">
+          <span>🤖 ARM 1</span>
+        </button>
+        <button class="arm-select-btn" data-arm="1" id="btn-top-arm-1" title="Select Arm 2 [Beta - Kuka Orange] (Key: 2)">
+          <span>🤖 ARM 2</span>
+        </button>
+        <button class="arm-select-btn" data-arm="2" id="btn-top-arm-2" title="Select Arm 3 [Gamma - ABB White] (Key: 3)">
+          <span>🤖 ARM 3</span>
+        </button>
+        <button class="arm-select-btn" data-arm="3" id="btn-top-arm-3" title="Select Arm 4 [Delta - Cyber Cyan] (Key: 4)">
+          <span>🤖 ARM 4</span>
+        </button>
+        <button class="arm-select-btn sync-btn" id="btn-top-arm-sync" title="Sync & Control All 4 Arms Simultaneously">
+          <span>🌐 SYNC ALL</span>
+        </button>
+      </div>
+
       <!-- Quick Action Buttons -->
       <div class="floating-actions">
         <!-- Ball Buster Score Chip & Toggle -->
@@ -98,6 +117,23 @@
           </button>
 
           <div class="accordion-content" id="acc-content-kinematics">
+            <!-- Active Robot Arm Selector -->
+            <div class="menu-section-label" style="margin-top: 0;"><span>SELECT ACTIVE ROBOT ARM</span></div>
+            <div class="drawer-arm-grid">
+              <button class="drawer-arm-btn active" data-arm="0" id="btn-drawer-arm-0">
+                <span class="arm-dot dot-fanuc"></span> ARM 1 (Alpha)
+              </button>
+              <button class="drawer-arm-btn" data-arm="1" id="btn-drawer-arm-1">
+                <span class="arm-dot dot-kuka"></span> ARM 2 (Beta)
+              </button>
+              <button class="drawer-arm-btn" data-arm="2" id="btn-drawer-arm-2">
+                <span class="arm-dot dot-abb"></span> ARM 3 (Gamma)
+              </button>
+              <button class="drawer-arm-btn" data-arm="3" id="btn-drawer-arm-3">
+                <span class="arm-dot dot-cyber"></span> ARM 4 (Delta)
+              </button>
+            </div>
+
             <!-- Mode Selector Tabs -->
             <div class="menu-mode-tabs">
               <button class="mode-tab active" data-mode="fk" id="tab-fk">

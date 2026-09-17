@@ -79,13 +79,18 @@ export class Kinematics {
     const initialAngles = [...this.robot.angles];
     const initialTelescope = this.robot.getTelescope();
 
-    // 1. Analytical Base Yaw (J1): Always face target directly in XZ plane
-    const targetYaw = Math.atan2(targetPos.x, targetPos.z);
+    // 0. Transform World Target to Robot Local Space
+    this.robot.group.updateMatrixWorld(true);
+    const localTarget = targetPos.clone();
+    this.robot.group.worldToLocal(localTarget);
+
+    // 1. Analytical Base Yaw (J1): Face target directly in robot local XZ plane
+    const targetYaw = Math.atan2(localTarget.x, localTarget.z);
     
     // 2. Planar Coordinates relative to shoulder pivot
-    const shoulderWorldY = 0.48; // Base height + shoulder yoke height
-    const hDist = Math.sqrt(targetPos.x * targetPos.x + targetPos.z * targetPos.z);
-    const dy = targetPos.y - shoulderWorldY;
+    const shoulderLocalY = 0.48; // Base height + shoulder yoke height
+    const hDist = Math.sqrt(localTarget.x * localTarget.x + localTarget.z * localTarget.z);
+    const dy = localTarget.y - shoulderLocalY;
     const targetDist = Math.sqrt(hDist * hDist + dy * dy);
 
     // 3. Adaptive Telescoping Extension

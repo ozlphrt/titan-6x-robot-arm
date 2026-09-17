@@ -84,25 +84,27 @@ function createBouncyBallTexture(styleIndex, color1Hex, color2Hex) {
 }
 
 export class BallInterceptor {
-  constructor(scene, robot, kinematics, audio) {
+  constructor(scene, robots, kinematicsList, audio) {
     this.scene = scene;
-    this.robot = robot;
-    this.kinematics = kinematics;
+    this.robots = Array.isArray(robots) ? robots : [robots];
+    this.kinematicsList = Array.isArray(kinematicsList) ? kinematicsList : [kinematicsList];
+    this.robot = this.robots[0];
+    this.kinematics = this.kinematicsList[0];
     this.audio = audio;
 
     this.enabled = true; // Auto-defense active by default
-    this.targetFlockSize = 3; // Clean, focused flock size of 3 flying balls
+    this.targetFlockSize = 4; // Cooperative multi-arm flock
     this.spawnTimer = 0;
     this.spawnInterval = 2.0;
 
     this.balls = [];
     this.particles = [];
 
-    // Airspace flight bounds (3D bounding envelope within workspace)
+    // Airspace flight bounds (3D bounding envelope covering all 4 quad stations)
     this.bounds = {
-      minX: -1.65, maxX: 1.65,
-      minY: 0.28,  maxY: 1.55,
-      minZ: -1.65, maxZ: 1.65
+      minX: -2.4, maxX: 2.4,
+      minY: 0.28, maxY: 1.65,
+      minZ: -2.4, maxZ: 2.4
     };
 
     // The circle is the reach zone the robot arm actively defends (r <= 1.35m)
@@ -117,12 +119,22 @@ export class BallInterceptor {
     // Swarm flow / wandering parametric attractor state
     this.flowTime = 0;
 
-    // Smooth pursuit state
-    this.pursuitPos = new THREE.Vector3(0.45, 0.55, 0.0);
-    this.pursuitTarget = new THREE.Vector3(0.45, 0.55, 0.0);
-    this.pursuitVelocity = new THREE.Vector3(0, 0, 0);
-
-    this.defaultRestPos = new THREE.Vector3(0.45, 0.55, 0.0);
+    // Multi-Arm Pursuit States for all 4 Robot Arms
+    this.armPursuits = this.robots.map((r) => {
+      const basePos = new THREE.Vector3();
+      r.group.getWorldPosition(basePos);
+      const restPos = new THREE.Vector3().copy(basePos).add(new THREE.Vector3(0, 0.55, 0));
+      return {
+        robot: r,
+        basePos: basePos,
+        pursuitPos: restPos.clone(),
+        pursuitTarget: restPos.clone(),
+        pursuitVelocity: new THREE.Vector3(0, 0, 0),
+        defaultRestPos: restPos.clone(),
+        currentTargetBall: null,
+        lockedTargetBall: null
+      };
+    });
 
     // Color pairs for vibrant bouncy rubber/plastic balls
     this.ballColorThemes = [
@@ -141,8 +153,6 @@ export class BallInterceptor {
     this.particlesGroup = new THREE.Group();
     this.particlesGroup.name = 'BurstParticlesGroup';
     this.scene.add(this.particlesGroup);
-
-    this.lockedTargetBall = null;
 
     // Holographic AI Targeting Lock-On Reticle
     this.targetReticle = new THREE.Group();
@@ -457,25 +467,25 @@ export class BallInterceptor {
   }
 
   /**
-   * Spacetime Rendezvous Trajectory Predictor for Flying Boids
+   * Spacetime Rendezvous Trajectory Predictor for Flying Boids for a specific Robot Arm
    */
-  predictInterception(ball, currentTcp) {
+  predictInterception(ball, currentTcp, basePos = new THREE.Vector3(0, 0, 0)) {
     const simPos = ball.mesh.position.clone();
     const simVel = ball.velocity.clone();
     const dt = 0.035; // 35ms simulation slice
     const maxSteps = 45; // ~1.55 seconds lookahead
-    const armSpeed = 4.2; // m/s effective robotic intercept capability
+    const armSpeed = 4.5; // m/s effective robotic intercept capability
 
     for (let step = 1; step <= maxSteps; step++) {
       const t = step * dt;
       simPos.addScaledVector(simVel, dt);
 
-      // Check if candidate point is within physical reachable defense envelope
-      const hDist = Math.sqrt(simPos.x * simPos.x + simPos.z * simPos.z);
-      if (hDist <= 1.25 && hDist >= 0.18 && simPos.y >= 0.15 && simPos.y <= 1.35) {
+      // Check if candidate point is within physical reachable defense envelope of this arm
+      const hDist = Math.hypot(simPos.x - basePos.x, simPos.z - basePos.z);
+      if (hDist <= 1.30 && hDist >= 0.15 && simPos.y >= 0.12 && simPos.y <= 1.45) {
         const distFromTcp = currentTcp.distanceTo(simPos);
         const timeNeeded = distFromTcp / armSpeed;
-        if (timeNeeded <= (t + 0.15)) {
+        if (timeNeeded <= (t + 0.18)) {
           return {
             interceptPos: simPos.clone(),
             time: t,
@@ -485,14 +495,15 @@ export class BallInterceptor {
       }
     }
 
-    // Fallback: direct lead clamped within reach envelope
+    // Fallback: direct lead clamped within reach envelope of this arm
     const fallbackPos = ball.mesh.position.clone().addScaledVector(ball.velocity, 0.18);
-    const fbH = Math.sqrt(fallbackPos.x * fallbackPos.x + fallbackPos.z * fallbackPos.z);
-    if (fbH > 1.18) {
-      fallbackPos.x = (fallbackPos.x / fbH) * 1.18;
-      fallbackPos.z = (fallbackPos.z / fbH) * 1.18;
+    const offset = new THREE.Vector3().subVectors(fallbackPos, basePos);
+    const fbH = Math.hypot(offset.x, offset.z);
+    if (fbH > 1.20) {
+      fallbackPos.x = basePos.x + (offset.x / fbH) * 1.20;
+      fallbackPos.z = basePos.z + (offset.z / fbH) * 1.20;
     }
-    fallbackPos.y = Math.max(0.18, Math.min(1.25, fallbackPos.y));
+    fallbackPos.y = Math.max(0.15, Math.min(1.30, fallbackPos.y));
     return {
       interceptPos: fallbackPos,
       time: 0.20,
@@ -536,192 +547,206 @@ export class BallInterceptor {
       }
     }
 
-    // 3. Collision, Deflection & Gripper Contact Checks
-    const currentTcp = new THREE.Vector3();
-    this.robot.getTCPWorldPosition(currentTcp);
+    // 3. Multi-Arm Collision, Deflection & Gripper Contact Checks
+    for (let rIdx = 0; rIdx < this.robots.length; rIdx++) {
+      const robot = this.robots[rIdx];
+      const tcpPos = new THREE.Vector3();
+      robot.getTCPWorldPosition(tcpPos);
+      const armColliders = robot.getArmColliders();
 
-    for (let i = this.balls.length - 1; i >= 0; i--) {
-      const b = this.balls[i];
-      const pos = b.mesh.position;
-
-      // --- Precise Physical Contact Check: ONLY BURSTS WHEN GRIPPER TOUCHES THE BALL ---
-      const distToTcp = pos.distanceTo(currentTcp);
-      const touchThreshold = b.radius + 0.055; // Physical pinch contact zone with gripper jaws
-
-      if (distToTcp <= touchThreshold && pos.y > 0.05) {
-        // BURST THE BALL!
-        this.createBurstEffect(pos, b.color, b.radius);
-        this.score += Math.round(100 * (1.1 - b.radius * 4));
-        this.burstCount++;
-        this.combo++;
-        this.lastBurstTime = performance.now();
-
-        // Snap Gripper closed for physical pinch / bite
-        this.robot.setGripper(1.0);
-        setTimeout(() => this.robot.setGripper(0.0), 160);
-
-        if (this.lockedTargetBall === b) {
-          this.lockedTargetBall = null;
-        }
-
-        this.ballsGroup.remove(b.mesh);
-        b.mesh.geometry.dispose();
-        b.mesh.material.dispose();
-        if (b.texture) b.texture.dispose();
-        this.balls.splice(i, 1);
-        continue;
-      }
-
-      // --- Physical Robot Arm Segment Collisions & Bounce Deflections ---
-      const armColliders = this.robot.getArmColliders();
-      for (const col of armColliders) {
-        let closestPoint = null;
-        const colRadius = col.radius;
-
-        if (col.type === 'sphere') {
-          closestPoint = col.center;
-        } else if (col.type === 'capsule') {
-          const ab = new THREE.Vector3().subVectors(col.p2, col.p1);
-          const ap = new THREE.Vector3().subVectors(pos, col.p1);
-          const abLenSq = ab.lengthSq();
-          const t = abLenSq > 0.0001 ? Math.max(0, Math.min(1, ap.dot(ab) / abLenSq)) : 0;
-          closestPoint = new THREE.Vector3().copy(col.p1).addScaledVector(ab, t);
-        }
-
-        if (closestPoint) {
-          const diff = new THREE.Vector3().subVectors(pos, closestPoint);
-          const dist = diff.length();
-          const minDist = colRadius + b.radius;
-
-          if (dist < minDist && dist > 0.0001) {
-            const normal = diff.clone().normalize();
-            // Separate sphere out of collision penetration cleanly
-            pos.copy(closestPoint).addScaledVector(normal, minDist + 0.006);
-            b.mesh.position.copy(pos);
-
-            // Reflect velocity with lively elasticity and momentum deflection
-            const vDotN = b.velocity.dot(normal);
-            if (vDotN < 0) {
-              b.velocity.subScaledVector(normal, (1.0 + b.restitution) * vDotN);
-            }
-            b.velocity.addScaledVector(normal, 0.55 + Math.random() * 0.25);
-
-            b.bounces++;
-            b.squash = 0.62;
-            this.audio.playClick();
-          }
-        }
-      }
-    }
-
-    // 4. Intelligent Dynamic Ball Targeting with Adaptive Priority Scoring
-    let bestTarget = null;
-    let lowestScore = Infinity;
-
-    if (this.enabled) {
-      // Validate locked target
-      if (this.lockedTargetBall) {
-        const b = this.lockedTargetBall;
-        const bIndex = this.balls.indexOf(b);
-        const pos = b ? b.mesh.position : null;
-        const hDist = pos ? Math.sqrt(pos.x * pos.x + pos.z * pos.z) : 999;
-        const isStillValid = bIndex !== -1 && !b.burst && hDist <= 1.45 && pos.y >= 0.10 && pos.y <= 1.55;
-        if (!isStillValid) {
-          this.lockedTargetBall = null;
-        }
-      }
-
-      for (let i = 0; i < this.balls.length; i++) {
+      for (let i = this.balls.length - 1; i >= 0; i--) {
         const b = this.balls[i];
+        if (!b || !b.mesh) continue;
         const pos = b.mesh.position;
-        const hDist = Math.sqrt(pos.x * pos.x + pos.z * pos.z);
 
-        // Candidate filtering
-        if (hDist > 1.50 || pos.y < 0.08) continue;
+        // --- Precise Physical Contact Check: ONLY BURSTS WHEN GRIPPER TOUCHES THE BALL ---
+        const distToTcp = pos.distanceTo(tcpPos);
+        const touchThreshold = b.radius + 0.058; // Physical pinch contact zone with gripper jaws
 
-        const prediction = this.predictInterception(b, currentTcp);
-        if (prediction) {
-          // Dynamic Priority Score: Lower is better
-          let score = prediction.time * 1.6 + prediction.dist * 1.8 + Math.abs(pos.y - 0.70) * 0.4;
+        if (distToTcp <= touchThreshold && pos.y > 0.05) {
+          // BURST THE BALL!
+          this.createBurstEffect(pos, b.color, b.radius);
+          this.score += Math.round(100 * (1.1 - b.radius * 4));
+          this.burstCount++;
+          this.combo++;
+          this.lastBurstTime = performance.now();
 
-          // Balanced lock-on hysteresis (smooth tracking without being locked into distant targets)
-          if (b === this.lockedTargetBall) {
-            score -= 0.35;
+          // Snap Gripper closed for physical pinch / bite
+          robot.setGripper(1.0);
+          setTimeout(() => robot.setGripper(0.0), 160);
+
+          for (const ap of this.armPursuits) {
+            if (ap.lockedTargetBall === b) ap.lockedTargetBall = null;
+            if (ap.currentTargetBall === b) ap.currentTargetBall = null;
           }
 
-          if (score < lowestScore) {
-            lowestScore = score;
-            bestTarget = {
-              ball: b,
-              interceptPos: prediction.interceptPos,
-              time: prediction.time
-            };
+          this.ballsGroup.remove(b.mesh);
+          b.mesh.geometry.dispose();
+          b.mesh.material.dispose();
+          if (b.texture) b.texture.dispose();
+          this.balls.splice(i, 1);
+          continue;
+        }
+
+        // --- Physical Robot Arm Segment Collisions & Bounce Deflections ---
+        for (const col of armColliders) {
+          let closestPoint = null;
+          const colRadius = col.radius;
+
+          if (col.type === 'sphere') {
+            closestPoint = col.center;
+          } else if (col.type === 'capsule') {
+            const ab = new THREE.Vector3().subVectors(col.p2, col.p1);
+            const ap = new THREE.Vector3().subVectors(pos, col.p1);
+            const abLenSq = ab.lengthSq();
+            const t = abLenSq > 0.0001 ? Math.max(0, Math.min(1, ap.dot(ab) / abLenSq)) : 0;
+            closestPoint = new THREE.Vector3().copy(col.p1).addScaledVector(ab, t);
+          }
+
+          if (closestPoint) {
+            const diff = new THREE.Vector3().subVectors(pos, closestPoint);
+            const dist = diff.length();
+            const minDist = colRadius + b.radius;
+
+            if (dist < minDist && dist > 0.0001) {
+              const normal = diff.clone().normalize();
+              // Separate sphere out of collision penetration cleanly
+              pos.copy(closestPoint).addScaledVector(normal, minDist + 0.006);
+              b.mesh.position.copy(pos);
+
+              // Reflect velocity with lively elasticity and momentum deflection
+              const vDotN = b.velocity.dot(normal);
+              if (vDotN < 0) {
+                b.velocity.subScaledVector(normal, (1.0 + b.restitution) * vDotN);
+              }
+              b.velocity.addScaledVector(normal, 0.55 + Math.random() * 0.25);
+
+              b.bounces++;
+              b.squash = 0.62;
+              this.audio.playClick();
+            }
           }
         }
       }
-
-      if (bestTarget) {
-        this.lockedTargetBall = bestTarget.ball;
-      }
     }
 
-    // 5. Agile Arm Pursuit, Kinematics & HUD Reticle
-    if (this.enabled) {
-      if (bestTarget) {
-        this.currentTargetBall = bestTarget.ball;
-        this.pursuitTarget.copy(bestTarget.interceptPos);
+    // 4. Cooperative 4-Arm Intelligent Dynamic Targeting & Pursuit
+    let primaryTargetBall = null;
 
-        // Update 3D Holographic Lock-On Reticle
-        if (this.targetReticle) {
+    if (this.enabled) {
+      for (let k = 0; k < this.armPursuits.length; k++) {
+        const ap = this.armPursuits[k];
+        const robot = ap.robot;
+        const kinematics = this.kinematicsList[k] || this.kinematicsList[0];
+        const tcpPos = new THREE.Vector3();
+        robot.getTCPWorldPosition(tcpPos);
+        robot.group.getWorldPosition(ap.basePos);
+
+        // Validate locked target for this arm
+        if (ap.lockedTargetBall) {
+          const b = ap.lockedTargetBall;
+          const bIndex = this.balls.indexOf(b);
+          const pos = b ? b.mesh.position : null;
+          const hDist = pos ? Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z) : 999;
+          const isStillValid = bIndex !== -1 && !b.burst && hDist <= 1.45 && pos.y >= 0.10 && pos.y <= 1.65;
+          if (!isStillValid) {
+            ap.lockedTargetBall = null;
+          }
+        }
+
+        let bestTarget = null;
+        let lowestScore = Infinity;
+
+        for (let i = 0; i < this.balls.length; i++) {
+          const b = this.balls[i];
+          const pos = b.mesh.position;
+          const hDist = Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z);
+
+          // Candidate filtering relative to this arm's base
+          if (hDist > 1.50 || pos.y < 0.08) continue;
+
+          const prediction = this.predictInterception(b, tcpPos, ap.basePos);
+          if (prediction) {
+            // Dynamic Priority Score: Lower is better
+            let score = prediction.time * 1.6 + prediction.dist * 1.8 + Math.abs(pos.y - 0.70) * 0.4;
+
+            // Balanced lock-on hysteresis
+            if (b === ap.lockedTargetBall) {
+              score -= 0.35;
+            }
+
+            if (score < lowestScore) {
+              lowestScore = score;
+              bestTarget = {
+                ball: b,
+                interceptPos: prediction.interceptPos,
+                time: prediction.time
+              };
+            }
+          }
+        }
+
+        if (bestTarget) {
+          ap.lockedTargetBall = bestTarget.ball;
+          ap.currentTargetBall = bestTarget.ball;
+          ap.pursuitTarget.copy(bestTarget.interceptPos);
+          if (!primaryTargetBall) primaryTargetBall = bestTarget.ball;
+        } else {
+          ap.currentTargetBall = null;
+          ap.lockedTargetBall = null;
+          // Rest position slightly above arm base
+          const restY = 0.55;
+          ap.pursuitTarget.set(ap.basePos.x * 0.55, restY, ap.basePos.z * 0.55);
+        }
+
+        // Fast, agile critically damped Cartesian pursuit (SmoothDamp)
+        const smoothTime = 0.06;
+        const maxSpeed = 5.8;
+
+        const omega = 2.0 / smoothTime;
+        const x = omega * deltaTime;
+        const exp = 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x);
+
+        const change = new THREE.Vector3().subVectors(ap.pursuitPos, ap.pursuitTarget);
+        const originalTo = ap.pursuitTarget.clone();
+
+        const maxChange = maxSpeed * smoothTime;
+        change.clampLength(0, maxChange);
+        const clampedTarget = ap.pursuitPos.clone().sub(change);
+
+        const temp = new THREE.Vector3().addVectors(
+          ap.pursuitVelocity,
+          change.clone().multiplyScalar(omega)
+        ).multiplyScalar(deltaTime);
+
+        ap.pursuitVelocity.sub(temp.clone().multiplyScalar(omega)).multiplyScalar(exp);
+        const newPos = clampedTarget.clone().add(change.add(temp).multiplyScalar(exp));
+
+        if (originalTo.clone().sub(ap.pursuitPos).dot(newPos.clone().sub(originalTo)) > 0) {
+          newPos.copy(originalTo);
+          ap.pursuitVelocity.set(0, 0, 0);
+        }
+        ap.pursuitPos.copy(newPos);
+
+        // Solve IK target configuration smoothly into targetAngles for this arm
+        kinematics.solveIK(ap.pursuitPos, 16, 0.002, false);
+
+        // Open gripper jaws on approach
+        if (ap.currentTargetBall) {
+          robot.setGripper(0.0);
+        }
+      }
+
+      // Update Holographic Reticle
+      if (this.targetReticle) {
+        if (primaryTargetBall) {
           this.targetReticle.visible = true;
-          this.targetReticle.position.copy(this.currentTargetBall.mesh.position);
+          this.targetReticle.position.copy(primaryTargetBall.mesh.position);
           this.targetReticle.lookAt(this.targetReticle.position.clone().add(new THREE.Vector3(0, 1, 0)));
           this.reticleMesh.rotation.z += deltaTime * 5.0;
-        }
-      } else {
-        this.currentTargetBall = null;
-        this.lockedTargetBall = null;
-        this.pursuitTarget.copy(this.defaultRestPos);
-        if (this.targetReticle) {
+        } else {
           this.targetReticle.visible = false;
         }
-      }
-
-      // Fast, agile critically damped Cartesian pursuit (SmoothDamp)
-      const smoothTime = 0.06; // Snappy, responsive pursuit
-      const maxSpeed = 5.8; // High-speed robotic interception
-
-      const omega = 2.0 / smoothTime;
-      const x = omega * deltaTime;
-      const exp = 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x);
-
-      const change = new THREE.Vector3().subVectors(this.pursuitPos, this.pursuitTarget);
-      const originalTo = this.pursuitTarget.clone();
-
-      const maxChange = maxSpeed * smoothTime;
-      change.clampLength(0, maxChange);
-      const clampedTarget = this.pursuitPos.clone().sub(change);
-
-      const temp = new THREE.Vector3().addVectors(
-        this.pursuitVelocity,
-        change.clone().multiplyScalar(omega)
-      ).multiplyScalar(deltaTime);
-
-      this.pursuitVelocity.sub(temp.clone().multiplyScalar(omega)).multiplyScalar(exp);
-      const newPos = clampedTarget.clone().add(change.add(temp).multiplyScalar(exp));
-
-      if (originalTo.clone().sub(this.pursuitPos).dot(newPos.clone().sub(originalTo)) > 0) {
-        newPos.copy(originalTo);
-        this.pursuitVelocity.set(0, 0, 0);
-      }
-      this.pursuitPos.copy(newPos);
-
-      // Solve IK target configuration smoothly into targetAngles with unified analytical Elbow-Up solver
-      this.kinematics.solveIK(this.pursuitPos, 16, 0.002, false);
-
-      // Open gripper jaws on approach
-      if (this.currentTargetBall) {
-        this.robot.setGripper(0.0);
       }
     }
   }

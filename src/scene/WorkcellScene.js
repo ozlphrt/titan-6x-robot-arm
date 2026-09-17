@@ -58,7 +58,7 @@ export class WorkcellScene {
     this.gridHelper.position.y = 0.001;
     this.scene.add(this.gridHelper);
 
-    // 4. High-End Tactical Aerospace Radar HUD Floor Decal (3.2m x 3.2m, at y = 0.002)
+    // 4. Quad-Station Tactical Aerospace Radar HUD Floor Decals (Under each of 4 Robot Arms)
     this.ringsGroup = new THREE.Group();
     this.ringsGroup.name = 'TacticalRadarHUDGroup';
 
@@ -71,33 +71,60 @@ export class WorkcellScene {
 
     this.renderTacticalHUD(false); // Render initial Light Studio theme
 
-    const hudPlaneGeo = new THREE.PlaneGeometry(3.2, 3.2);
+    const hudPlaneGeo = new THREE.PlaneGeometry(2.8, 2.8);
     this.hudMat = new THREE.MeshBasicMaterial({
       map: this.hudTexture,
       transparent: true,
-      opacity: 0.95,
+      opacity: 0.92,
       depthWrite: false,
       toneMapped: false
     });
 
-    this.hudMesh = new THREE.Mesh(hudPlaneGeo, this.hudMat);
-    this.hudMesh.rotation.x = -Math.PI / 2;
-    this.hudMesh.position.y = 0.002;
-    this.ringsGroup.add(this.hudMesh);
-
-    // Dynamic Sweeping Tactical Radar Reticle Ring
-    const sweeperGeo = new THREE.RingGeometry(0.50, 1.36, 64);
+    const sweeperGeo = new THREE.RingGeometry(0.40, 1.35, 64);
     sweeperGeo.rotateX(-Math.PI / 2);
     this.sweeperMat = new THREE.MeshBasicMaterial({
       color: 0x0284c7,
       transparent: true,
-      opacity: 0.12,
+      opacity: 0.10,
       side: THREE.DoubleSide,
       depthWrite: false
     });
-    this.sweeperMesh = new THREE.Mesh(sweeperGeo, this.sweeperMat);
-    this.sweeperMesh.position.y = 0.003;
-    this.ringsGroup.add(this.sweeperMesh);
+
+    this.quadArmPositions = [
+      new THREE.Vector3(1.4, 0, -1.4),   // Arm 1 (Alpha - North-East)
+      new THREE.Vector3(-1.4, 0, -1.4),  // Arm 2 (Beta - North-West)
+      new THREE.Vector3(-1.4, 0, 1.4),   // Arm 3 (Gamma - South-West)
+      new THREE.Vector3(1.4, 0, 1.4)     // Arm 4 (Delta - South-East)
+    ];
+
+    this.hudMeshes = [];
+    this.sweeperMeshes = [];
+
+    this.quadArmPositions.forEach(pos => {
+      const hudMesh = new THREE.Mesh(hudPlaneGeo, this.hudMat);
+      hudMesh.rotation.x = -Math.PI / 2;
+      hudMesh.position.set(pos.x, 0.002, pos.z);
+      this.ringsGroup.add(hudMesh);
+      this.hudMeshes.push(hudMesh);
+
+      const sweeper = new THREE.Mesh(sweeperGeo, this.sweeperMat);
+      sweeper.position.set(pos.x, 0.003, pos.z);
+      this.ringsGroup.add(sweeper);
+      this.sweeperMeshes.push(sweeper);
+    });
+
+    // Central Shared Interaction Arena Reticle Ring
+    const centerRingGeo = new THREE.RingGeometry(0.78, 0.80, 64);
+    centerRingGeo.rotateX(-Math.PI / 2);
+    const centerRingMat = new THREE.MeshBasicMaterial({
+      color: 0x0284c7,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide
+    });
+    const centerRing = new THREE.Mesh(centerRingGeo, centerRingMat);
+    centerRing.position.set(0, 0.002, 0);
+    this.ringsGroup.add(centerRing);
 
     this.scene.add(this.ringsGroup);
   }
@@ -415,9 +442,11 @@ export class WorkcellScene {
   }
 
   update(deltaTime) {
-    // Subtle rotation of tactical radar pulse
-    if (this.sweeperMesh) {
-      this.sweeperMesh.rotation.y += deltaTime * 0.18;
+    // Subtle rotation of tactical radar pulse across all 4 arm stations
+    if (this.sweeperMeshes) {
+      this.sweeperMeshes.forEach((mesh, idx) => {
+        mesh.rotation.y += deltaTime * (0.18 + idx * 0.04);
+      });
     }
   }
 

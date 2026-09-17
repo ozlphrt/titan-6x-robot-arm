@@ -32,10 +32,18 @@ function createRoundedBoxGeometry(width, height, depth, radius, smoothness = 4) 
 }
 
 export class RobotModel {
-  constructor(scene) {
+  constructor(scene, options = {}) {
     this.scene = scene;
+    this.options = options;
     this.group = new THREE.Group();
-    this.group.name = 'IndustrialRobotArm';
+    this.group.name = options.name || 'IndustrialRobotArm';
+
+    if (options.position) {
+      this.group.position.copy(options.position);
+    }
+    if (options.rotationY !== undefined) {
+      this.group.rotation.y = options.rotationY;
+    }
 
     // Theme color palettes
     this.themes = {
@@ -46,7 +54,7 @@ export class RobotModel {
       cleanroom: { primary: 0xffffff, secondary: 0x0284c7, accent: 0x38bdf8, dark: 0x334155 },
       stealth: { primary: 0x374151, secondary: 0x0f172a, accent: 0x9ca3af, dark: 0x070b14 }
     };
-    this.currentTheme = 'fanuc';
+    this.currentTheme = options.theme || 'fanuc';
 
     // Joint Angle State in Radians (Actual current physical angles)
     this.angles = [0, 0, 0, 0, 0, 0]; // J1..J6

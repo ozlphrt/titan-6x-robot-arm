@@ -72,17 +72,29 @@ class RobotApp {
     // Audio Synthesizer
     this.audio = new AudioEngine();
 
-    // Workcell 3D Environment
+    // Workcell 3D Environment (Unified High-Tech Base Plate)
     this.workcell = new WorkcellScene(this.scene);
 
-    // 6-Axis Robot Arm Model (Default Theme: Fanuc Yellow)
-    this.robot = new RobotModel(this.scene);
+    // Quad 6-Axis Robot Arms Distributed in 4 Quadrants
+    const armConfigs = [
+      { position: [1.4, 0, -1.4], rotationY: Math.PI * 0.75, theme: 'fanuc', name: 'ALPHA (ARM 1)' },
+      { position: [-1.4, 0, -1.4], rotationY: Math.PI * 0.25, theme: 'kuka', name: 'BETA (ARM 2)' },
+      { position: [-1.4, 0, 1.4], rotationY: -Math.PI * 0.25, theme: 'abb', name: 'GAMMA (ARM 3)' },
+      { position: [1.4, 0, 1.4], rotationY: -Math.PI * 0.75, theme: 'cyber', name: 'DELTA (ARM 4)' }
+    ];
 
-    // Kinematics (FK / IK Engine)
-    this.kinematics = new Kinematics(this.robot);
+    this.robots = armConfigs.map(cfg => new RobotModel(this.scene, cfg));
+    this.kinematicsList = this.robots.map(r => new Kinematics(r));
+    this.grippers = this.robots.map(r => new GripperController(r, this.workcell, this.audio));
+    this.telemetries = this.robots.map((r, i) => new TelemetryManager(r, this.kinematicsList[i]));
 
-    // Gripper & Payload Controller
-    this.gripper = new GripperController(this.robot, this.workcell, this.audio);
+    // Active Arm Selection State
+    this.activeArmIndex = 0;
+    this.syncAllMode = false;
+    this.robot = this.robots[0];
+    this.kinematics = this.kinematicsList[0];
+    this.gripper = this.grippers[0];
+    this.telemetry = this.telemetries[0];
 
     // TCP Ribbon Trail & Gizmo
     this.visualizer = new ToolpathVisualizer(this.scene);
@@ -90,21 +102,19 @@ class RobotApp {
     // Program Sequencer (Teach Pendant & Auto Workcell Cycle)
     this.sequencer = new ProgramSequencer(this.robot, this.kinematics, this.gripper, this.audio);
 
-    // Real-Time Telemetry Manager
-    this.telemetry = new TelemetryManager(this.robot, this.kinematics);
-
-    // Autonomous Ball Dropper & Interceptor Game AI
-    this.ballInterceptor = new BallInterceptor(this.scene, this.robot, this.kinematics, this.audio);
+    // Autonomous Ball Dropper & Multi-Arm Interceptor Game AI
+    this.ballInterceptor = new BallInterceptor(this.scene, this.robots, this.kinematicsList, this.audio);
 
     // Initial Environment Theme (Clean Studio Daylight)
     this.currentEnvTheme = 'light_studio';
     this.setEnvironmentTheme('light_studio');
 
-    // Set initial ready pose
-    this.kinematics.moveToPreset('ready', 1.0);
+    // Set initial ready pose on all 4 arms
+    this.kinematicsList.forEach(k => k.moveToPreset('ready', 1.0));
   }
 
   initUI() {
+    this.bindArmSelector();
     this.bindSettingsDrawer();
     this.bindQuickActions();
     this.bindBallInterceptorUI();
@@ -118,6 +128,87 @@ class RobotApp {
     this.bindDisplayToggles();
     this.bindThemeSelector();
     this.bindEStop();
+  }
+
+  bindArmSelector() {
+    const updateButtons = () => {
+      // Top bar buttons
+      document.querySelectorAll('#top-arm-selector .arm-select-btn').forEach(btn => {
+        const aIdx = parseInt(btn.dataset.arm);
+        if (!isNaN(aIdx)) {
+          btn.classList.toggle('active', aIdx === this.activeArmIndex && !this.syncAllMode);
+        }
+      });
+      const topSync = document.getElementById('btn-top-arm-sync');
+      if (topSync) topSync.classList.toggle('active', this.syncAllMode);
+
+      // Drawer buttons
+      document.querySelectorAll('.drawer-arm-btn').forEach(btn => {
+        const aIdx = parseInt(btn.dataset.arm);
+        if (!isNaN(aIdx)) {
+          btn.classList.toggle('active', aIdx === this.activeArmIndex);
+        }
+      });
+
+      const chip = document.getElementById('quick-status-chip');
+      if (chip) {
+        chip.textContent = this.syncAllMode ? 'SYNC 4X ALL' : `ARM ${this.activeArmIndex + 1} ACTIVE`;
+      }
+    };
+
+    // Top Bar arm buttons
+    for (let i = 0; i < 4; i++) {
+      const btn = document.getElementById(`btn-top-arm-${i}`);
+      if (btn) {
+        btn.addEventListener('click', () => {
+          this.setActiveArm(i);
+        });
+      }
+    }
+
+    // Top Bar Sync All button
+    const topSync = document.getElementById('btn-top-arm-sync');
+    if (topSync) {
+      topSync.addEventListener('click', () => {
+        this.toggleSyncAll();
+      });
+    }
+
+    // Drawer arm buttons
+    for (let i = 0; i < 4; i++) {
+      const btn = document.getElementById(`btn-drawer-arm-${i}`);
+      if (btn) {
+        btn.addEventListener('click', () => {
+          this.setActiveArm(i);
+        });
+      }
+    }
+
+    this.updateArmUI = updateButtons;
+  }
+
+  setActiveArm(index) {
+    if (index < 0 || index >= this.robots.length) return;
+    this.activeArmIndex = index;
+    this.syncAllMode = false;
+    this.robot = this.robots[index];
+    this.kinematics = this.kinematicsList[index];
+    this.gripper = this.grippers[index];
+    this.telemetry = this.telemetries[index];
+
+    this.sequencer.robot = this.robot;
+    this.sequencer.kinematics = this.kinematics;
+    this.sequencer.gripper = this.gripper;
+
+    if (this.updateArmUI) this.updateArmUI();
+    this.updateJointUI();
+    this.audio.playClick();
+  }
+
+  toggleSyncAll() {
+    this.syncAllMode = !this.syncAllMode;
+    if (this.updateArmUI) this.updateArmUI();
+    this.audio.playClick();
   }
 
   bindSettingsDrawer() {
@@ -259,8 +350,15 @@ class RobotApp {
     if (slider) {
       slider.addEventListener('input', (e) => {
         const ratio = parseFloat(e.target.value);
-        this.robot.setTelescope(ratio);
-        this.robot.targetTelescopeExtension = ratio;
+        if (this.syncAllMode) {
+          this.robots.forEach(r => {
+            r.setTelescope(ratio);
+            r.targetTelescopeExtension = ratio;
+          });
+        } else {
+          this.robot.setTelescope(ratio);
+          this.robot.targetTelescopeExtension = ratio;
+        }
         updateTelescopeUI(ratio);
       });
     }
@@ -272,7 +370,14 @@ class RobotApp {
         if (current < 0.25) next = 0.5;
         else if (current < 0.75) next = 1.0;
         else next = 0.0;
-        this.robot.targetTelescopeExtension = next;
+
+        if (this.syncAllMode) {
+          this.robots.forEach(r => {
+            r.targetTelescopeExtension = next;
+          });
+        } else {
+          this.robot.targetTelescopeExtension = next;
+        }
         this.audio.playPuff();
         updateTelescopeUI(next);
       });
@@ -282,7 +387,13 @@ class RobotApp {
       toggleBtn.addEventListener('click', () => {
         const current = this.robot.targetTelescopeExtension || this.robot.getTelescope();
         const next = current > 0.5 ? 0.0 : 1.0;
-        this.robot.targetTelescopeExtension = next;
+        if (this.syncAllMode) {
+          this.robots.forEach(r => {
+            r.targetTelescopeExtension = next;
+          });
+        } else {
+          this.robot.targetTelescopeExtension = next;
+        }
         this.audio.playPuff();
         updateTelescopeUI(next);
       });
@@ -331,7 +442,11 @@ class RobotApp {
       slider.addEventListener('input', (e) => {
         if (this.isEStopped) return;
         const deg = parseFloat(e.target.value);
-        this.robot.setJointAngleDeg(idx, deg);
+        if (this.syncAllMode) {
+          this.robots.forEach(r => r.setJointAngleDeg(idx, deg));
+        } else {
+          this.robot.setJointAngleDeg(idx, deg);
+        }
         this.updateJointUI();
       });
 
@@ -346,7 +461,15 @@ class RobotApp {
         const dir = parseInt(e.target.dataset.dir);
         const currentDeg = THREE.MathUtils.radToDeg(this.robot.angles[idx]);
         const newDeg = currentDeg + dir * 5;
-        this.robot.setJointAngleDeg(idx, newDeg);
+
+        if (this.syncAllMode) {
+          this.robots.forEach(r => {
+            const cur = THREE.MathUtils.radToDeg(r.angles[idx]);
+            r.setJointAngleDeg(idx, cur + dir * 5);
+          });
+        } else {
+          this.robot.setJointAngleDeg(idx, newDeg);
+        }
         this.updateJointUI();
         this.audio.playClick();
       });
@@ -355,7 +478,11 @@ class RobotApp {
     // Reset pose button
     document.getElementById('btn-reset-pose')?.addEventListener('click', () => {
       if (this.isEStopped) return;
-      this.kinematics.moveToPreset('home', 0.8, () => this.updateJointUI());
+      if (this.syncAllMode) {
+        this.kinematicsList.forEach(k => k.moveToPreset('home', 0.8, () => this.updateJointUI()));
+      } else {
+        this.kinematics.moveToPreset('home', 0.8, () => this.updateJointUI());
+      }
       this.audio.playClick();
     });
   }
@@ -446,7 +573,11 @@ class RobotApp {
       btn.addEventListener('click', () => {
         if (this.isEStopped) return;
         const preset = btn.dataset.preset;
-        this.kinematics.moveToPreset(preset, 1.0, () => this.updateJointUI());
+        if (this.syncAllMode) {
+          this.kinematicsList.forEach(k => k.moveToPreset(preset, 1.0, () => this.updateJointUI()));
+        } else {
+          this.kinematics.moveToPreset(preset, 1.0, () => this.updateJointUI());
+        }
         this.audio.playClick();
       });
     });
@@ -575,14 +706,22 @@ class RobotApp {
     const quickGripLabel = document.getElementById('quick-grip-label');
 
     gripBtn?.addEventListener('click', () => {
-      this.robot.setTool('gripper');
+      if (this.syncAllMode) {
+        this.robots.forEach(r => r.setTool('gripper'));
+      } else {
+        this.robot.setTool('gripper');
+      }
       gripBtn.classList.add('active');
       weldBtn?.classList.remove('active');
       this.audio.playClick();
     });
 
     weldBtn?.addEventListener('click', () => {
-      this.robot.setTool('welder');
+      if (this.syncAllMode) {
+        this.robots.forEach(r => r.setTool('welder'));
+      } else {
+        this.robot.setTool('welder');
+      }
       weldBtn.classList.add('active');
       gripBtn?.classList.remove('active');
       this.audio.playClick();
@@ -590,7 +729,11 @@ class RobotApp {
 
     toggleGripBtn?.addEventListener('click', () => {
       if (this.isEStopped) return;
-      this.gripper.toggle();
+      if (this.syncAllMode) {
+        this.grippers.forEach(g => g.toggle());
+      } else {
+        this.gripper.toggle();
+      }
       const isOpen = this.gripper.isOpen;
 
       toggleGripBtn.classList.toggle('closed', !isOpen);
@@ -870,9 +1013,18 @@ class RobotApp {
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
 
-      if (e.key === '1') document.getElementById('tab-fk')?.click();
-      if (e.key === '2') document.getElementById('tab-ik')?.click();
-      if (e.key === '4') document.getElementById('tab-teach')?.click();
+      // Arm Selection Shortcuts
+      if (e.key === '1') this.setActiveArm(0);
+      if (e.key === '2') this.setActiveArm(1);
+      if (e.key === '3') this.setActiveArm(2);
+      if (e.key === '4') this.setActiveArm(3);
+      if (e.key === '0' || e.key === '5') this.toggleSyncAll();
+
+      // Kinematics Mode Tabs
+      if (e.key.toLowerCase() === 'f') document.getElementById('tab-fk')?.click();
+      if (e.key.toLowerCase() === 'i') document.getElementById('tab-ik')?.click();
+      if (e.key.toLowerCase() === 'p') document.getElementById('tab-teach')?.click();
+
       if (e.key.toLowerCase() === 'o') {
         const quickOrbit = document.getElementById('btn-quick-orbit');
         quickOrbit?.click();
@@ -910,7 +1062,7 @@ class RobotApp {
     const delta = Math.min(this.clock.getDelta(), 0.05);
 
     if (!this.isEStopped) {
-      // 0. Update Ball Dropper & Autonomous Catch AI
+      // 0. Update Ball Dropper & Autonomous Catch AI across all 4 arms
       if (!this.isRightClickDragging) {
         this.ballInterceptor.update(delta);
         const stats = this.ballInterceptor.getStats();
@@ -922,9 +1074,12 @@ class RobotApp {
         if (drawerBurst) drawerBurst.textContent = stats.burstCount;
       }
 
-      // 0.5. Smooth Robotic Servo Motors (Joint-by-Joint Continuous Movement, No Teleporting)
-      const hasServoMoved = this.robot.updateServoMotors(delta);
-      if (hasServoMoved) {
+      // 0.5. Smooth Robotic Servo Motors (Joint-by-Joint Continuous Movement across all 4 arms)
+      let anyServoMoved = false;
+      this.robots.forEach((r) => {
+        if (r.updateServoMotors(delta)) anyServoMoved = true;
+      });
+      if (anyServoMoved) {
         this.updateJointUI();
       }
 
@@ -959,38 +1114,55 @@ class RobotApp {
         }
 
         this.ikCurrentPos.copy(newPos);
-        this.kinematics.solveIK(this.ikCurrentPos, 24, 0.003, false);
+        if (this.syncAllMode) {
+          this.kinematicsList.forEach(k => k.solveIK(this.ikCurrentPos, 24, 0.003, false));
+        } else {
+          this.kinematics.solveIK(this.ikCurrentPos, 24, 0.003, false);
+        }
       }
 
-      // 2. Update Kinematics interpolation (for Presets, Teach Pendant)
-      const isMoving = this.kinematics.update(delta);
-      if (isMoving) {
+      // 2. Update Kinematics interpolation (for Presets, Teach Pendant across all 4 arms)
+      let isAnyArmMoving = false;
+      this.kinematicsList.forEach((k) => {
+        if (k.update(delta)) isAnyArmMoving = true;
+      });
+      if (isAnyArmMoving) {
         this.updateJointUI();
         this.robot.getTCPWorldPosition(this.ikCurrentPos);
         this.ikTargetPos.copy(this.ikCurrentPos);
         this.ikVelocity.set(0, 0, 0);
       }
 
-      // 3. Update Gripper kinematics & object grasping
-      this.gripper.update(delta);
+      // 3. Update Gripper kinematics & object grasping across all 4 arms
+      this.grippers.forEach((g) => g.update(delta));
 
       // 4. Update Workcell
       this.workcell.update(delta);
 
-      // 5. Record TCP motion path
+      // 5. Record Active TCP motion path
       const tcpPos = new THREE.Vector3();
       this.robot.getTCPWorldPosition(tcpPos);
       this.visualizer.addPoint(tcpPos);
 
-      // 6. Update Telemetry & Multi-Voice Joint Audio Synthesizer
-      this.telemetry.update(delta);
-      const jointSpeeds = this.telemetry.jointVelocities.map((v, i) =>
-        Math.max(v, Math.abs(this.robot.jointVelocities[i] || 0))
-      );
-      const teleSpeed = Math.abs(this.robot.telescopeVelocity || 0);
-      this.audio.updateJointMotors(jointSpeeds, teleSpeed);
+      // 6. Update Telemetry & Multi-Voice Joint Audio Synthesizer across all arms
+      this.telemetries.forEach((t) => t.update(delta));
 
-      // 7. Follow Gripper Camera Preset
+      const maxJointSpeeds = [0, 0, 0, 0, 0, 0];
+      let maxTeleSpeed = 0;
+
+      this.robots.forEach((r, rIdx) => {
+        const tel = this.telemetries[rIdx];
+        for (let j = 0; j < 6; j++) {
+          const spd = Math.max(tel.jointVelocities[j] || 0, Math.abs(r.jointVelocities[j] || 0));
+          if (spd > maxJointSpeeds[j]) maxJointSpeeds[j] = spd;
+        }
+        const tSpd = Math.abs(r.telescopeVelocity || 0);
+        if (tSpd > maxTeleSpeed) maxTeleSpeed = tSpd;
+      });
+
+      this.audio.updateJointMotors(maxJointSpeeds, maxTeleSpeed);
+
+      // 7. Follow Gripper Camera Preset for active arm
       if (this.activeCamPreset === 'tcp') {
         const tcpQuat = new THREE.Quaternion();
         this.robot.getTCPWorldQuaternion(tcpQuat);
