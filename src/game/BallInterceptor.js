@@ -846,61 +846,7 @@ export class BallInterceptor {
       }
     }
 
-    // 2.5. Stationary Center Ball Billiard Snipe System:
-    // When an arm's own ball has been stationary (v < 0.12 m/s) in the center circle (r <= 0.52m) for > 1.4s,
-    // the arm grabs an ammo ball from its zone and performs a kinetic bowling snipe!
-    for (let i = 0; i < this.balls.length; i++) {
-      const b = this.balls[i];
-      if (!b || !b.mesh || b.isHeld) continue;
-      const pos = b.mesh.position;
-      const distCenter = Math.hypot(pos.x, pos.z);
 
-      if (distCenter <= 0.52) {
-        const speed = b.velocity.length();
-        if (speed < 0.12) {
-          b.centerStuckTime = (b.centerStuckTime || 0) + deltaTime;
-        } else {
-          b.centerStuckTime = Math.max(0, (b.centerStuckTime || 0) - deltaTime * 1.5);
-        }
-
-        if (b.centerStuckTime > 0.25) {
-          const armIdx = b.teamId;
-          const ap = this.armPursuits[armIdx];
-
-          if (ap && ap.throwState === 'IDLE') {
-            // Find a resting own-color ball in this arm's zone to use as projectile ammo
-            let ammoBall = null;
-            let closestDist = Infinity;
-            for (let j = 0; j < this.balls.length; j++) {
-              const ab = this.balls[j];
-              if (!ab || !ab.mesh || ab.isHeld || ab === b) continue;
-              if (ab.teamId === armIdx) {
-                const abSpeed = ab.velocity.length();
-                if (abSpeed > 0.45) continue; // Pick a slow/resting ball as ammo
-
-                const d = Math.hypot(ab.mesh.position.x - ap.basePos.x, ab.mesh.position.z - ap.basePos.z);
-                if (d >= 0.22 && d <= 1.55 && d < closestDist) {
-                  closestDist = d;
-                  ammoBall = ab;
-                }
-              }
-            }
-
-            if (ammoBall) {
-              ap.throwState = 'APPROACH';
-              ap.throwMode = 'CENTER_STRIKE';
-              ap.throwBall = ammoBall;
-              ap.centerTargetBall = b;
-              ap.throwTimer = 0;
-              ap.robot.setGripper(0.0);
-              b.centerStuckTime = 0;
-            }
-          }
-        }
-      } else {
-        b.centerStuckTime = 0;
-      }
-    }
 
     // 3. Multi-Arm Push Contact, Grab & Throw for Stuck Balls
     for (let rIdx = 0; rIdx < this.robots.length; rIdx++) {
@@ -1068,11 +1014,7 @@ export class BallInterceptor {
             ap.heldBall.mesh.position.copy(tcpPos);
             this.audio.playPneumatic(true);
 
-            if (ap.throwMode === 'CENTER_STRIKE') {
-              const targetPos = (ap.centerTargetBall && ap.centerTargetBall.mesh) ? ap.centerTargetBall.mesh.position : new THREE.Vector3(0, 0.065, 0);
-              ap.targetThrowPos = targetPos.clone();
-              ap.targetThrowDir.set(targetPos.x - ap.basePos.x, 0, targetPos.z - ap.basePos.z).normalize();
-            } else if (ap.throwMode === 'RETRIEVE_CARRY') {
+            if (ap.throwMode === 'RETRIEVE_CARRY') {
               // Retrieve mode: carry inward towards home circle
               const angle = ((ap.retainsCount || 0) * 1.35) % (Math.PI * 2);
               const rIn = 0.55 + ((ap.retainsCount || 0) % 3) * 0.14;
@@ -1138,40 +1080,8 @@ export class BallInterceptor {
               robot.setTargetTelescope(savedTele);
               robot.setTelescope(savedTele);
             }
-          } else if (distToBall <= 0.42 && ap.throwTimer > 0.35) {
-            // CORNER / EDGE RAKE: Close enough but blocked from full clamping - perform instant kinetic swat
-            if (ap.throwMode === 'RETRIEVE_CARRY') {
-              const pushDir = new THREE.Vector3(ap.basePos.x - ballPos.x, 0, ap.basePos.z - ballPos.z).normalize();
-              ap.throwBall.velocity.set(pushDir.x * 3.5, 0.75, pushDir.z * 3.5);
-              ap.throwBall.lastPushTime = now + 400;
-              ap.throwBall.isHeld = false;
-              this.audio.playPneumatic(false);
-              if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.2);
-            } else {
-              const oppBase = this.armPursuits[ap.throwBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
-              const pushDir = new THREE.Vector3(oppBase.x - ballPos.x, 0, oppBase.z - ballPos.z).normalize();
-              if (pushDir.lengthSq() < 0.001) pushDir.set(ballPos.x - ap.basePos.x, 0, ballPos.z - ap.basePos.z).normalize();
-
-              ap.throwBall.velocity.set(pushDir.x * 4.5, 1.10, pushDir.z * 4.5);
-              ap.throwBall.lastThrowArm = armTeam;
-              ap.throwBall.lastThrowTime = now + 1500;
-              ap.throwBall.lastPushTime = now + 1500;
-              ap.throwBall.isHeld = false;
-              this.audio.playPneumatic(false);
-              if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.3);
-            }
-
-            robot.getTCPWorldPosition(tcpPos);
-            ap.pursuitPos.copy(tcpPos);
-            ap.pursuitTarget.copy(tcpPos);
-            ap.pursuitVelocity.set(0, 0, 0);
-            ap.lockedTargetBall = null;
-            ap.throwBall = null;
-            ap.centerTargetBall = null;
-            ap.throwMode = 'EJECT';
-            ap.throwState = 'IDLE';
           } else if (ap.throwTimer > 0.75) {
-            // Rapid 0.75s timeout to re-acquire target without stalling
+            // Clean timeout if ball rolls away out of reach, reset to IDLE cleanly
             if (ap.throwBall && !isAlienInBase) {
               ap.throwBall.lastPushTime = now + 80;
             }
@@ -1181,7 +1091,6 @@ export class BallInterceptor {
             ap.pursuitVelocity.set(0, 0, 0);
             ap.lockedTargetBall = null;
             ap.throwBall = null;
-            ap.centerTargetBall = null;
             ap.throwMode = 'EJECT';
             ap.throwState = 'IDLE';
           }
