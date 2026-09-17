@@ -56,13 +56,13 @@ export class RobotModel {
     // Max angular speeds (rad/s) for agile, high-performance robotic tracking [J1..J6]
     this.jointSpeeds = [5.2, 4.6, 5.2, 6.5, 6.5, 8.0]; // Fast, agile industrial servo speed
 
-    // Joint Angle Limits in Degrees (Realistic Wide Industrial Range of Motion)
+    // Joint Angle Limits in Degrees (Wide Industrial Range to Reach All Ground Circles)
     this.limits = [
       { min: -180, max: 180 }, // J1: Base Yaw (Full 360° rotation)
-      { min: -125, max: 45 },  // J2: Shoulder Pitch (Wide forward/upward/backward articulation)
-      { min: -155, max: 65 },  // J3: Elbow Pitch (Wide elbow flexion & extension)
+      { min: -145, max: 65 },  // J2: Shoulder Pitch (Deep forward & downward reach)
+      { min: -165, max: 85 },  // J3: Elbow Pitch (Deep folding for inner circles + extended reaching)
       { min: -180, max: 180 }, // J4: Forearm Roll (Full 360° axial roll)
-      { min: -125, max: 125 }, // J5: Wrist Pitch (Wide tool articulation)
+      { min: -145, max: 145 }, // J5: Wrist Pitch (Perpendicular ground alignment)
       { min: -360, max: 360 }  // J6: Tool Roll (Continuous flange spin)
     ];
 
@@ -70,12 +70,12 @@ export class RobotModel {
     this.dimensions = {
       baseHeight: 0.22,
       shoulderHeight: 0.18,
-      upperArmLength: 0.45,
+      upperArmLength: 0.52,
       elbowOffset: 0.08,
-      baseForearmLength: 0.38,
-      forearmLength: 0.38,
-      maxTelescopeExtension: 0.28,
-      wristLength: 0.12,
+      baseForearmLength: 0.44,
+      forearmLength: 0.44,
+      maxTelescopeExtension: 0.36,
+      wristLength: 0.13,
       flangeLength: 0.05
     };
 
@@ -413,9 +413,9 @@ export class RobotModel {
     this.telescopeStage1 = new THREE.Group();
     this.telescopeStage1.name = 'Telescope_Stage1_Outer';
 
-    const stage1BarrelGeo = new THREE.CylinderGeometry(0.073, 0.080, 0.18, 32);
+    const stage1BarrelGeo = new THREE.CylinderGeometry(0.073, 0.080, 0.22, 32);
     const stage1Barrel = new THREE.Mesh(stage1BarrelGeo, this.materials.primaryPaint);
-    stage1Barrel.position.y = 0.10;
+    stage1Barrel.position.y = 0.12;
     stage1Barrel.castShadow = true;
     this.telescopeStage1.add(stage1Barrel);
 
@@ -424,7 +424,7 @@ export class RobotModel {
       new THREE.CylinderGeometry(0.082, 0.078, 0.025, 32),
       this.materials.jointBezel
     );
-    stage1Collar.position.y = 0.19;
+    stage1Collar.position.y = 0.23;
     this.telescopeStage1.add(stage1Collar);
 
     const stage1BezelTorus = new THREE.Mesh(
@@ -432,7 +432,7 @@ export class RobotModel {
       this.materials.primaryPaint
     );
     stage1BezelTorus.rotateX(Math.PI / 2);
-    stage1BezelTorus.position.y = 0.19;
+    stage1BezelTorus.position.y = 0.23;
     this.telescopeStage1.add(stage1BezelTorus);
 
     // External Linear Guide Rails & Hydraulic Booster Housings
@@ -474,9 +474,9 @@ export class RobotModel {
     this.telescopeStage2.name = 'Telescope_Stage2_Mid';
     this.telescopeStage2.position.y = 0.0;
 
-    const stage2BarrelGeo = new THREE.CylinderGeometry(0.063, 0.066, 0.18, 32);
+    const stage2BarrelGeo = new THREE.CylinderGeometry(0.063, 0.066, 0.22, 32);
     const stage2Barrel = new THREE.Mesh(stage2BarrelGeo, this.materials.primaryPaint);
-    stage2Barrel.position.y = 0.15;
+    stage2Barrel.position.y = 0.18;
     stage2Barrel.castShadow = true;
     this.telescopeStage2.add(stage2Barrel);
 
@@ -485,7 +485,7 @@ export class RobotModel {
       new THREE.CylinderGeometry(0.069, 0.066, 0.02, 32),
       this.materials.jointBezel
     );
-    stage2Collar.position.y = 0.24;
+    stage2Collar.position.y = 0.29;
     this.telescopeStage2.add(stage2Collar);
 
     // Metric laser etched stroke ring markers
@@ -495,7 +495,7 @@ export class RobotModel {
         this.materials.jointBezel
       );
       ring.rotateX(Math.PI / 2);
-      ring.position.y = 0.10 + m * 0.045;
+      ring.position.y = 0.12 + m * 0.055;
       this.telescopeStage2.add(ring);
     }
 
@@ -507,9 +507,9 @@ export class RobotModel {
     this.telescopeStage3.position.y = 0.0;
 
     // Mirror polished chrome / titanium telescoping inner shaft
-    const stage3RodGeo = new THREE.CylinderGeometry(0.052, 0.054, 0.19, 32);
+    const stage3RodGeo = new THREE.CylinderGeometry(0.052, 0.054, 0.24, 32);
     const stage3Rod = new THREE.Mesh(stage3RodGeo, this.materials.chromePiston);
-    stage3Rod.position.y = 0.20;
+    stage3Rod.position.y = 0.24;
     stage3Rod.castShadow = true;
     this.telescopeStage3.add(stage3Rod);
 
@@ -518,7 +518,7 @@ export class RobotModel {
       new THREE.CylinderGeometry(0.058, 0.054, 0.025, 32),
       this.materials.jointBezel
     );
-    stage3Neck.position.y = 0.29;
+    stage3Neck.position.y = 0.35;
     this.telescopeStage3.add(stage3Neck);
 
     this.j4.add(this.telescopeStage3);
@@ -808,15 +808,15 @@ export class RobotModel {
     const rWrist = rElbow - Math.sin(armAngle2) * foreLen;
     const yWrist = yElbow + Math.cos(armAngle2) * foreLen;
 
-    // Solid Floor Clearance (Y >= 0.04m)
-    if (yWrist < 0.04) {
-      const deficit = 0.04 - yWrist;
-      angles[1] -= deficit * 0.5;
+    // Solid Floor Clearance (allow reaching directly onto base plate circles at y=0.003)
+    if (yWrist < 0.012) {
+      const deficit = 0.012 - yWrist;
+      angles[1] -= deficit * 0.25;
     }
 
-    // Solid Base Turntable Core (Radius <= 0.23m, Height <= 0.40m)
+    // Solid Base Turntable Core (Radius <= 0.23m, Height <= 0.38m)
     const baseCoreRadius = 0.23;
-    const baseCoreHeight = 0.40;
+    const baseCoreHeight = 0.38;
     if (Math.abs(rWrist) < baseCoreRadius && yWrist < baseCoreHeight) {
       if (angles[1] > -0.15) {
         angles[1] = -0.15;

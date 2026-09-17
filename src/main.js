@@ -797,9 +797,9 @@ class RobotApp {
       raycaster.setFromCamera(mouse, this.camera);
 
       if (raycaster.ray.intersectPlane(dragPlane, intersectPoint)) {
-        // Enforce physical workspace bounds (expanded for telescopic forearm)
+        // Enforce physical workspace bounds (expanded for telescopic forearm and floor circles)
         const horizontalDist = Math.sqrt(intersectPoint.x * intersectPoint.x + intersectPoint.z * intersectPoint.z);
-        const maxReach = 1.38;
+        const maxReach = 1.55;
         const minReach = 0.16;
 
         if (horizontalDist > maxReach) {
@@ -810,7 +810,7 @@ class RobotApp {
           intersectPoint.z = (intersectPoint.z / horizontalDist) * minReach;
         }
 
-        intersectPoint.y = Math.max(0.04, Math.min(1.35, intersectPoint.y));
+        intersectPoint.y = Math.max(0.005, Math.min(1.48, intersectPoint.y));
 
         this.ikTargetPos.copy(intersectPoint);
         this.visualizer.setTargetPosition(intersectPoint.x, intersectPoint.y, intersectPoint.z);

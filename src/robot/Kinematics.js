@@ -89,17 +89,17 @@ export class Kinematics {
     const targetDist = Math.sqrt(hDist * hDist + dy * dy);
 
     // 3. Adaptive Telescoping Extension
-    const baseArmReach = 0.72;
-    const maxArmReach = 1.18;
+    const baseArmReach = 0.75;
+    const maxArmReach = 1.48;
     const desiredExt = Math.max(0, Math.min(1.0, (targetDist - baseArmReach) / (maxArmReach - baseArmReach)));
     const currentExt = this.robot.getTelescope();
-    const newExt = currentExt + (desiredExt - currentExt) * 0.45;
+    const newExt = currentExt + (desiredExt - currentExt) * 0.50;
     this.robot.setTelescope(newExt);
 
     // 4. Analytical 2-Link Geometric "Elbow-Up" Seed
-    const L1 = this.robot.dimensions.upperArmLength; // 0.45m
-    const L2 = this.robot.dimensions.forearmLength + this.robot.dimensions.wristLength + 0.15; // Forearm + Wrist + Gripper TCP
-    const dClamped = Math.max(0.18, Math.min(L1 + L2 - 0.01, targetDist));
+    const L1 = this.robot.dimensions.upperArmLength;
+    const L2 = this.robot.dimensions.forearmLength + this.robot.dimensions.wristLength + 0.175; // Forearm + Wrist + Gripper TCP
+    const dClamped = Math.max(0.16, Math.min(L1 + L2 - 0.005, targetDist));
 
     const cosBeta = Math.max(-1.0, Math.min(1.0, (L1 * L1 + L2 * L2 - dClamped * dClamped) / (2 * L1 * L2)));
     const beta = Math.acos(cosBeta);
