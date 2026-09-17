@@ -967,7 +967,7 @@ export class BallInterceptor {
           }
         }
       } else if (ap.throwState === 'CLAMPING') {
-        // Visible Clamping Phase: keep gripper tightly clamped and ball firmly anchored
+        // Step 2: HOLD THE BALL (0.08s smooth clamp & capture exact joint pose)
         if (ap.heldBall && ap.heldBall.mesh) {
           ap.heldBall.velocity.set(0, 0, 0);
           ap.heldBall.mesh.position.copy(tcpPos);
@@ -980,11 +980,55 @@ export class BallInterceptor {
             ap.throwState = 'RETRIEVE_CARRY';
             ap.throwTimer = 0.45;
           } else {
-            ap.throwState = 'WINDUP';
-            const alpha = ap.throwPowerRatio || 0.5;
-            ap.throwTimer = 0.32 + 0.10 * alpha; // Smooth proportional lift & windup time
-            ap.windupDuration = ap.throwTimer;
+            // Step 3: Transition to smooth vertical LIFT
+            ap.throwState = 'LIFT';
+            ap.throwTimer = 0.20;
+            ap.liftDuration = 0.20;
           }
+        }
+      } else if (ap.throwState === 'LIFT') {
+        // Step 3: LIFT THE BALL smoothly off the ground from exact grasp pose
+        const startJ = ap.graspJointAngles || [0, -0.45, -0.55, 0, 0.60, 0];
+        const startTele = (ap.graspTele !== undefined) ? ap.graspTele : 0.40;
+
+        const lDuration = ap.liftDuration || 0.20;
+        const liftT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / lDuration));
+        // Quintic smoothstep for ultra-smooth vertical lift
+        const p = liftT * liftT * liftT * (liftT * (liftT * 6.0 - 15.0) + 10.0);
+
+        const liftJ2 = startJ[1] + 0.24;
+        const liftJ3 = startJ[2] - 0.22;
+        const liftJ5 = 0.65;
+        const liftTele = Math.max(0.12, startTele - 0.15);
+
+        const j1 = startJ[0];
+        const j2 = startJ[1] + (liftJ2 - startJ[1]) * p;
+        const j3 = startJ[2] + (liftJ3 - startJ[2]) * p;
+        const j4 = startJ[3] * (1.0 - p);
+        const j5 = startJ[4] + (liftJ5 - startJ[4]) * p;
+        const j6 = startJ[5] * (1.0 - p);
+        const tele = startTele + (liftTele - startTele) * p;
+
+        robot.setJointAngles([j1, j2, j3, j4, j5, j6]);
+        robot.setTelescope(tele);
+        robot.group.updateMatrixWorld(true);
+        robot.getTCPWorldPosition(tcpPos);
+
+        if (ap.heldBall && ap.heldBall.mesh) {
+          ap.heldBall.velocity.set(0, 0, 0);
+          ap.heldBall.mesh.position.copy(tcpPos);
+        }
+        robot.setGripper(1.0);
+
+        ap.throwTimer -= deltaTime;
+        if (ap.throwTimer <= 0) {
+          // Step 4: Transition to COCK & WINDUP
+          ap.throwState = 'WINDUP';
+          ap.liftEndAngles = [j1, j2, j3, j4, j5, j6];
+          ap.liftEndTele = tele;
+          const alpha = ap.throwPowerRatio || 0.5;
+          ap.throwTimer = 0.24 + 0.10 * alpha; // Proportional windup time
+          ap.windupDuration = ap.throwTimer;
         }
       } else if (ap.throwState === 'RETRIEVE_CARRY') {
         // Smoothly lift and carry ball over to the home sanctuary behind the robot arm
@@ -1045,9 +1089,9 @@ export class BallInterceptor {
           ap.throwState = 'IDLE';
         }
       } else if (ap.throwState === 'WINDUP') {
-        // Smooth continuous lift & windup from exact grasp pose
-        const startJ = ap.graspJointAngles || [0, -0.45, -0.55, 0, 0.60, 0];
-        const startTele = (ap.graspTele !== undefined) ? ap.graspTele : 0.40;
+        // Step 4: COCK & TARGET (Smooth rotation into pitch azimuth and rear cocking stance)
+        const startJ = ap.liftEndAngles || ap.graspJointAngles || [0, -0.45, -0.55, 0, 0.60, 0];
+        const startTele = (ap.liftEndTele !== undefined) ? ap.liftEndTele : ((ap.graspTele !== undefined) ? ap.graspTele : 0.40);
 
         // Target Base Yaw (J1) aligned directly with targetThrowDir in robot local space
         const localDir = ap.targetThrowDir.clone();
@@ -1060,9 +1104,9 @@ export class BallInterceptor {
         while (diffJ1 > Math.PI) diffJ1 -= Math.PI * 2;
         while (diffJ1 < -Math.PI) diffJ1 += Math.PI * 2;
 
-        const wDuration = ap.windupDuration || 0.35;
+        const wDuration = ap.windupDuration || 0.28;
         const windT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / wDuration));
-        // Quintic smoothstep for zero-jerk acceleration from grasp into cocked stance
+        // Quintic smoothstep for smooth continuous uncoiling into cocked stance
         const p = windT * windT * windT * (windT * (windT * 6.0 - 15.0) + 10.0);
         const alpha = ap.throwPowerRatio || 0.5;
 
@@ -1084,9 +1128,9 @@ export class BallInterceptor {
 
         const j2 = startJ[1] + (targetJ2 - startJ[1]) * p;
         const j3 = startJ[2] + (targetJ3 - startJ[2]) * p;
-        const j4 = startJ[3] + (0 - startJ[3]) * p;
+        const j4 = startJ[3] * (1.0 - p);
         const j5 = startJ[4] + (targetJ5 - startJ[4]) * p;
-        const j6 = startJ[5] + (0 - startJ[5]) * p;
+        const j6 = startJ[5] * (1.0 - p);
         const tele = startTele + (targetTele - startTele) * p;
 
         robot.setJointAngles([j1, j2, j3, j4, j5, j6]);
@@ -1102,13 +1146,14 @@ export class BallInterceptor {
 
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
+          // Step 5: Transition to FORWARD SWING & APEX RELEASE
           ap.throwState = 'SWING_THROW';
-          const swingDuration = 0.26 + 0.10 * alpha; // Proportional single forward swing duration
+          const swingDuration = 0.28 + 0.10 * alpha; // Proportional forward pitch duration
           ap.throwTimer = swingDuration;
           ap.swingDuration = swingDuration;
         }
       } else if (ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
-        // ONE SINGLE FLUID ATHLETIC FORWARD SWING strictly along targetThrowDir plane
+        // Step 5, 6, 7: ONE CONTINUOUS ATHLETIC FORWARD SWING, APEX RELEASE & FOLLOW-THROUGH
         const localDir = ap.targetThrowDir.clone();
         const invRot = robot.group.quaternion.clone().invert();
         localDir.applyQuaternion(invRot);
@@ -1151,19 +1196,19 @@ export class BallInterceptor {
         robot.group.updateMatrixWorld(true);
         robot.getTCPWorldPosition(tcpPos);
 
-        // Ball is held through acceleration phase; released right at peak forward power (swingT >= 0.68)
-        if (swingT < 0.68) {
+        // Step 6: APEX RELEASE AT 75% OF SWING
+        if (swingT < 0.75) {
           robot.setGripper(1.0);
           if (ap.heldBall && ap.heldBall.mesh) {
             ap.heldBall.velocity.set(0, 0, 0);
             ap.heldBall.mesh.position.copy(tcpPos);
           }
         } else if (ap.heldBall && ap.heldBall.mesh) {
-          // SINGLE APEX RELEASE: Snap gripper wide open and apply ballistic trajectory
+          // RELEASE BALL CLEANLY WITH BALLISTIC SPEED VECTOR
           robot.setGripper(0.0);
           this.audio.playPneumatic(false);
 
-          // Position ball cleanly ahead of gripper
+          // Position ball cleanly ahead of gripper along throw vector
           ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(ap.targetThrowDir, ap.heldBall.radius + 0.16);
           ap.heldBall.mesh.position.y += 0.04;
 
@@ -1197,13 +1242,13 @@ export class BallInterceptor {
           this.score += 100;
           ap.heldBall = null;
         } else {
-          // Post-release: Gripper stays wide open as arm glides naturally to finish the single forward stroke
+          // Step 7: FOLLOW-THROUGH (Gripper stays wide open as arm decelerates momentum to stroke end)
           robot.setGripper(0.0);
         }
 
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
-          // Seamless completion: Sync Cartesian IK anchors to final pose to prevent any snap/secondary swing
+          // Step 8: SMOOTH RECOVERY & ZERO-SNAP HANDOVER TO IDLE
           robot.getTCPWorldPosition(tcpPos);
           ap.pursuitPos.copy(tcpPos);
           ap.pursuitTarget.copy(tcpPos);
@@ -1293,8 +1338,8 @@ export class BallInterceptor {
           ap.wasDancing = false;
         }
 
-        // If arm is in WINDUP or SWING_THROW, direct joint trajectory controls the arm
-        if (ap.throwState === 'WINDUP' || ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
+        // If arm is in LIFT, WINDUP or SWING_THROW, direct joint trajectory controls the arm
+        if (ap.throwState === 'LIFT' || ap.throwState === 'WINDUP' || ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
           continue;
         }
 
