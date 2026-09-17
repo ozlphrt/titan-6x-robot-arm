@@ -624,8 +624,8 @@ export class BallInterceptor {
 
       if (hDist <= this.maxDefenseRadius + 0.20 && hDist >= 0.15 && simPos.y <= 1.55) {
         const floorAtPos = this.getFloorInfo(simPos.x, simPos.z);
-        // Strike target: position TCP slightly behind the ball relative to rotated attack direction
-        const strikePos = simPos.clone().addScaledVector(rotatedAttackDir, -ball.radius * 0.45);
+        // Strike target: position TCP directly on the contact surface of the ball along attack vector
+        const strikePos = simPos.clone().addScaledVector(rotatedAttackDir, -ball.radius * 0.85);
         
         // Clamp strikePos to robot's physical reach envelope (<= 1.35m)
         const sDx = strikePos.x - basePos.x;
@@ -636,7 +636,7 @@ export class BallInterceptor {
           strikePos.z = basePos.z + (sDz / sH) * 1.35;
         }
         
-        strikePos.y = Math.max(floorAtPos.y + ball.radius * 0.75 + yOffset, simPos.y + yOffset);
+        strikePos.y = Math.max(floorAtPos.y + ball.radius * 0.85 + yOffset, Math.min(simPos.y + yOffset, 0.45));
 
         const distFromTcp = currentTcp.distanceTo(strikePos);
         const timeNeeded = distFromTcp / armSpeed;
@@ -842,13 +842,14 @@ export class BallInterceptor {
           }
         }
 
-        // --- Active Gripper / TCP Push Contact Zone (Normal Fast Deflections & Swats) ---
+        // --- Active Gripper / TCP Push Contact Zone (Physical Finger / Tool Contact) ---
         if (ap.throwState === 'IDLE') {
           const distToTcp = pos.distanceTo(tcpPos);
           const hDistTcp = Math.hypot(pos.x - tcpPos.x, pos.z - tcpPos.z);
           const vDistTcp = Math.abs(pos.y - tcpPos.y);
-          const pushThreshold = b.radius + 0.18;
-          const isProximity = (distToTcp <= pushThreshold) || (hDistTcp <= b.radius + 0.16 && vDistTcp <= 0.24);
+          // Tight physical contact threshold: require ball to physically touch gripper fingers/TCP
+          const pushThreshold = b.radius + 0.045;
+          const isProximity = (distToTcp <= pushThreshold) || (hDistTcp <= b.radius + 0.048 && vDistTcp <= 0.095);
           const canBePushed = (now - b.lastPushTime) > 80;
 
           if (isProximity && pos.y >= 0.02 && canBePushed) {
@@ -1472,13 +1473,13 @@ export class BallInterceptor {
         }
 
         // Proactive Hover Stall-Breaker:
-        // If the arm's TCP has arrived near target ball (dist <= 0.24m) and ball is resting/slow (v < 0.25m/s)
-        // for more than 0.30s, directly trigger contact push without waiting.
+        // If the arm's TCP has arrived in direct physical contact with target ball (dist <= radius + 0.048m)
+        // and ball is resting/slow (v < 0.25m/s) for more than 0.25s, trigger contact push.
         if (ap.currentTargetBall && ap.currentTargetBall.mesh) {
           const tb = ap.currentTargetBall;
           const tbPos = tb.mesh.position;
           const distTcpToTb = tcpPos.distanceTo(tbPos);
-          if (distTcpToTb <= 0.24 && tb.velocity.length() < 0.25) {
+          if (distTcpToTb <= (tb.radius + 0.048) && tb.velocity.length() < 0.25) {
             ap.hoverStallTimer = (ap.hoverStallTimer || 0) + deltaTime;
             if (ap.hoverStallTimer > 0.30) {
               ap.hoverStallTimer = 0;
