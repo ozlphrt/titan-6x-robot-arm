@@ -1141,18 +1141,35 @@ export class BallInterceptor {
             }
           }
 
-          // --- VICTORY CELEBRATION DANCE ANIMATION ---
+          // --- VICTORY CELEBRATION SWING DANCE ANIMATION (High/Low Vertical Swing) ---
           const t = ap.danceTimer;
+          const tempo = 3.4; // Smooth energetic swing tempo
           const baseDirYaw = Math.atan2(-ap.basePos.x, -ap.basePos.z);
-          const j1 = baseDirYaw + Math.sin(t * 4.5) * 0.45; // Upbeat base sway
-          const j2 = -0.38 + Math.sin(t * 9.0) * 0.32;   // Shoulder bounce
-          const j3 = 0.68 + Math.cos(t * 9.0) * 0.35;    // Elbow groove
-          const j4 = Math.sin(t * 6.0) * 1.6;            // Forearm wave
-          const j5 = -0.65 + Math.cos(t * 9.0) * 0.48;   // Wrist pitch flex
-          const j6 = Math.sin(t * 14.0) * 4.2;           // Flange celebration spin
+
+          // 1. Horizontal Turntable Sway (Wide side-to-side swing)
+          const j1 = baseDirYaw + Math.sin(t * tempo) * 0.65;
+
+          // 2. High-to-Low Elevation Swing (Deep low floor dip down to -1.15 rad, soaring high skyward reach up to +0.35 rad)
+          const j2 = -0.40 + Math.cos(t * tempo) * 0.75;
+
+          // 3. Elbow Articulation (Folds on the low floor sweep and extends on the high soaring reach)
+          const j3 = 0.20 - Math.cos(t * tempo) * 0.55 + Math.sin(t * tempo * 2.0) * 0.22;
+
+          // 4. Forearm Body Roll (Leaning rhythmically into the side curves)
+          const j4 = Math.sin(t * tempo + 0.8) * 1.35;
+
+          // 5. Wrist Pitch Gesture (Gracefully tilts up on the low dip and down on the high soar)
+          const j5 = -0.30 + Math.cos(t * tempo) * 0.80;
+
+          // 6. Flange Tool Spin (Rhythmic celebration twirls)
+          const j6 = t * 3.8 + Math.sin(t * tempo) * 2.2;
+
+          // 7. Telescoping Forearm Extension (Reaches out high, tucks in low)
+          const tele = 0.15 + 0.70 * (0.5 + 0.5 * Math.cos(t * tempo));
+          robot.setTargetTelescope(tele);
 
           robot.setTargetAngles([j1, j2, j3, j4, j5, j6]);
-          robot.setGripper(0.5 + 0.5 * Math.sin(t * 16.0)); // Gripper celebration claps!
+          robot.setGripper(0.5 + 0.5 * Math.sin(t * tempo * 2.0)); // Syncopated upbeat gripper claps!
           continue;
         } else {
           ap.danceTimer = 0;
