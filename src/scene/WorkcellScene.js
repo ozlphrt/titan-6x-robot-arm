@@ -58,29 +58,233 @@ export class WorkcellScene {
     this.gridHelper.position.y = 0.001;
     this.scene.add(this.gridHelper);
 
-    // 4. Concentric Circular Defense Envelope (The zone the robot arm reaches & defends)
+    // 4. High-End Tactical Aerospace Radar HUD Floor Decal (3.2m x 3.2m, at y = 0.002)
     this.ringsGroup = new THREE.Group();
-    const reachOutlines = [
-      { radius: 0.50, color: 0x0284c7, opacity: 0.45 },
-      { radius: 0.85, color: 0x059669, opacity: 0.50 },
-      { radius: 1.15, color: 0xd97706, opacity: 0.50 },
-      { radius: 1.35, color: 0x0284c7, opacity: 0.75 } // Outer max reach defense boundary
-    ];
+    this.ringsGroup.name = 'TacticalRadarHUDGroup';
 
-    reachOutlines.forEach(env => {
-      const ringGeo = new THREE.RingGeometry(env.radius - 0.003, env.radius + 0.003, 128);
-      ringGeo.rotateX(-Math.PI / 2);
-      const ringMat = new THREE.MeshBasicMaterial({
-        color: env.color,
-        transparent: true,
-        opacity: env.opacity,
-        side: THREE.DoubleSide
-      });
-      const ring = new THREE.Mesh(ringGeo, ringMat);
-      ring.position.y = 0.002;
-      this.ringsGroup.add(ring);
+    this.hudCanvas = document.createElement('canvas');
+    this.hudCanvas.width = 2048;
+    this.hudCanvas.height = 2048;
+    this.hudCtx = this.hudCanvas.getContext('2d');
+    this.hudTexture = new THREE.CanvasTexture(this.hudCanvas);
+    this.hudTexture.anisotropy = 16;
+
+    this.renderTacticalHUD(false); // Render initial Light Studio theme
+
+    const hudPlaneGeo = new THREE.PlaneGeometry(3.2, 3.2);
+    this.hudMat = new THREE.MeshBasicMaterial({
+      map: this.hudTexture,
+      transparent: true,
+      opacity: 0.95,
+      depthWrite: false,
+      toneMapped: false
     });
+
+    this.hudMesh = new THREE.Mesh(hudPlaneGeo, this.hudMat);
+    this.hudMesh.rotation.x = -Math.PI / 2;
+    this.hudMesh.position.y = 0.002;
+    this.ringsGroup.add(this.hudMesh);
+
+    // Dynamic Sweeping Tactical Radar Reticle Ring
+    const sweeperGeo = new THREE.RingGeometry(0.50, 1.36, 64);
+    sweeperGeo.rotateX(-Math.PI / 2);
+    this.sweeperMat = new THREE.MeshBasicMaterial({
+      color: 0x0284c7,
+      transparent: true,
+      opacity: 0.12,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    this.sweeperMesh = new THREE.Mesh(sweeperGeo, this.sweeperMat);
+    this.sweeperMesh.position.y = 0.003;
+    this.ringsGroup.add(this.sweeperMesh);
+
     this.scene.add(this.ringsGroup);
+  }
+
+  renderTacticalHUD(isDark) {
+    const ctx = this.hudCtx;
+    const w = 2048;
+    const h = 2048;
+    const cx = 1024;
+    const cy = 1024;
+    const scale = 640; // 1m = 640px (1.6m half-width = 1024px)
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Color Palettes
+    const colPrimary = isDark ? '#00f0ff' : '#0284c7';
+    const colSecondary = isDark ? '#00ff9d' : '#059669';
+    const colAccent = isDark ? '#ffb300' : '#d97706';
+    const colGhost = isDark ? 'rgba(0, 240, 255, 0.16)' : 'rgba(2, 132, 199, 0.20)';
+    const colSubtle = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.10)';
+    const colText = isDark ? '#e2e8f0' : '#0f172a';
+    const colTextDim = isDark ? '#94a3b8' : '#64748b';
+
+    // 1. Azimuth Guideline Rays (Every 45 degrees)
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+
+      ctx.save();
+      ctx.strokeStyle = i % 2 === 0 ? colGhost : colSubtle;
+      ctx.lineWidth = i % 2 === 0 ? 3 : 2;
+      ctx.setLineDash(i % 2 === 0 ? [12, 10] : [6, 8]);
+      ctx.beginPath();
+      ctx.moveTo(cx + cos * (0.32 * scale), cy + sin * (0.32 * scale));
+      ctx.lineTo(cx + cos * (1.46 * scale), cy + sin * (1.46 * scale));
+      ctx.stroke();
+      ctx.restore();
+
+      // Metric distance tick marks along cardinal rays
+      if (i % 2 === 0) {
+        [0.55, 0.75, 0.95, 1.15, 1.35].forEach(r => {
+          const px = cx + cos * (r * scale);
+          const py = cy + sin * (r * scale);
+          const tickLen = 10;
+          ctx.save();
+          ctx.strokeStyle = colPrimary;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(px - sin * tickLen, py + cos * tickLen);
+          ctx.lineTo(px + sin * tickLen, py - cos * tickLen);
+          ctx.stroke();
+          ctx.restore();
+        });
+      }
+    }
+
+    // 2. Outer Max Reach Defense Envelope Ring (r = 1.35m)
+    const rOuter = 1.35 * scale;
+    ctx.save();
+    // Segmented Outer Track
+    ctx.strokeStyle = colPrimary;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rOuter, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Outer thin boundary offset
+    ctx.strokeStyle = colGhost;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rOuter + 22, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 72 Radial Perimeter Ticks & Degree Numbers (Every 5 deg)
+    for (let deg = 0; deg < 360; deg += 5) {
+      const rad = (deg * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const isMajor = deg % 45 === 0;
+      const isMedium = deg % 15 === 0;
+
+      const len = isMajor ? 20 : isMedium ? 12 : 6;
+      ctx.strokeStyle = isMajor ? colAccent : isMedium ? colPrimary : colGhost;
+      ctx.lineWidth = isMajor ? 4 : isMedium ? 2.5 : 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx + cos * (rOuter - len), cy + sin * (rOuter - len));
+      ctx.lineTo(cx + cos * (rOuter + len), cy + sin * (rOuter + len));
+      ctx.stroke();
+
+      // Degree labels at 45 degree intervals
+      if (isMajor) {
+        const textDist = rOuter + 48;
+        const tx = cx + cos * textDist;
+        const ty = cy + sin * textDist;
+        ctx.save();
+        ctx.fillStyle = colAccent;
+        ctx.font = 'bold 22px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const label = String(deg).padStart(3, '0') + '°';
+        ctx.fillText(label, tx, ty);
+        ctx.restore();
+      }
+    }
+
+    // Outer Zone Label Badges
+    ctx.fillStyle = colPrimary;
+    ctx.font = 'bold 20px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('MAX DEFENSE REACH // R1.35m', cx, cy - rOuter - 65);
+    ctx.fillText('TITAN-6X WORKCELL BOUNDARY', cx, cy + rOuter + 75);
+    ctx.restore();
+
+    // 3. Mid Working Envelope Ring (r = 0.95m)
+    const rMid = 0.95 * scale;
+    ctx.save();
+    ctx.strokeStyle = colSecondary;
+    ctx.lineWidth = 3.5;
+    ctx.setLineDash([20, 12]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, rMid, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Micro crosshair corner markers at 45°
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI) / 2 + Math.PI / 4;
+      const mx = cx + Math.cos(a) * rMid;
+      const my = cy + Math.sin(a) * rMid;
+      ctx.strokeStyle = colSecondary;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(mx - 14, my);
+      ctx.lineTo(mx + 14, my);
+      ctx.moveTo(mx, my - 14);
+      ctx.lineTo(mx, my + 14);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = colSecondary;
+    ctx.font = '600 18px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('WORKING ENVELOPE // R0.95m', cx + rMid - 16, cy - 24);
+    ctx.restore();
+
+    // 4. Inner Agile Core Dock Ring (r = 0.55m)
+    const rInner = 0.55 * scale;
+    ctx.save();
+    ctx.strokeStyle = colPrimary;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rInner, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Hazard Hash Teeth around Inner Circle
+    const hashCount = 36;
+    for (let i = 0; i < hashCount; i++) {
+      const a = (i / hashCount) * Math.PI * 2;
+      const cos = Math.cos(a);
+      const sin = Math.sin(a);
+      ctx.strokeStyle = i % 2 === 0 ? colAccent : colGhost;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(cx + cos * (rInner - 12), cy + sin * (rInner - 12));
+      ctx.lineTo(cx + cos * (rInner + 12), cy + sin * (rInner + 12));
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = colAccent;
+    ctx.font = 'bold 16px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('CORE DEFENSE DOCK // R0.55m', cx, cy - rInner - 22);
+    ctx.restore();
+
+    // 5. Robot Base Clearance Collar (r = 0.32m)
+    const rBase = 0.32 * scale;
+    ctx.save();
+    ctx.strokeStyle = colGhost;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, rBase, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    this.hudTexture.needsUpdate = true;
   }
 
   setEnvironmentTheme(themeKey) {
@@ -167,6 +371,14 @@ export class WorkcellScene {
     if (this.fillLight) this.fillLight.intensity = cfg.fill;
     if (this.backLight) this.backLight.intensity = cfg.back;
 
+    // Update Tactical HUD Texture & Sweeper to match theme
+    const isDark = themeKey === 'dark_cyber' || themeKey === 'cad_blueprint';
+    this.renderTacticalHUD(isDark);
+    if (this.sweeperMat) {
+      this.sweeperMat.color.setHex(cfg.gridCenter);
+      this.sweeperMat.opacity = isDark ? 0.18 : 0.10;
+    }
+
     // Grid
     if (this.gridHelper) {
       this.scene.remove(this.gridHelper);
@@ -203,7 +415,10 @@ export class WorkcellScene {
   }
 
   update(deltaTime) {
-    // Clean scene
+    // Subtle rotation of tactical radar pulse
+    if (this.sweeperMesh) {
+      this.sweeperMesh.rotation.y += deltaTime * 0.18;
+    }
   }
 
   toggleSafetyCurtain(visible) {
