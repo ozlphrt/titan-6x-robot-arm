@@ -1032,9 +1032,9 @@ export class BallInterceptor {
           ap.pursuitTarget.set(ballPos.x, targetY, ballPos.z);
 
           const distToBall = tcpPos.distanceTo(ballPos);
-          const graspThreshold = ap.throwBall.radius + 0.16; // Generous reach for open 26cm jaws
+          const graspThreshold = ap.throwBall.radius + 0.22; // Generous reach for open 26cm jaws
 
-          if ((distToBall <= graspThreshold || (ap.throwTimer > 0.35 && distToBall <= graspThreshold + 0.10)) && now > (ap.throwBall.lastPushTime || 0)) {
+          if ((distToBall <= graspThreshold || (ap.throwTimer > 0.40 && distToBall <= graspThreshold + 0.14)) && now > (ap.throwBall.lastPushTime || 0)) {
             // Initiate Smooth Clamping Phase (0.28s progressive calm jaw closure)
             ap.throwState = 'CLAMPING';
             ap.clampDuration = 0.28;
@@ -1051,6 +1051,12 @@ export class BallInterceptor {
               const targetPos = (ap.centerTargetBall && ap.centerTargetBall.mesh) ? ap.centerTargetBall.mesh.position : new THREE.Vector3(0, 0.065, 0);
               ap.targetThrowPos = targetPos.clone();
               ap.targetThrowDir.set(targetPos.x - ap.basePos.x, 0, targetPos.z - ap.basePos.z).normalize();
+            } else if (ap.throwMode === 'RETRIEVE_CARRY') {
+              // Retrieve mode: carry inward towards home circle
+              const angle = ((ap.retainsCount || 0) * 1.35) % (Math.PI * 2);
+              const rIn = 0.55 + ((ap.retainsCount || 0) % 3) * 0.14;
+              ap.targetThrowPos = ap.basePos.clone().add(new THREE.Vector3(Math.cos(angle) * rIn, 0, Math.sin(angle) * rIn));
+              ap.targetThrowDir.set(ap.targetThrowPos.x - ap.basePos.x, 0, ap.targetThrowPos.z - ap.basePos.z).normalize();
             } else {
               // Target: land directly at the opponent arm's base pedestal
               const targetArm = this.armPursuits[ap.heldBall.teamId];
@@ -1078,51 +1084,47 @@ export class BallInterceptor {
             ap.throwPowerRatio = alpha;
 
             // PRE-COMPUTE THROW KEYFRAME JOINT ANGLES via IK (done once here at grasp time)
-            // This guarantees natural-looking poses without any guesswork.
-            // 1. COCKED / WINDUP world position: behind and above the shoulder, ready to throw
-            const perpDir = new THREE.Vector3(-ap.targetThrowDir.z, 0, ap.targetThrowDir.x);
-            const cockedWorldPos = ap.basePos.clone()
-              .sub(ap.targetThrowDir.clone().multiplyScalar(0.12 + 0.22 * alpha))
-              .addScaledVector(perpDir, (rIdx % 2 === 0 ? -1 : 1) * 0.06 * alpha);
-            cockedWorldPos.y = 0.52 + 0.24 * alpha;
+            if (ap.throwMode !== 'RETRIEVE_CARRY') {
+              const perpDir = new THREE.Vector3(-ap.targetThrowDir.z, 0, ap.targetThrowDir.x);
+              const cockedWorldPos = ap.basePos.clone()
+                .sub(ap.targetThrowDir.clone().multiplyScalar(0.12 + 0.22 * alpha))
+                .addScaledVector(perpDir, (rIdx % 2 === 0 ? -1 : 1) * 0.06 * alpha);
+              cockedWorldPos.y = 0.52 + 0.24 * alpha;
 
-            // 2. RELEASE world position: forward and elevated along throw direction
-            const releaseWorldPos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.38 + 0.32 * alpha);
-            releaseWorldPos.y = 0.46 + 0.18 * alpha;
+              const releaseWorldPos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.38 + 0.32 * alpha);
+              releaseWorldPos.y = 0.46 + 0.18 * alpha;
 
-            // 3. FOLLOW-THROUGH world position: continuing the arc past release
-            const followWorldPos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.48 + 0.30 * alpha);
-            followWorldPos.y = 0.22 + 0.06 * alpha;
+              const followWorldPos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.48 + 0.30 * alpha);
+              followWorldPos.y = 0.22 + 0.06 * alpha;
 
-            // Solve IK for each keyframe and store the resulting joint angles
-            const savedAngles = [...robot.angles];
-            const savedTele = robot.getTelescope();
+              const savedAngles = [...robot.angles];
+              const savedTele = robot.getTelescope();
 
-            kinematics.solveIK(cockedWorldPos, 20, 0.001, true);
-            ap.throwCockedAngles = [...robot.angles];
-            ap.throwCockedTele = robot.getTelescope();
+              kinematics.solveIK(cockedWorldPos, 20, 0.001, true);
+              ap.throwCockedAngles = [...robot.angles];
+              ap.throwCockedTele = robot.getTelescope();
 
-            kinematics.solveIK(releaseWorldPos, 20, 0.001, true);
-            ap.throwReleaseAngles = [...robot.angles];
-            ap.throwReleaseTele = robot.getTelescope();
+              kinematics.solveIK(releaseWorldPos, 20, 0.001, true);
+              ap.throwReleaseAngles = [...robot.angles];
+              ap.throwReleaseTele = robot.getTelescope();
 
-            kinematics.solveIK(followWorldPos, 20, 0.001, true);
-            ap.throwFollowAngles = [...robot.angles];
-            ap.throwFollowTele = robot.getTelescope();
+              kinematics.solveIK(followWorldPos, 20, 0.001, true);
+              ap.throwFollowAngles = [...robot.angles];
+              ap.throwFollowTele = robot.getTelescope();
 
-            // Restore robot to the actual grasp pose
-            robot.setJointAngles(savedAngles);
-            robot.setTargetTelescope(savedTele);
-            robot.setTelescope(savedTele);
-          } else if (ap.throwTimer > 0.85) {
-            // CLUSTER JAM / CORNER REACH BREAKER: If obstructed or at max reach near perimeter walls, execute inward swat/sweep
+              robot.setJointAngles(savedAngles);
+              robot.setTargetTelescope(savedTele);
+              robot.setTelescope(savedTele);
+            }
+          } else if (distToBall <= 0.38 && ap.throwTimer > 1.6) {
+            // CORNER / EDGE RAKE: Close enough but blocked from full clamping
             if (ap.throwMode === 'RETRIEVE_CARRY') {
               const pushDir = new THREE.Vector3(ap.basePos.x - ballPos.x, 0, ap.basePos.z - ballPos.z).normalize();
-              ap.throwBall.velocity.set(pushDir.x * 3.6, 0.75, pushDir.z * 3.6);
-              ap.throwBall.lastPushTime = now + 600;
+              ap.throwBall.velocity.set(pushDir.x * 3.8, 0.85, pushDir.z * 3.8);
+              ap.throwBall.lastPushTime = now + 500;
               ap.throwBall.isHeld = false;
               this.audio.playPneumatic(false);
-              if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.1);
+              if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.2);
             } else {
               const oppBase = this.armPursuits[ap.throwBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
               const pushDir = new THREE.Vector3(oppBase.x - ballPos.x, 0, oppBase.z - ballPos.z).normalize();
@@ -1135,6 +1137,12 @@ export class BallInterceptor {
               if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.3);
             }
 
+            ap.throwBall = null;
+            ap.centerTargetBall = null;
+            ap.throwMode = 'EJECT';
+            ap.throwState = 'IDLE';
+          } else if (ap.throwTimer > 2.8) {
+            // Generous 2.8s timeout for maximum reach extension
             ap.throwBall = null;
             ap.centerTargetBall = null;
             ap.throwMode = 'EJECT';
@@ -1455,6 +1463,7 @@ export class BallInterceptor {
         // An arm can ONLY claim victory if:
         // 1. It is not currently holding or throwing a ball (must finish throwing alien ball first)
         // 2. All own balls are gathered inside this circle AND zero foreign balls in perimeter
+        const targetTeamBalls = Math.floor(this.targetFlockSize / 4); // Exactly 20 balls required per team
         const totalOwnBalls = this.balls.filter(b => b.teamId === armTeam).length;
         const ownInCircle = distributions[k]?.counts[armTeam] || 0;
         const foreignInCircle = (distributions[k]?.total || 0) - ownInCircle;
@@ -1474,8 +1483,8 @@ export class BallInterceptor {
         const isComplete = (
           !isBusyHandling &&
           !hasForeignInZone &&
-          totalOwnBalls > 0 &&
-          ownInCircle === totalOwnBalls &&
+          totalOwnBalls >= targetTeamBalls &&
+          ownInCircle >= targetTeamBalls &&
           foreignInCircle === 0
         );
 
