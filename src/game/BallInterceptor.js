@@ -198,19 +198,20 @@ export class BallInterceptor {
 
   /**
    * Spawns / drops a ball at the center circle with variable size and mass
+   * Pure vertical drop (0 horizontal velocity) - horizontal speed is gained exclusively through collisions
    */
   spawnBall(dropAtCenter = true) {
-    // 1. Center Circle Spawn Coordinates (above center ground disc)
-    let x = (Math.random() - 0.5) * 0.28;
-    let z = (Math.random() - 0.5) * 0.28;
-    let y = 1.35 + Math.random() * 0.50; // Dropping from 1.35m - 1.85m height
+    // 1. Center Circle Spawn Coordinates (purely centered above the center ground disc)
+    let x = (Math.random() - 0.5) * 0.08;
+    let z = (Math.random() - 0.5) * 0.08;
+    let y = 1.45 + Math.random() * 0.45; // Dropping vertically from 1.45m - 1.90m height
 
     if (!dropAtCenter) {
       const angle = Math.random() * Math.PI * 2;
-      const dist = 0.5 + Math.random() * 0.8;
+      const dist = 0.3 + Math.random() * 0.4;
       x = Math.cos(angle) * dist;
       z = Math.sin(angle) * dist;
-      y = 0.8 + Math.random() * 0.6;
+      y = 0.9 + Math.random() * 0.5;
     }
 
     // 2. Variable Size & Mass
@@ -222,27 +223,24 @@ export class BallInterceptor {
     if (sizeRoll < 0.35) {
       // Small agile superball
       ballRadius = 0.038 + Math.random() * 0.015; // 0.038m - 0.053m
-      baseRestitution = 0.90 + Math.random() * 0.05; // Highly elastic
+      baseRestitution = 0.92 + Math.random() * 0.04; // Highly elastic
     } else if (sizeRoll < 0.75) {
       // Medium rubber playground ball
       ballRadius = 0.058 + Math.random() * 0.020; // 0.058m - 0.078m
-      baseRestitution = 0.84 + Math.random() * 0.06;
+      baseRestitution = 0.86 + Math.random() * 0.05;
     } else {
       // Large heavy rubber ball
       ballRadius = 0.082 + Math.random() * 0.024; // 0.082m - 0.106m
-      baseRestitution = 0.78 + Math.random() * 0.06;
+      baseRestitution = 0.80 + Math.random() * 0.05;
     }
 
     // Mass scales with volume: m = density * (4/3 * pi * r^3)
-    // Normalized so standard 0.06m ball is ~0.35kg, small is ~0.10kg, large is ~1.2kg
     const mass = Math.pow(ballRadius / 0.060, 3) * 0.35;
 
-    // 3. Multi-directional outward scatter velocity + downward drop
-    const scatterAngle = Math.random() * Math.PI * 2;
-    const horizontalSpeed = 0.7 + Math.random() * 1.4; // 0.7 - 2.1 m/s outward velocity in all directions
-    const vx = Math.cos(scatterAngle) * horizontalSpeed;
-    const vz = Math.sin(scatterAngle) * horizontalSpeed;
-    const vy = -0.4 - Math.random() * 0.8; // Initial downward drop velocity
+    // 3. ZERO initial horizontal speed - pure downward vertical gravity fall!
+    const vx = 0.0;
+    const vz = 0.0;
+    const vy = -0.2 - Math.random() * 0.6; // Downward vertical velocity
 
     const themeIndex = Math.floor(Math.random() * this.ballColorThemes.length);
     const theme = this.ballColorThemes[themeIndex];
@@ -273,8 +271,8 @@ export class BallInterceptor {
       color: theme.hex,
       texture: ballTexture,
       velocity: new THREE.Vector3(vx, vy, vz),
-      rotationAxis: new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize(),
-      rotationSpeed: (Math.random() * 6 + 2) * (Math.random() < 0.5 ? 1 : -1),
+      rotationAxis: new THREE.Vector3(0, 1, 0),
+      rotationSpeed: 0,
       restitution: baseRestitution,
       squash: 1.0,
       bounces: 0,
@@ -355,7 +353,7 @@ export class BallInterceptor {
    */
   updateBallPhysics(deltaTime) {
     const numBalls = this.balls.length;
-    const subSteps = 2;
+    const subSteps = 3;
     const dt = deltaTime / subSteps;
 
     for (let step = 0; step < subSteps; step++) {
@@ -375,12 +373,12 @@ export class BallInterceptor {
         // Floor Contact & Elastic Bouncing (pos.y <= b.radius)
         if (pos.y <= b.radius) {
           pos.y = b.radius;
-          if (b.velocity.y < -0.15) {
-            // Elastic bounce
+          if (b.velocity.y < -0.12) {
+            // Pure vertical elastic bounce
             b.velocity.y = -b.velocity.y * b.restitution;
             // Floor rolling friction
-            b.velocity.x *= 0.985;
-            b.velocity.z *= 0.985;
+            b.velocity.x *= 0.988;
+            b.velocity.z *= 0.988;
 
             // Elastic squash deformation
             b.squash = Math.max(0.55, 1.0 - Math.abs(b.velocity.y) * 0.06);
@@ -392,17 +390,8 @@ export class BallInterceptor {
           } else {
             // Resting / rolling on floor
             b.velocity.y = 0;
-            b.velocity.x *= (1.0 - dt * 1.2);
-            b.velocity.z *= (1.0 - dt * 1.2);
-
-            // Re-energize or nudge if nearly stationary in center
-            const hDist = Math.hypot(pos.x, pos.z);
-            if (hDist < 0.25 && b.velocity.lengthSq() < 0.08) {
-              const kickAngle = Math.random() * Math.PI * 2;
-              b.velocity.x = Math.cos(kickAngle) * (0.8 + Math.random() * 0.8);
-              b.velocity.z = Math.sin(kickAngle) * (0.8 + Math.random() * 0.8);
-              b.velocity.y = 1.6 + Math.random() * 1.2;
-            }
+            b.velocity.x *= (1.0 - dt * 0.9);
+            b.velocity.z *= (1.0 - dt * 0.9);
           }
         }
 
