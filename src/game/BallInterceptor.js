@@ -1333,65 +1333,18 @@ export class BallInterceptor {
 
         if (bestTarget) {
           const targetBall = bestTarget.ball;
-
-          // Adaptive Retry Angle & Orientation Cycling:
-          // If stuck on the same ball without clearing it, systematically cycle approach angles and wrist orientation
-          if (ap.lastAttemptBall === targetBall) {
-            ap.attemptTimer += deltaTime;
-            if (ap.attemptTimer > 0.45 && targetBall.velocity.length() < 0.28) {
-              ap.attemptTimer = 0;
-              ap.approachAttempts++;
-
-              const cycle = ap.approachAttempts % 5;
-              if (cycle === 1) {
-                // 1. Left Flank Attack: approach from +55 deg side with +45 deg wrist roll
-                ap.currentAngleOffset = 0.96;
-                ap.currentWristRoll = 0.78;
-                ap.currentWristPitch = 0.26;
-                ap.currentYOffset = 0.015;
-              } else if (cycle === 2) {
-                // 2. Right Flank Attack: approach from -55 deg side with -45 deg wrist roll
-                ap.currentAngleOffset = -0.96;
-                ap.currentWristRoll = -0.78;
-                ap.currentWristPitch = 0.26;
-                ap.currentYOffset = 0.015;
-              } else if (cycle === 3) {
-                // 3. Low Shovel Scoop: approach under ball with upward wrist pitch
-                ap.currentAngleOffset = 0.0;
-                ap.currentWristRoll = 0.0;
-                ap.currentWristPitch = -0.44;
-                ap.currentYOffset = -0.020;
-              } else if (cycle === 4) {
-                // 4. High Overhead Hook / Side Flick
-                ap.currentAngleOffset = 1.35;
-                ap.currentWristRoll = 1.57;
-                ap.currentWristPitch = 0.35;
-                ap.currentYOffset = 0.035;
-              } else {
-                // 5. Direct grasp initiation
-                ap.throwState = 'APPROACH';
-                ap.throwMode = (targetBall.teamId === armTeam) ? 'RETRIEVE_CARRY' : 'EJECT';
-                ap.throwBall = targetBall;
-                ap.throwTimer = 0;
-                robot.setGripper(0.0);
-                ap.currentAngleOffset = 0;
-                ap.currentWristRoll = 0;
-                ap.currentWristPitch = 0;
-                ap.currentYOffset = 0;
-              }
-            }
-          } else {
-            ap.lastAttemptBall = targetBall;
-            ap.attemptTimer = 0;
-            ap.approachAttempts = 0;
-            ap.currentAngleOffset = 0;
-            ap.currentWristRoll = 0;
-            ap.currentWristPitch = 0;
-            ap.currentYOffset = 0;
-          }
-
           ap.lockedTargetBall = targetBall;
           ap.currentTargetBall = targetBall;
+
+          // Automatically engage unified Grasp & Retrieve / Catapult State Machine
+          if (ap.throwState === 'IDLE') {
+            ap.throwState = 'APPROACH';
+            ap.throwMode = (targetBall.teamId === armTeam) ? 'RETRIEVE_CARRY' : 'EJECT';
+            ap.throwBall = targetBall;
+            ap.throwTimer = 0;
+            robot.setGripper(0.0);
+          }
+
           ap.pursuitTarget.copy(bestTarget.interceptPos);
           if (!primaryTargetBall) primaryTargetBall = targetBall;
         } else {
@@ -1448,67 +1401,6 @@ export class BallInterceptor {
           robot.getTCPWorldPosition(tcpPos);
           ap.heldBall.mesh.position.copy(tcpPos);
           ap.heldBall.velocity.set(0, 0, 0);
-        }
-
-        if (ap.currentTargetBall) {
-          robot.setGripper(0.0);
-        }
-
-        // Proactive Hover Stall-Breaker:
-        // If the arm's TCP has arrived in direct physical contact with target ball (dist <= radius + 0.010m)
-        // and ball is resting/slow (v < 0.25m/s) for more than 0.25s, trigger contact push.
-        if (ap.currentTargetBall && ap.currentTargetBall.mesh) {
-          const tb = ap.currentTargetBall;
-          const tbPos = tb.mesh.position;
-          const distTcpToTb = tcpPos.distanceTo(tbPos);
-          if (distTcpToTb <= (tb.radius + 0.010) && tb.velocity.length() < 0.25) {
-            ap.hoverStallTimer = (ap.hoverStallTimer || 0) + deltaTime;
-            if (ap.hoverStallTimer > 0.30) {
-              ap.hoverStallTimer = 0;
-              const isOwn = (tb.teamId === armTeam);
-              let pushDir;
-              let pushForce;
-              if (isOwn) {
-                const hDistBase = Math.hypot(tbPos.x - ap.basePos.x, tbPos.z - ap.basePos.z);
-                if (hDistBase > 1.20) {
-                  const dxB = ap.basePos.x - tbPos.x;
-                  const dzB = ap.basePos.z - tbPos.z;
-                  const dB = Math.hypot(dxB, dzB);
-                  pushDir = dB > 0.001 ? new THREE.Vector3(dxB / dB, 0, dzB / dB) : new THREE.Vector3(1, 0, 0);
-                  pushForce = 1.65;
-                } else {
-                  const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
-                  const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48);
-                  const inDir = new THREE.Vector3(sanctuaryPos.x - tbPos.x, 0, sanctuaryPos.z - tbPos.z).normalize();
-                  pushDir = inDir;
-                  pushForce = 1.20;
-                }
-                ap.retainsCount++;
-              } else {
-                const oppBase = this.armPursuits[tb.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
-                pushDir = new THREE.Vector3(oppBase.x - tbPos.x, 0, oppBase.z - tbPos.z).normalize();
-                pushForce = 2.4;
-                ap.ejectionsCount++;
-              }
-              tb.velocity.x = pushDir.x * pushForce;
-              tb.velocity.z = pushDir.z * pushForce;
-              tb.velocity.y = 0.26;
-              tb.lastPushTime = now;
-              tb.bounces++;
-              this.createPushRippleEffect(tbPos, tb.color, tb.radius, pushDir);
-              robot.setGripper(0.85);
-              if (this.audio && typeof this.audio.playArmSwat === 'function') {
-                this.audio.playArmSwat(Math.min(1.0, pushForce / 2.4));
-              }
-              setTimeout(() => robot.setGripper(0.0), 140);
-              ap.lockedTargetBall = null;
-              ap.currentTargetBall = null;
-            }
-          } else {
-            ap.hoverStallTimer = 0;
-          }
-        } else {
-          ap.hoverStallTimer = 0;
         }
       }
 
