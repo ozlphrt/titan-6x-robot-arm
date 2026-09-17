@@ -210,29 +210,29 @@ export class WorkcellScene {
     ctx.clearRect(0, 0, w, h);
 
     // Desaturated, elegant color palette perfectly matching each robot arm's native paint
-    // Alpha = Fanuc Yellow (#ffcb05), Beta = Kuka Orange (#e65100), Gamma = Emerald Green (#10b981), Delta = Cyber Cyan (#00f0ff)
+    // Alpha = Fanuc Yellow (#ffcb05), Beta = Kuka Orange (#e65100), Gamma = Emerald Green (#10b981), Delta = Cobalt Blue (#2563eb)
     const teamFills = [
       'rgba(215, 175, 60, 0.80)',   // Fanuc Yellow (muted warm ochre)
       'rgba(195, 100, 50, 0.80)',   // Kuka Orange (muted terracotta)
       'rgba(35, 175, 115, 0.80)',   // Gamma Emerald Green (muted industrial green)
-      'rgba(55, 160, 175, 0.80)'    // Cyber Cyan (muted slate teal)
+      'rgba(37, 99, 235, 0.80)'     // Delta Cobalt Blue (muted royal blue)
     ];
 
     const teamDividers = [
       'rgba(240, 205, 95, 0.95)',
       'rgba(225, 130, 80, 0.95)',
       'rgba(75, 215, 155, 0.95)',
-      'rgba(85, 195, 210, 0.95)'
+      'rgba(96, 165, 250, 0.95)'
     ];
 
     const teamStandbyGlows = [
       'rgba(215, 175, 60, 0.15)',
       'rgba(195, 100, 50, 0.15)',
       'rgba(35, 175, 115, 0.15)',
-      'rgba(55, 160, 175, 0.15)'
+      'rgba(37, 99, 235, 0.15)'
     ];
 
-    const teamNames = ['ALPHA (YELLOW)', 'BETA (ORANGE)', 'GAMMA (GREEN)', 'DELTA (CYAN)'];
+    const teamNames = ['ALPHA (YELLOW)', 'BETA (ORANGE)', 'GAMMA (GREEN)', 'DELTA (BLUE)'];
 
     const colPrimary = isDark ? '#00f0ff' : '#0284c7';
     const colSecondary = isDark ? '#00ff9d' : '#059669';

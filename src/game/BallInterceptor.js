@@ -63,9 +63,9 @@ export class BallInterceptor {
       {
         id: 3,
         name: 'DELTA (ARM 4)',
-        label: 'Cyber Cyan',
-        primary: '#00f0ff',
-        hex: 0x00f0ff
+        label: 'Cobalt Blue',
+        primary: '#2563eb',
+        hex: 0x2563eb
       }
     ];
 

@@ -68,7 +68,7 @@ export class RobotModel {
       fanuc: { primary: 0xffcb05, secondary: 0x1c2128, accent: 0xffe047, dark: 0x0f1318 },
       kuka: { primary: 0xe65100, secondary: 0x1e242d, accent: 0xff9800, dark: 0x11141a },
       abb: { primary: 0x10b981, secondary: 0x112920, accent: 0x34d399, dark: 0x061510 },
-      cyber: { primary: 0x00f0ff, secondary: 0x0d1527, accent: 0x00ff9d, dark: 0x060913 },
+      cyber: { primary: 0x2563eb, secondary: 0x0f172a, accent: 0x60a5fa, dark: 0x070d1a },
       cleanroom: { primary: 0xffffff, secondary: 0x0284c7, accent: 0x38bdf8, dark: 0x334155 },
       stealth: { primary: 0x374151, secondary: 0x0f172a, accent: 0x9ca3af, dark: 0x070b14 }
     };
@@ -1141,8 +1141,8 @@ export class RobotModel {
       return { ledOn: '#ff3d00', glow: 'rgba(255, 61, 0, 0.45)', ledOff: '#200c06', bg: '#08080c', text: '#ff6e40' };
     } else if (t === 'abb' || t === 'emerald' || t === 'green') {
       return { ledOn: '#10b981', glow: 'rgba(16, 185, 129, 0.50)', ledOff: '#041c12', bg: '#020a06', text: '#34d399' };
-    } else if (t === 'cyber') {
-      return { ledOn: '#00f0ff', glow: 'rgba(0, 240, 255, 0.50)', ledOff: '#041620', bg: '#030610', text: '#00ff9d' };
+    } else if (t === 'cyber' || t === 'blue') {
+      return { ledOn: '#3b82f6', glow: 'rgba(59, 130, 246, 0.50)', ledOff: '#040d1a', bg: '#020610', text: '#60a5fa' };
     }
     return { ledOn: '#00ff9d', glow: 'rgba(0, 255, 157, 0.45)', ledOff: '#091c14', bg: '#060d0a', text: '#00ff9d' };
   }
