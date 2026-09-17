@@ -521,6 +521,35 @@ export class BallInterceptor {
     };
   }
 
+  /**
+   * Returns true if there are active moving threats or intruder balls in the given arm's defense sector
+   */
+  hasActiveThreatsInZone(armIdx) {
+    const ap = this.armPursuits[armIdx];
+    if (!ap) return false;
+    const basePos = ap.basePos;
+    const armTeam = ap.teamId;
+
+    for (let i = 0; i < this.balls.length; i++) {
+      const b = this.balls[i];
+      if (!b || !b.mesh || b.isHeld) continue;
+      const pos = b.mesh.position;
+      const distBase = Math.hypot(pos.x - basePos.x, pos.z - basePos.z);
+
+      if (distBase <= 1.35 && pos.y >= 0.02) {
+        const isOwnColor = (b.teamId === armTeam);
+        const speed = b.velocity.length();
+
+        // 1. Any opponent ball inside our circle is an active threat
+        if (!isOwnColor) return true;
+
+        // 2. Any moving own-color ball that is still rolling or bouncing
+        if (speed > 0.25) return true;
+      }
+    }
+    return false;
+  }
+
   update(deltaTime) {
     const now = performance.now();
 
@@ -560,36 +589,42 @@ export class BallInterceptor {
       }
     }
 
-    // 2.5. Stationary Center Ball Billiard Snipe System:
-    // If a ball is resting inside the center circle (r <= 0.50m), its respective arm grabs an own-color ball and hurls it straight at the stuck ball!
+    // 2.5. Stationary Center Ball Billiard Snipe System (LAST RESORT ONLY):
+    // Only triggered when an arm has zero active moving threats in its station,
+    // and its own ball has been completely stationary (v < 0.10 m/s) in the center circle (r <= 0.45m) for > 2.2 seconds!
     for (let i = 0; i < this.balls.length; i++) {
       const b = this.balls[i];
       if (!b || !b.mesh || b.isHeld) continue;
       const pos = b.mesh.position;
       const distCenter = Math.hypot(pos.x, pos.z);
 
-      if (distCenter <= 0.50) {
+      if (distCenter <= 0.45) {
         const speed = b.velocity.length();
-        if (speed < 0.28) {
+        if (speed < 0.10) {
           b.centerStuckTime = (b.centerStuckTime || 0) + deltaTime;
         } else {
-          b.centerStuckTime = Math.max(0, (b.centerStuckTime || 0) - deltaTime * 0.5);
+          b.centerStuckTime = Math.max(0, (b.centerStuckTime || 0) - deltaTime * 1.5);
         }
 
-        // If resting in center for > 0.35s, request kinetic rescue snipe from respective arm
-        if (b.centerStuckTime > 0.35) {
-          const armIdx = b.teamId; // Respective arm matching ball's team
+        // LAST RESORT: Only if resting stationary in center for > 2.2s
+        if (b.centerStuckTime > 2.2) {
+          const armIdx = b.teamId;
           const ap = this.armPursuits[armIdx];
-          if (ap && ap.throwState === 'IDLE') {
-            // Find an available own-color ball in this arm's zone to use as projectile ammo
+
+          // MUST NOT trigger if arm is busy OR has moving balls/threats to defend!
+          if (ap && ap.throwState === 'IDLE' && !this.hasActiveThreatsInZone(armIdx)) {
+            // Find a resting own-color ball in this arm's zone to use as projectile ammo
             let ammoBall = null;
             let closestDist = Infinity;
             for (let j = 0; j < this.balls.length; j++) {
               const ab = this.balls[j];
               if (!ab || !ab.mesh || ab.isHeld || ab === b) continue;
               if (ab.teamId === armIdx) {
+                const abSpeed = ab.velocity.length();
+                if (abSpeed > 0.25) continue; // Only pick a resting/slow ball as ammo
+
                 const d = Math.hypot(ab.mesh.position.x - ap.basePos.x, ab.mesh.position.z - ap.basePos.z);
-                if (d <= 1.35 && d < closestDist) {
+                if (d >= 0.25 && d <= 1.25 && d < closestDist) {
                   closestDist = d;
                   ammoBall = ab;
                 }
@@ -603,7 +638,7 @@ export class BallInterceptor {
               ap.centerTargetBall = b;
               ap.throwTimer = 0;
               ap.robot.setGripper(0.0);
-              b.centerStuckTime = 0; // Prevent duplicate triggers while arm approaches
+              b.centerStuckTime = 0; // Clear stuck time while in pursuit
             }
           }
         }
@@ -638,14 +673,14 @@ export class BallInterceptor {
         // Stuck detection: opponent ball lingering in circle without leaving
         if (!isOwnColor && distBase <= 1.35) {
           const speed = b.velocity.length();
-          if (speed < 0.60) {
+          if (speed < 0.20) {
             b.stuckTime = (b.stuckTime || 0) + deltaTime;
           } else {
-            b.stuckTime = Math.max(0, (b.stuckTime || 0) - deltaTime * 0.5);
+            b.stuckTime = Math.max(0, (b.stuckTime || 0) - deltaTime * 0.8);
           }
 
-          // If ball has been stuck for > 0.35s, and arm is idle, initiate Grab & Throw!
-          if (b.stuckTime > 0.35 && ap.throwState === 'IDLE') {
+          // If ball has been stuck for > 2.0s and no active moving threats, initiate Grab & Throw
+          if (b.stuckTime > 2.0 && ap.throwState === 'IDLE' && !this.hasActiveThreatsInZone(rIdx)) {
             ap.throwState = 'APPROACH';
             ap.throwMode = 'EJECT';
             ap.throwBall = b;
@@ -655,7 +690,7 @@ export class BallInterceptor {
           }
         }
 
-        // --- Active Gripper / TCP Push Contact Zone (Normal Non-Stuck Pushes) ---
+        // --- Active Gripper / TCP Push Contact Zone (Normal Fast Deflections & Swats) ---
         if (ap.throwState === 'IDLE') {
           const distToTcp = pos.distanceTo(tcpPos);
           const pushThreshold = b.radius + 0.11;
@@ -755,8 +790,8 @@ export class BallInterceptor {
         robot.setGripper(0.0); // Open wide!
         ap.throwTimer += deltaTime;
 
-        // Failsafe timeout or target invalidation: if grasp takes > 1.1s, apply impulse and reset to IDLE
-        if (!ap.throwBall || !ap.throwBall.mesh || ap.throwBall.isHeld || ap.throwTimer > 1.1) {
+        // Failsafe timeout or target invalidation: if grasp takes > 1.2s, apply impulse and reset to IDLE
+        if (!ap.throwBall || !ap.throwBall.mesh || ap.throwBall.isHeld || ap.throwTimer > 1.2) {
           if (ap.throwBall && ap.throwBall.mesh) {
             const outDir = new THREE.Vector3(ap.throwBall.mesh.position.x - basePos.x, 0, ap.throwBall.mesh.position.z - basePos.z).normalize();
             ap.throwBall.velocity.addScaledVector(outDir, 2.6);
@@ -768,7 +803,7 @@ export class BallInterceptor {
           ap.throwMode = 'EJECT';
           ap.throwState = 'IDLE';
         } else {
-          // Track directly onto ball center
+          // Track directly onto ammo ball center
           const ballPos = ap.throwBall.mesh.position;
           ap.pursuitTarget.set(ballPos.x, Math.max(0.040, ballPos.y), ballPos.z);
 
@@ -781,11 +816,11 @@ export class BallInterceptor {
             ap.heldBall.velocity.set(0, 0, 0);
             this.audio.playClick();
             ap.throwState = 'WINDUP';
-            ap.throwTimer = 0.22;
+            ap.throwTimer = 0.26;
 
-            if (ap.throwMode === 'CENTER_STRIKE' && ap.centerTargetBall && ap.centerTargetBall.mesh) {
+            if (ap.throwMode === 'CENTER_STRIKE') {
               // Aim directly at the stationary center ball!
-              const targetPos = ap.centerTargetBall.mesh.position;
+              const targetPos = (ap.centerTargetBall && ap.centerTargetBall.mesh) ? ap.centerTargetBall.mesh.position : new THREE.Vector3(0, 0.065, 0);
               ap.targetThrowDir.set(targetPos.x - ap.basePos.x, 0, targetPos.z - ap.basePos.z).normalize();
             } else {
               // Compute throw direction toward opponent station
@@ -798,14 +833,24 @@ export class BallInterceptor {
           }
         }
       } else if (ap.throwState === 'WINDUP') {
-        // Cock arm back and up into high wind-up position
         if (ap.heldBall && ap.heldBall.mesh) {
           ap.heldBall.mesh.position.copy(tcpPos);
           ap.heldBall.velocity.set(0, 0, 0);
         }
 
-        const windUpPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.88, 0)).addScaledVector(ap.targetThrowDir, -0.30);
-        ap.pursuitTarget.copy(windUpPos);
+        if (ap.throwMode === 'CENTER_STRIKE') {
+          // Precise low wind-up aligned directly back along the line of sight
+          const tgtPos = (ap.centerTargetBall && ap.centerTargetBall.mesh) ? ap.centerTargetBall.mesh.position : new THREE.Vector3(0, 0.065, 0);
+          const aimDir = new THREE.Vector3(tgtPos.x - ap.basePos.x, 0, tgtPos.z - ap.basePos.z).normalize();
+          ap.targetThrowDir.copy(aimDir);
+
+          const windUpPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.35, 0)).addScaledVector(aimDir, -0.22);
+          ap.pursuitTarget.copy(windUpPos);
+        } else {
+          // High catapult wind-up
+          const windUpPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.88, 0)).addScaledVector(ap.targetThrowDir, -0.30);
+          ap.pursuitTarget.copy(windUpPos);
+        }
 
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
@@ -819,8 +864,14 @@ export class BallInterceptor {
           ap.heldBall.velocity.set(0, 0, 0);
         }
 
-        const swingPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.52, 0)).addScaledVector(ap.targetThrowDir, 1.10);
-        ap.pursuitTarget.copy(swingPos);
+        if (ap.throwMode === 'CENTER_STRIKE') {
+          // Low forward power bowling stroke right along floor line of sight
+          const swingPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.060, 0)).addScaledVector(ap.targetThrowDir, 0.85);
+          ap.pursuitTarget.copy(swingPos);
+        } else {
+          const swingPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.52, 0)).addScaledVector(ap.targetThrowDir, 1.10);
+          ap.pursuitTarget.copy(swingPos);
+        }
 
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
@@ -828,19 +879,29 @@ export class BallInterceptor {
           robot.setGripper(0.0); // Open wide to release!
 
           if (ap.heldBall && ap.heldBall.mesh) {
-            if (ap.throwMode === 'CENTER_STRIKE' && ap.centerTargetBall && ap.centerTargetBall.mesh) {
-              // DIRECT BILLIARD SNIPE: Fast skimming projectile aimed right at center ball
-              const strikeSpeed = 6.4 + Math.random() * 0.6;
-              ap.heldBall.velocity.x = ap.targetThrowDir.x * strikeSpeed;
-              ap.heldBall.velocity.z = ap.targetThrowDir.z * strikeSpeed;
-              ap.heldBall.velocity.y = 0.38;
+            if (ap.throwMode === 'CENTER_STRIKE') {
+              // PINPOINT BILLIARD BOWLING SNIPE:
+              // Compute exact vector from TCP directly to the center target ball's center!
+              const tgtPos = (ap.centerTargetBall && ap.centerTargetBall.mesh) ? ap.centerTargetBall.mesh.position : new THREE.Vector3(0, 0.065, 0);
+              const strikeVector = new THREE.Vector3(tgtPos.x - tcpPos.x, 0, tgtPos.z - tcpPos.z);
+              const strikeDist = strikeVector.length();
+              if (strikeDist > 0.001) strikeVector.normalize();
+              else strikeVector.copy(ap.targetThrowDir);
+
+              const strikeSpeed = 7.6; // High precision kinetic bowling speed
+              ap.heldBall.mesh.position.set(tcpPos.x, 0.065, tcpPos.z);
+              ap.heldBall.velocity.set(strikeVector.x * strikeSpeed, 0.02, strikeVector.z * strikeSpeed);
+
               if (ap.centerTargetBall) ap.centerTargetBall.centerStuckTime = 0;
             } else {
-              // High arc catapult throw
-              const throwPower = 5.6 + Math.random() * 0.8;
-              ap.heldBall.velocity.x = ap.targetThrowDir.x * throwPower;
-              ap.heldBall.velocity.z = ap.targetThrowDir.z * throwPower;
-              ap.heldBall.velocity.y = 1.30 + Math.random() * 0.35; // Lofty catapult arc!
+              // High arc catapult throw towards opponent base
+              const oppBase = this.armPursuits[ap.heldBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
+              const oppVector = new THREE.Vector3(oppBase.x - tcpPos.x, 0, oppBase.z - tcpPos.z);
+              if (oppVector.lengthSq() > 0.001) oppVector.normalize();
+              else oppVector.copy(ap.targetThrowDir);
+
+              const throwPower = 5.8;
+              ap.heldBall.velocity.set(oppVector.x * throwPower, 1.35, oppVector.z * throwPower);
             }
 
             ap.heldBall.bounces++;
@@ -942,6 +1003,10 @@ export class BallInterceptor {
           let targetDir;
           let priorityScore = 0;
 
+          const ballSpeed = b.velocity.length();
+          // Moving balls get an urgency boost (higher speed = higher priority / lower score)
+          const speedBonus = ballSpeed > 0.15 ? Math.min(1.2, ballSpeed * 0.6) : -0.25;
+
           if (!isOwnColor) {
             if (hDist > 1.40) continue; // Outside this arm's defense circle
 
@@ -952,8 +1017,8 @@ export class BallInterceptor {
             targetDir = dOpp > 0.001 ? new THREE.Vector3(dxOpp / dOpp, 0, dzOpp / dOpp) : new THREE.Vector3(1, 0, 0);
 
             // Foreign balls inside the circle have absolute top priority (score ~0.0 to 0.4)
-            // Balls deeper inside circle (smaller hDist) have lower score (higher urgency)
-            priorityScore = 0.05 + (hDist / 1.40) * 0.35;
+            // Fast incoming foreign balls get highest intercept urgency
+            priorityScore = 0.02 + (hDist / 1.40) * 0.25 - speedBonus;
           } else {
             // OWN COLOR BALL: Proactively guide & shield behind the arm!
             if (hDist > 1.40) continue; // Outside this arm's territory
@@ -972,13 +1037,13 @@ export class BallInterceptor {
             const dS = Math.hypot(dxS, dzS);
             targetDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
 
-            // Priority: exposed own balls outside the sanctuary are prioritized to herd & protect behind the arm!
-            priorityScore = 0.20 + (distToSanctuary / 1.40) * 0.40;
+            // Priority: moving own balls take precedence over stationary ones, but lower priority than opponent threats
+            priorityScore = 0.45 + (distToSanctuary / 1.40) * 0.35 - speedBonus * 0.5;
           }
 
           const prediction = this.predictInterception(b, tcpPos, ap.basePos, targetDir);
           if (prediction) {
-            let score = prediction.time * 1.2 + prediction.dist * 0.8 + priorityScore;
+            let score = prediction.time * 1.0 + prediction.dist * 0.6 + priorityScore;
 
             if (b === ap.lockedTargetBall) {
               score -= 0.35; // Hysteresis bonus
