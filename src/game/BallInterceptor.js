@@ -943,9 +943,9 @@ export class BallInterceptor {
               }
             }
 
-            // Proportional distance scaling: compute distance to target arm (0.8m to 4.2m range)
-            const distToTarget = Math.hypot(ap.targetThrowPos.x - tcpPos.x, ap.targetThrowPos.z - tcpPos.z);
-            ap.throwPowerRatio = Math.max(0.12, Math.min(1.0, (distToTarget - 0.8) / 3.4));
+            // Proportional distance scaling: compute distance to target arm (0.6m to 4.2m range)
+            const distToTarget = Math.hypot(ap.targetThrowPos.x - ap.basePos.x, ap.targetThrowPos.z - ap.basePos.z);
+            ap.throwPowerRatio = Math.max(0.05, Math.min(1.0, (distToTarget - 0.6) / 3.4));
           } else if (ap.throwTimer > 0.85) {
             // CLUSTER JAM BREAKER: If obstructed or unable to clamp inside dense ball pile, execute dynamic kinetic swat/sweep
             const oppBase = this.armPursuits[ap.throwBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
@@ -1001,10 +1001,10 @@ export class BallInterceptor {
         // Quintic smoothstep (C^2 zero velocity & zero jerk at start and end)
         const p = liftT * liftT * liftT * (liftT * (liftT * 6.0 - 15.0) + 10.0);
 
-        const liftJ2 = startJ[1] + 0.22;
-        const liftJ3 = startJ[2] - 0.20;
-        const liftJ5 = startJ[4] - 0.06;
-        const liftTele = Math.max(0.06, startTele - 0.18);
+        const liftJ2 = startJ[1] + 0.20;
+        const liftJ3 = startJ[2] - 0.18;
+        const liftJ5 = startJ[4] - 0.05;
+        const liftTele = Math.max(0.04, startTele - 0.16);
 
         const j1 = startJ[0];
         const j2 = startJ[1] + (liftJ2 - startJ[1]) * p;
@@ -1032,7 +1032,7 @@ export class BallInterceptor {
           ap.liftEndAngles = [j1, j2, j3, j4, j5, j6];
           ap.liftEndTele = tele;
           const alpha = ap.throwPowerRatio || 0.5;
-          ap.windupDuration = 0.32 + 0.16 * alpha; // 0.34s to 0.48s smooth windup
+          ap.windupDuration = 0.24 + 0.16 * alpha; // Proportional windup time (0.24s for small toss -> 0.40s for power cocking)
           ap.throwTimer = ap.windupDuration;
         }
       } else if (ap.throwState === 'RETRIEVE_CARRY') {
@@ -1102,7 +1102,7 @@ export class BallInterceptor {
           ap.throwState = 'IDLE';
         }
       } else if (ap.throwState === 'WINDUP') {
-        // Step 4: COCK & TARGET (Quintic ease-in & ease-out into pitch azimuth and rear cocking stance)
+        // Step 4: COCK & TARGET (Backswing depth is STRICTLY proportional to required power alpha)
         const startJ = ap.liftEndAngles || ap.graspJointAngles || [0, -0.45, -0.55, 0, 0.60, 0];
         const startTele = (ap.liftEndTele !== undefined) ? ap.liftEndTele : ((ap.graspTele !== undefined) ? ap.graspTele : 0.40);
 
@@ -1117,9 +1117,9 @@ export class BallInterceptor {
         while (diffJ1 > Math.PI) diffJ1 -= Math.PI * 2;
         while (diffJ1 < -Math.PI) diffJ1 += Math.PI * 2;
 
-        const wDuration = ap.windupDuration || 0.36;
+        const wDuration = ap.windupDuration || 0.30;
         const windT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / wDuration));
-        // Quintic smoothstep for seamless continuous acceleration from lift end into stationary apex
+        // Quintic smoothstep for seamless continuous acceleration from lift end into cocked apex
         const p = windT * windT * windT * (windT * (windT * 6.0 - 15.0) + 10.0);
         const alpha = ap.throwPowerRatio || 0.5;
 
@@ -1130,15 +1130,15 @@ export class BallInterceptor {
           targetJ2 = -0.20;
           targetJ3 = -0.95;
           targetJ5 = 0.75;
-          targetTele = 0.05;
+          targetTele = 0.04;
         } else {
-          // Dynamic cocking pose strictly proportional to distance (alpha):
-          // Short toss: minimal shallow backswing (J2=-0.38, J3=-0.40)
-          // Long pitch: deep athletic power windup (J2=-0.10, J3=-1.25)
-          targetJ2 = -0.38 + 0.28 * alpha;
-          targetJ3 = -0.40 - 0.85 * alpha;
-          targetJ5 = 0.50 + 0.35 * alpha;
-          targetTele = 0.05;
+          // Backswing is an offset relative to startJ scaled strictly by alpha:
+          // alpha = 0 (short toss): Zero backswing! Arm stays in lift stance and simply turns to face target
+          // alpha = 1 (power throw): Deep athletic rear windup
+          targetJ2 = startJ[1] + 0.32 * alpha;
+          targetJ3 = startJ[2] - 0.90 * alpha;
+          targetJ5 = startJ[4] + 0.32 * alpha;
+          targetTele = Math.max(0.02, startTele - 0.12 * alpha);
         }
 
         const j2 = startJ[1] + (targetJ2 - startJ[1]) * p;
@@ -1163,18 +1163,20 @@ export class BallInterceptor {
         if (ap.throwTimer <= 0) {
           // Step 5: Transition to FORWARD SWING & APEX RELEASE
           ap.throwState = 'SWING_THROW';
-          const swingDuration = 0.26 + 0.16 * alpha; // 0.28s to 0.42s forward pitch duration
+          ap.cockedJointAngles = [j1, targetJ2, targetJ3, 0, targetJ5, 0];
+          ap.cockedTele = targetTele;
+          const swingDuration = 0.22 + 0.14 * alpha; // 0.22s for short toss -> 0.36s for long power pitch
           ap.throwTimer = swingDuration;
           ap.swingDuration = swingDuration;
         }
       } else if (ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
-        // Step 5, 6, 7: ATHLETIC FORWARD SWING WITH ZERO-SNAP EASE-IN, APEX RELEASE & CUSHIONED FOLLOW-THROUGH
+        // Step 5, 6, 7: FORWARD SWING (Stroke amplitude is STRICTLY proportional to required power alpha)
         const localDir = ap.targetThrowDir.clone();
         const invRot = robot.group.quaternion.clone().invert();
         localDir.applyQuaternion(invRot);
         const j1 = Math.atan2(localDir.x, localDir.z);
 
-        const sDuration = ap.swingDuration || 0.32;
+        const sDuration = ap.swingDuration || 0.28;
         const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / sDuration));
         // Quintic smoothstep for smooth acceleration from rest into peak speed, followed by cushioned follow-through
         const p = swingT * swingT * swingT * (swingT * (swingT * 6.0 - 15.0) + 10.0);
@@ -1182,30 +1184,29 @@ export class BallInterceptor {
 
         let j2, j3, j4 = 0, j5, j6 = 0, tele;
 
+        const cockJ = ap.cockedJointAngles || [j1, -0.30, -0.70, 0, 0.55, 0];
+        const cockTele = (ap.cockedTele !== undefined) ? ap.cockedTele : 0.05;
+
         if (ap.throwMode === 'CENTER_STRIKE') {
           // Low forward bowling stroke directly along target line
-          j2 = -0.20 + (-0.85 - (-0.20)) * p;
-          j3 = -0.95 + (-0.15 - (-0.95)) * p;
-          j5 = 0.75 + (0.25 - 0.75) * p;
-          tele = 0.05 + 0.75 * p;
+          j2 = cockJ[1] + (-0.85 - cockJ[1]) * p;
+          j3 = cockJ[2] + (-0.15 - cockJ[2]) * p;
+          j5 = cockJ[4] + (0.25 - cockJ[4]) * p;
+          tele = cockTele + (0.75 - cockTele) * p;
         } else {
-          // Dynamic forward stroke strictly proportional to distance:
-          // Short toss: gentle compact flick (J2: -0.38 -> -0.42, J3: -0.40 -> -0.22, tele: 0.05 -> 0.16)
-          // Long pitch: full athletic power whip (J2: -0.10 -> -0.65, J3: -1.25 -> +0.16, tele: 0.05 -> 0.80)
-          const startJ2 = -0.38 + 0.28 * alpha;
-          const startJ3 = -0.40 - 0.85 * alpha;
-          const startJ5 = 0.50 + 0.35 * alpha;
-          const startTele = 0.05;
+          // Forward stroke travel is strictly proportional to alpha:
+          // alpha = 0.05 (short toss): Minimal forward push (Delta J2 = -0.06 rad (~3 deg), Delta J3 = +0.10 rad (~5 deg), tele = 0.04)
+          // alpha = 0.50 (medium pitch): Moderate stroke (Delta J2 = -0.28 rad (~16 deg), Delta J3 = +0.50 rad (~28 deg), tele = 0.40)
+          // alpha = 1.00 (power throw): Full power athletic whip (Delta J2 = -0.55 rad (~32 deg), Delta J3 = +1.00 rad (~57 deg), tele = 0.78)
+          const endJ2 = cockJ[1] - (0.05 + 0.50 * alpha);
+          const endJ3 = cockJ[2] + (0.08 + 0.95 * alpha);
+          const endJ5 = cockJ[4] - (0.04 + 0.42 * alpha);
+          const endTele = cockTele + 0.76 * alpha;
 
-          const endJ2 = -0.42 - 0.23 * alpha;
-          const endJ3 = -0.22 + 0.38 * alpha;
-          const endJ5 = 0.40 - 0.25 * alpha;
-          const endTele = 0.08 + 0.72 * alpha;
-
-          j2 = startJ2 + (endJ2 - startJ2) * p;
-          j3 = startJ3 + (endJ3 - startJ3) * p;
-          j5 = startJ5 + (endJ5 - startJ5) * p;
-          tele = startTele + (endTele - startTele) * p;
+          j2 = cockJ[1] + (endJ2 - cockJ[1]) * p;
+          j3 = cockJ[2] + (endJ3 - cockJ[2]) * p;
+          j5 = cockJ[4] + (endJ5 - cockJ[4]) * p;
+          tele = cockTele + (endTele - cockTele) * p;
         }
 
         robot.setJointAngles([j1, j2, j3, j4, j5, j6]);
