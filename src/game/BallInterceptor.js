@@ -896,6 +896,9 @@ export class BallInterceptor {
 
             this.createPushRippleEffect(pos, b.color, b.radius, pushDir);
             robot.setGripper(0.85);
+            if (this.audio && typeof this.audio.playArmSwat === 'function') {
+              this.audio.playArmSwat(Math.min(1.0, pushForce / 2.4));
+            }
             setTimeout(() => robot.setGripper(0.0), 140);
           }
         }
@@ -1068,6 +1071,9 @@ export class BallInterceptor {
 
             this.createPushRippleEffect(tcpPos, ap.heldBall.color, ap.heldBall.radius, ap.targetThrowDir);
             this.audio.playPuff();
+            if (this.audio && typeof this.audio.playArmSwat === 'function') {
+              this.audio.playArmSwat(1.1);
+            }
             ap.ejectionsCount++;
             this.pushCount++;
             this.score += 100;

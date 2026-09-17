@@ -1234,7 +1234,7 @@ class RobotApp {
         if (tSpd > maxTeleSpeed) maxTeleSpeed = tSpd;
       });
 
-      this.audio.updateJointMotors(maxJointSpeeds, maxTeleSpeed);
+      this.audio.updateJointMotors(maxJointSpeeds, maxTeleSpeed, delta);
 
       // 7. Follow Gripper Camera Preset for active arm
       if (this.activeCamPreset === 'tcp') {
