@@ -1139,12 +1139,25 @@ export class BallInterceptor {
               if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.3);
             }
 
+            robot.getTCPWorldPosition(tcpPos);
+            ap.pursuitPos.copy(tcpPos);
+            ap.pursuitTarget.copy(tcpPos);
+            ap.pursuitVelocity.set(0, 0, 0);
+            ap.lockedTargetBall = null;
             ap.throwBall = null;
             ap.centerTargetBall = null;
             ap.throwMode = 'EJECT';
             ap.throwState = 'IDLE';
           } else if (ap.throwTimer > 2.8) {
             // Generous 2.8s timeout for maximum reach extension
+            if (ap.throwBall) {
+              ap.throwBall.lastPushTime = now + 1200;
+            }
+            robot.getTCPWorldPosition(tcpPos);
+            ap.pursuitPos.copy(tcpPos);
+            ap.pursuitTarget.copy(tcpPos);
+            ap.pursuitVelocity.set(0, 0, 0);
+            ap.lockedTargetBall = null;
             ap.throwBall = null;
             ap.centerTargetBall = null;
             ap.throwMode = 'EJECT';
@@ -1277,6 +1290,12 @@ export class BallInterceptor {
             this.score += 50;
           }
 
+          robot.getTCPWorldPosition(tcpPos);
+          ap.pursuitPos.copy(tcpPos);
+          ap.pursuitTarget.copy(tcpPos);
+          ap.pursuitVelocity.set(0, 0, 0);
+
+          ap.lockedTargetBall = null;
           ap.heldBall = null;
           ap.throwBall = null;
           ap.throwMode = 'EJECT';
@@ -1577,6 +1596,7 @@ export class BallInterceptor {
 
         // Validate locked target for this arm with anti-stall tracking
         if (ap.lockedTargetBall) {
+          ap.lockTimer = (ap.lockTimer || 0) + deltaTime;
           const b = ap.lockedTargetBall;
           const bIndex = this.balls.indexOf(b);
           const pos = b && b.mesh ? b.mesh.position : null;
@@ -1585,9 +1605,14 @@ export class BallInterceptor {
 
           // Target tracking timeout: if arm is unable to reach target within 2.0s, release lock and re-evaluate
           if (!isStillValid || ap.lockTimer > 2.0) {
+            if (b) b.lastPushTime = now + 1200;
             ap.lockedTargetBall = null;
             ap.lockTimer = 0;
             ap.approachAttempts = 0;
+            if (ap.throwState === 'APPROACH') {
+              ap.throwBall = null;
+              ap.throwState = 'IDLE';
+            }
           }
         } else {
           ap.lockTimer = 0;
