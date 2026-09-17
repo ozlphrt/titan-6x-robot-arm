@@ -212,7 +212,7 @@ class RobotApp {
 
     if (dropBtn) {
       dropBtn.addEventListener('click', () => {
-        this.ballInterceptor.spawnFlock(3);
+        this.ballInterceptor.spawnBall(true);
         this.audio.playPuff();
       });
     }
@@ -847,7 +847,7 @@ class RobotApp {
         document.getElementById('btn-toggle-ball-mode')?.click();
       }
       if (e.key.toLowerCase() === 'd') {
-        this.ballInterceptor.spawnFlock(3);
+        this.ballInterceptor.spawnBall(true);
         this.audio.playPuff();
       }
       if (e.key.toLowerCase() === 't') {

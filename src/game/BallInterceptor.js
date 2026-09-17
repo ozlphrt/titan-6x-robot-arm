@@ -91,7 +91,7 @@ export class BallInterceptor {
     this.audio = audio;
 
     this.enabled = true; // Auto-defense active by default
-    this.targetFlockSize = 9; // Number of flying flock members in active swarm
+    this.targetFlockSize = 3; // Clean, focused flock size of 3 flying balls
     this.spawnTimer = 0;
     this.spawnInterval = 2.0;
 
