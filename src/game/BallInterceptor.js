@@ -907,7 +907,12 @@ export class BallInterceptor {
 
         // --- Physical Robot Arm Segment Collisions & Deflections ---
         if (!b.isHeld) {
+          const isTargetOfArm = (b === ap.throwBall || b === ap.currentTargetBall || b === ap.lockedTargetBall);
+
           for (const col of armColliders) {
+            // Gripper fingers must NOT repel the ball that this arm is actively trying to grasp or target!
+            if (col.isGripper && isTargetOfArm) continue;
+
             let closestPoint = null;
             const colRadius = col.radius;
 
@@ -928,15 +933,14 @@ export class BallInterceptor {
 
               if (dist < minDist && dist > 0.0001) {
                 const normal = diff.clone().normalize();
-                pos.copy(closestPoint).addScaledVector(normal, minDist + 0.006);
+                pos.copy(closestPoint).addScaledVector(normal, minDist + 0.002);
                 b.mesh.position.copy(pos);
 
-                const outBaseDir = distBase > 0.001 ? new THREE.Vector3(dxBase / distBase, 0, dzBase / distBase) : normal;
                 const vDotN = b.velocity.dot(normal);
                 if (vDotN < 0) {
+                  // Pure realistic elastic deflection along collision normal (no artificial repulsion field)
                   b.velocity.addScaledVector(normal, -(1.0 + b.restitution) * vDotN);
                 }
-                b.velocity.addScaledVector(outBaseDir, 0.30 + Math.random() * 0.15);
                 b.bounces++;
                 if (Math.abs(vDotN) > 1.4) {
                   this.audio.playBallBounce(Math.min(1.0, Math.abs(vDotN) / 3.0));
@@ -1201,29 +1205,8 @@ export class BallInterceptor {
           const hDist = pos ? Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z) : 999;
           const isStillValid = bIndex !== -1 && !b.isHeld && hDist <= 1.75 && pos.y >= 0.02 && pos.y <= 1.85;
 
-          ap.lockTimer = (ap.lockTimer || 0) + deltaTime;
-
-          // Anti-stall: If locked on same stationary ball for > 0.8s without clearing, pop it and re-evaluate
-          if (!isStillValid || ap.lockTimer > 0.8) {
-            if (ap.lockTimer > 0.8 && b && b.mesh) {
-              const isOwn = (b.teamId === armTeam);
-              if (isOwn) {
-                const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
-                const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48);
-                const inDir = new THREE.Vector3(sanctuaryPos.x - pos.x, 0, sanctuaryPos.z - pos.z).normalize();
-                b.velocity.x = inDir.x * 1.8;
-                b.velocity.z = inDir.z * 1.8;
-                b.velocity.y = 0.28;
-              } else {
-                const oppBase = this.armPursuits[b.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
-                const outDir = new THREE.Vector3(oppBase.x - pos.x, 0, oppBase.z - pos.z).normalize();
-                b.velocity.x = outDir.x * 2.8;
-                b.velocity.z = outDir.z * 2.8;
-                b.velocity.y = 0.40;
-              }
-              b.lastPushTime = now;
-              b.bounces++;
-            }
+          // Target tracking timeout: if arm is unable to reach target within 2.0s, release lock and re-evaluate
+          if (!isStillValid || ap.lockTimer > 2.0) {
             ap.lockedTargetBall = null;
             ap.lockTimer = 0;
             ap.approachAttempts = 0;
