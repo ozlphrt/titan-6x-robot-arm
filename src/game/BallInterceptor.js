@@ -24,58 +24,94 @@ function drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius) {
   ctx.fill();
 }
 
-function createBouncyBallTexture(styleIndex, color1Hex, color2Hex) {
+function createBouncyBallTexture(teamId, styleIndex, theme) {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 256;
   const ctx = canvas.getContext('2d');
 
-  // Base Solid Color
-  ctx.fillStyle = color1Hex;
+  const baseCol = theme.primary;
+  const accentCol = theme.secondary;
+  const numCol = theme.numCol;
+  const badgeCol = theme.badgeBg;
+  const teamNum = String(teamId + 1);
+
+  // 1. Base High-Saturation Color Fill
+  ctx.fillStyle = baseCol;
   ctx.fillRect(0, 0, 512, 256);
 
+  // 2. High-Contrast Team Graphic Patterns
   if (styleIndex === 0) {
-    // Equator Racing Stripe Band
-    ctx.fillStyle = color2Hex;
-    ctx.fillRect(0, 90, 512, 76);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 114, 512, 28);
-  } else if (styleIndex === 1) {
-    // Classic Arcade Star Superball
-    ctx.fillStyle = color2Hex;
+    // Pro Racing Dual-Band
+    ctx.fillStyle = accentCol;
     ctx.fillRect(0, 80, 512, 96);
-    ctx.fillStyle = '#ffffff';
-    for (let i = 0; i < 6; i++) {
-      drawStar(ctx, 42 + i * 85, 128, 5, 26, 12);
-    }
+    ctx.fillStyle = theme.stripeCol || '#ffffff';
+    ctx.fillRect(0, 108, 512, 40);
+  } else if (styleIndex === 1) {
+    // Bold Hemisphere Block
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(0, 128, 512, 128);
+    ctx.fillStyle = theme.stripeCol || '#ffffff';
+    ctx.fillRect(0, 118, 512, 20);
   } else if (styleIndex === 2) {
-    // Swirl Wave Playground Pattern
-    ctx.fillStyle = color2Hex;
+    // Dynamic Wave Ribbons
+    ctx.fillStyle = accentCol;
     ctx.beginPath();
     ctx.moveTo(0, 128);
     for (let x = 0; x <= 512; x += 8) {
-      ctx.lineTo(x, 128 + Math.sin((x / 512) * Math.PI * 4) * 65);
+      ctx.lineTo(x, 128 + Math.sin((x / 512) * Math.PI * 4) * 60);
     }
     ctx.lineTo(512, 256);
     ctx.lineTo(0, 256);
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 10;
+    ctx.strokeStyle = theme.stripeCol || '#ffffff';
+    ctx.lineWidth = 12;
     ctx.beginPath();
     ctx.moveTo(0, 128);
     for (let x = 0; x <= 512; x += 8) {
-      ctx.lineTo(x, 128 + Math.sin((x / 512) * Math.PI * 4) * 65);
+      ctx.lineTo(x, 128 + Math.sin((x / 512) * Math.PI * 4) * 60);
     }
     ctx.stroke();
   } else {
-    // Dual Tone Vibrant Hemisphere
-    ctx.fillStyle = color2Hex;
-    ctx.fillRect(0, 128, 512, 128);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 120, 512, 16);
+    // Arcade Stars Belt
+    ctx.fillStyle = accentCol;
+    ctx.fillRect(0, 85, 512, 86);
+    ctx.fillStyle = theme.stripeCol || '#ffffff';
+    for (let i = 0; i < 6; i++) {
+      drawStar(ctx, 42 + i * 85, 128, 5, 24, 11);
+    }
   }
+
+  // 3. Prominent Bold Circular Team Number Badges (Opposite Equator Positions)
+  [128, 384].forEach(cx => {
+    // Outer shadow rim
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.beginPath();
+    ctx.arc(cx + 2, 130, 44, 0, Math.PI * 2);
+    ctx.fill();
+
+    // White / Contrast Base Disc
+    ctx.fillStyle = badgeCol;
+    ctx.beginPath();
+    ctx.arc(cx, 128, 42, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Colored Border Ring
+    ctx.strokeStyle = accentCol;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(cx, 128, 39, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Large Bold Team Number
+    ctx.fillStyle = numCol;
+    ctx.font = '900 52px "Chakra Petch", "JetBrains Mono", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(teamNum, cx, 129);
+  });
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
@@ -120,12 +156,52 @@ export class BallInterceptor {
     this.combo = 0;
     this.lastPushTime = 0;
 
-    // 4 Team Color Themes Matching the 4 Robot Arms
+    // 4 Distinct, Vivid High-Contrast Team Color Themes
     this.teamThemes = [
-      { id: 0, name: 'ALPHA (ARM 1)', label: 'Yellow', primary: '#ffb700', secondary: '#111111', hex: 0xffb700 }, // Fanuc Yellow
-      { id: 1, name: 'BETA (ARM 2)', label: 'Orange', primary: '#ff5500', secondary: '#111111', hex: 0xff5500 }, // KUKA Orange
-      { id: 2, name: 'GAMMA (ARM 3)', label: 'White', primary: '#f8fafc', secondary: '#475569', hex: 0xf8fafc }, // ABB White
-      { id: 3, name: 'DELTA (ARM 4)', label: 'Cyan', primary: '#00e5ff', secondary: '#002244', hex: 0x00e5ff }  // Cyber Cyan
+      {
+        id: 0,
+        name: 'ALPHA (ARM 1)',
+        label: 'Solar Yellow',
+        primary: '#ffea00',    // Vivid High-Luminance Solar Yellow
+        secondary: '#0f172a',  // Dark Obsidian
+        stripeCol: '#ffffff',
+        badgeBg: '#ffffff',
+        numCol: '#000000',
+        hex: 0xffea00
+      },
+      {
+        id: 1,
+        name: 'BETA (ARM 2)',
+        label: 'Blaze Orange',
+        primary: '#ff3d00',    // Vivid Fiery Crimson Orange
+        secondary: '#7f1d1d',  // Deep Burgundy Maroon
+        stripeCol: '#ffffff',
+        badgeBg: '#ffffff',
+        numCol: '#d50000',
+        hex: 0xff3d00
+      },
+      {
+        id: 2,
+        name: 'GAMMA (ARM 3)',
+        label: 'Arctic White',
+        primary: '#ffffff',    // Brilliant Arctic Pure White
+        secondary: '#1d4ed8',  // Vivid Electric Sapphire Blue
+        stripeCol: '#38bdf8',  // Sky Blue Accent
+        badgeBg: '#1e3a8a',
+        numCol: '#ffffff',
+        hex: 0xf8fafc
+      },
+      {
+        id: 3,
+        name: 'DELTA (ARM 4)',
+        label: 'Laser Cyan',
+        primary: '#00f0ff',    // Ultra-Vivid Neon Laser Cyan
+        secondary: '#030712',  // Midnight Void
+        stripeCol: '#4f46e5',  // Indigo Laser Accent
+        badgeBg: '#ffffff',
+        numCol: '#006699',
+        hex: 0x00f0ff
+      }
     ];
 
     // Multi-Arm Pursuit & Defense States for all 4 Robot Arms
@@ -187,12 +263,12 @@ export class BallInterceptor {
     this.scene.add(this.targetReticle);
 
     // Pre-create textures for the 4 teams
-    this.teamTextures = this.teamThemes.map((theme) => {
+    this.teamTextures = this.teamThemes.map((theme, teamId) => {
       return [
-        createBouncyBallTexture(0, theme.primary, theme.secondary),
-        createBouncyBallTexture(1, theme.primary, theme.secondary),
-        createBouncyBallTexture(2, theme.primary, theme.secondary),
-        createBouncyBallTexture(3, theme.primary, theme.secondary)
+        createBouncyBallTexture(teamId, 0, theme),
+        createBouncyBallTexture(teamId, 1, theme),
+        createBouncyBallTexture(teamId, 2, theme),
+        createBouncyBallTexture(teamId, 3, theme)
       ];
     });
 
@@ -254,11 +330,13 @@ export class BallInterceptor {
     const geo = new THREE.SphereGeometry(ballRadius, 24, 24);
     const mat = new THREE.MeshPhysicalMaterial({
       map: ballTexture,
-      roughness: 0.15,
-      metalness: 0.05,
-      clearcoat: 0.9,
-      clearcoatRoughness: 0.08,
-      reflectivity: 0.95
+      roughness: 0.10,
+      metalness: 0.04,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.05,
+      reflectivity: 0.98,
+      emissive: new THREE.Color(theme.hex),
+      emissiveIntensity: 0.06
     });
 
     const mesh = new THREE.Mesh(geo, mat);
