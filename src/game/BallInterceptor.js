@@ -1563,7 +1563,10 @@ export class BallInterceptor {
             newPos.copy(originalTo);
             ap.pursuitVelocity.set(0, 0, 0);
           }
+          ap.pursuitPos.copy(newPos);
+
           kinematics.solveIK(ap.pursuitPos, 18, 0.002, false, ap.currentWristRoll, ap.currentWristPitch);
+          robot.group.updateMatrixWorld(true);
           robot.getTCPWorldPosition(tcpPos);
           if (ap.heldBall && ap.heldBall.mesh) {
             ap.heldBall.mesh.position.copy(tcpPos);
