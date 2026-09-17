@@ -15,66 +15,13 @@
     <!-- 3D Canvas Container -->
     <div id="canvas-container"></div>
 
-    <!-- Floating Top Bar: Quick Status & Collapsible Settings Trigger -->
-    <div class="floating-top-bar">
-      <div class="floating-brand">
-        <span class="brand-icon">🦾</span>
-        <div class="brand-info">
-          <span class="brand-name">TITAN-6X</span>
-          <span class="brand-status-chip" id="quick-status-chip">READY</span>
-        </div>
-      </div>
-
-      <!-- Arm Selection Group -->
-      <div class="floating-arm-selector" id="top-arm-selector">
-        <button class="arm-select-btn active" data-arm="0" id="btn-top-arm-0" title="Select Arm 1 [Alpha - Fanuc Yellow] (Key: 1)">
-          <span>🤖 ARM 1</span>
-        </button>
-        <button class="arm-select-btn" data-arm="1" id="btn-top-arm-1" title="Select Arm 2 [Beta - Kuka Orange] (Key: 2)">
-          <span>🤖 ARM 2</span>
-        </button>
-        <button class="arm-select-btn" data-arm="2" id="btn-top-arm-2" title="Select Arm 3 [Gamma - ABB White] (Key: 3)">
-          <span>🤖 ARM 3</span>
-        </button>
-        <button class="arm-select-btn" data-arm="3" id="btn-top-arm-3" title="Select Arm 4 [Delta - Cyber Cyan] (Key: 4)">
-          <span>🤖 ARM 4</span>
-        </button>
-        <button class="arm-select-btn sync-btn" id="btn-top-arm-sync" title="Sync & Control All 4 Arms Simultaneously">
-          <span>🌐 SYNC ALL</span>
-        </button>
-      </div>
-
-      <!-- Quick Action Buttons -->
-      <div class="floating-actions">
-        <!-- Ball Pusher Score Chip & Toggle -->
-        <button id="btn-toggle-ball-mode" class="floating-pill-btn active" title="Toggle Auto Push & Circle Defense [B]">
-          <span id="ball-mode-icon">🛡️</span>
-          <span id="ball-mode-text">Push AI: ON</span>
-        </button>
-        <div class="floating-score-chip" id="ball-score-chip" title="Balls Pushed Outside Circles">
-          <span class="score-label">PUSHED:</span>
-          <span class="score-val" id="score-burst-count">0</span>
-        </div>
-
-        <button id="btn-quick-orbit" class="floating-pill-btn active" title="Toggle 360° Auto Orbit [O]">
-          <span>🔄 Orbit</span>
-        </button>
-        <button id="btn-quick-gripper" class="floating-pill-btn" title="Toggle Gripper [G]">
-          <span id="quick-grip-label">🗜️ Gripper</span>
-        </button>
-        <button id="btn-quick-telescope" class="floating-pill-btn" title="Step Telescoping Forearm [T]">
-          <span id="quick-tele-label">📏 Telescope</span>
-        </button>
-        <button id="btn-quick-theme" class="floating-pill-btn" title="Toggle Light Studio / Dark Cyber Mode [M]">
-          <span id="theme-btn-label">☀️ Light</span>
-        </button>
-        <button id="btn-open-settings" class="floating-settings-trigger" title="Open Settings & Controls Menu">
-          <span class="settings-gear-icon">⚙️</span>
-          <span class="settings-trigger-text">SETTINGS</span>
-          <span class="pulse-indicator"></span>
-        </button>
-      </div>
-    </div>
+    <!-- Floating Round Settings Cog (Lower Right Corner) -->
+    <button id="btn-open-settings" class="floating-settings-cog" title="Open Settings & Controls [S]" aria-label="Open Settings">
+      <svg class="cog-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
 
     <!-- Collapsible Settings Drawer Overlay -->
     <aside class="settings-drawer hidden" id="settings-drawer">
@@ -131,6 +78,9 @@
               </button>
               <button class="drawer-arm-btn" data-arm="3" id="btn-drawer-arm-3">
                 <span class="arm-dot dot-cyber"></span> ARM 4 (Delta)
+              </button>
+              <button class="drawer-arm-btn sync-btn" id="btn-drawer-arm-sync" style="grid-column: span 2;">
+                <span>🌐 SYNC ALL 4 ARMS</span>
               </button>
             </div>
 

@@ -77,7 +77,57 @@ html, body, #app {
 }
 
 /* ==========================================================================
-   FLOATING TOP BAR & SETTINGS TRIGGER
+/* ==========================================================================
+   FLOATING ROUND SETTINGS COG (LOWER RIGHT CORNER)
+   ========================================================================== */
+.floating-settings-cog {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 30;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+}
+
+.floating-settings-cog .cog-icon {
+  width: 22px;
+  height: 22px;
+  stroke: #cbd5e1;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.2s ease;
+}
+
+.floating-settings-cog:hover {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: var(--accent-yellow, #ffcb05);
+  color: #ffffff;
+  transform: scale(1.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 18px rgba(255, 203, 5, 0.35);
+}
+
+.floating-settings-cog:hover .cog-icon {
+  stroke: var(--accent-yellow, #ffcb05);
+  transform: rotate(60deg);
+}
+
+.floating-settings-cog:active {
+  transform: scale(0.95);
+}
+
+/* ==========================================================================
+   FLOATING TOP BAR & SETTINGS TRIGGER (LEGACY FALLBACKS)
    ========================================================================== */
 .floating-top-bar {
   position: absolute;
@@ -1325,6 +1375,28 @@ body.theme-light .settings-drawer {
   color: var(--text-main);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
   border-color: var(--border-subtle);
+}
+
+body.theme-light .floating-settings-cog {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  color: #1e293b;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+body.theme-light .floating-settings-cog .cog-icon {
+  stroke: #475569;
+}
+
+body.theme-light .floating-settings-cog:hover {
+  background: #ffffff;
+  border-color: var(--accent-yellow, #ca8a04);
+  color: #ca8a04;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 0 16px rgba(202, 138, 4, 0.25);
+}
+
+body.theme-light .floating-settings-cog:hover .cog-icon {
+  stroke: var(--accent-yellow, #ca8a04);
 }
 
 body.theme-light .select-input-styled {

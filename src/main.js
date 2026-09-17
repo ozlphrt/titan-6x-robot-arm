@@ -134,7 +134,7 @@ class RobotApp {
 
   bindArmSelector() {
     const updateButtons = () => {
-      // Top bar buttons
+      // Top bar buttons (if present)
       document.querySelectorAll('#top-arm-selector .arm-select-btn').forEach(btn => {
         const aIdx = parseInt(btn.dataset.arm);
         if (!isNaN(aIdx)) {
@@ -148,9 +148,11 @@ class RobotApp {
       document.querySelectorAll('.drawer-arm-btn').forEach(btn => {
         const aIdx = parseInt(btn.dataset.arm);
         if (!isNaN(aIdx)) {
-          btn.classList.toggle('active', aIdx === this.activeArmIndex);
+          btn.classList.toggle('active', aIdx === this.activeArmIndex && !this.syncAllMode);
         }
       });
+      const drawerSync = document.getElementById('btn-drawer-arm-sync');
+      if (drawerSync) drawerSync.classList.toggle('active', this.syncAllMode);
 
       const chip = document.getElementById('quick-status-chip');
       if (chip) {
@@ -158,7 +160,7 @@ class RobotApp {
       }
     };
 
-    // Top Bar arm buttons
+    // Top Bar arm buttons (if present)
     for (let i = 0; i < 4; i++) {
       const btn = document.getElementById(`btn-top-arm-${i}`);
       if (btn) {
@@ -184,6 +186,14 @@ class RobotApp {
           this.setActiveArm(i);
         });
       }
+    }
+
+    // Drawer Sync All button
+    const drawerSync = document.getElementById('btn-drawer-arm-sync');
+    if (drawerSync) {
+      drawerSync.addEventListener('click', () => {
+        this.toggleSyncAll();
+      });
     }
 
     this.updateArmUI = updateButtons;
@@ -1028,11 +1038,19 @@ class RobotApp {
       if (e.key.toLowerCase() === 'p') document.getElementById('tab-teach')?.click();
 
       if (e.key.toLowerCase() === 'o') {
-        const quickOrbit = document.getElementById('btn-quick-orbit');
-        quickOrbit?.click();
+        this.controls.autoRotate = !this.controls.autoRotate;
+        this.controls.autoRotateSpeed = 1.0;
+        this.audio.playClick();
       }
       if (e.key.toLowerCase() === 'b') {
-        document.getElementById('btn-toggle-ball-mode')?.click();
+        this.ballInterceptor.toggle();
+        const badge = document.getElementById('ball-ai-status-badge');
+        if (badge) {
+          const active = this.ballInterceptor.enabled;
+          badge.textContent = active ? 'AUTO ACTIVE' : 'MANUAL';
+          badge.style.color = active ? 'var(--accent-mint)' : 'var(--text-muted)';
+        }
+        this.audio.playClick();
       }
       if (e.key.toLowerCase() === 'd') {
         this.ballInterceptor.spawnBall(true);
@@ -1045,7 +1063,11 @@ class RobotApp {
         document.getElementById('btn-toggle-telescope')?.click();
       }
       if (e.key.toLowerCase() === 'm') {
-        document.getElementById('btn-quick-theme')?.click();
+        const nextTheme = this.currentEnvTheme === 'light_studio' || this.currentEnvTheme === 'cleanroom_lab'
+          ? 'dark_cyber'
+          : 'light_studio';
+        this.setEnvironmentTheme(nextTheme);
+        this.audio.playClick();
       }
       if (e.key.toLowerCase() === 'g') document.getElementById('btn-toggle-gripper')?.click();
       if (e.key.toLowerCase() === 'h') document.getElementById('btn-reset-pose')?.click();
