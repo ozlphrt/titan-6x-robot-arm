@@ -882,24 +882,14 @@ export class BallInterceptor {
         // Alien balls in territory ignore residual cooldown timers to ensure immediate action
         if (!isAlienInBase && (now < (b.lastPushTime || 0))) continue;
 
-        // Instant stuck detection: opponent ball lingering in circle without leaving
-        if (!isOwnColor && distBase <= 1.45) {
-          const speed = b.velocity.length();
-          if (speed < 0.30) {
-            b.stuckTime = (b.stuckTime || 0) + deltaTime;
-          } else {
-            b.stuckTime = Math.max(0, (b.stuckTime || 0) - deltaTime * 0.8);
-          }
-
-          // If ball has been stuck for > 0.05s, immediately initiate Grab & Catapult Eject
-          if (b.stuckTime > 0.05 && ap.throwState === 'IDLE') {
-            ap.throwState = 'APPROACH';
-            ap.throwMode = 'EJECT';
-            ap.throwBall = b;
-            ap.centerTargetBall = null;
-            ap.throwTimer = 0;
-            robot.setGripper(0.0); // Open wide!
-          }
+        // Instant intruder engagement: any opponent ball in the home circle immediately triggers grab & eject
+        if (!isOwnColor && distBase <= 1.45 && ap.throwState === 'IDLE') {
+          ap.throwState = 'APPROACH';
+          ap.throwMode = 'EJECT';
+          ap.throwBall = b;
+          ap.centerTargetBall = null;
+          ap.throwTimer = 0;
+          robot.setGripper(0.0); // Open wide!
         }
 
         // --- Active Direct Grasp Trigger on Approach for Intruder Balls ---
@@ -1292,7 +1282,7 @@ export class BallInterceptor {
           ap.heldBall.isHeld = false;
           ap.heldBall.lastThrowArm = armTeam;
           ap.heldBall.lastThrowTime = now + 1500;
-          ap.heldBall.lastPushTime = now + 1500;
+          ap.heldBall.lastPushTime = now + 80;
 
           if (this.audio && typeof this.audio.playArmSwat === 'function') {
             this.audio.playArmSwat(Math.min(1.6, 0.5 + finalLaunchVel.length() * 0.20));
@@ -1637,8 +1627,8 @@ export class BallInterceptor {
         }
 
         // Smooth critically damped Cartesian pursuit (SmoothDamp)
-        const smoothTime = 0.12;
-        const maxSpeed = 1.1;
+        const smoothTime = 0.08;
+        const maxSpeed = 2.4;
 
         const omega = 2.0 / smoothTime;
         const x = omega * deltaTime;
