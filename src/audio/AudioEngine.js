@@ -85,6 +85,7 @@ export class AudioEngine {
     this.hydraulicVoice = null;
     this.noiseBuffer = null;
     this.wasPistonMoving = false;
+    this.lastBallBounceTime = 0;
   }
 
   setSchema(schemaKey) {
@@ -374,6 +375,48 @@ export class AudioEngine {
     this.updateJointMotors([avg, avg, avg, avg, avg, avg], 0);
   }
 
+  // Gentle, warm, velvety rubber ball bounce tap (subtle & non-intrusive)
+  playBallBounce(intensity = 1.0) {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+
+    const curTime = this.ctx.currentTime;
+    // Strict rate limiter: max 1 subtle tap every 45ms across the entire simulation
+    if (curTime - this.lastBallBounceTime < 0.045) return;
+    this.lastBallBounceTime = curTime;
+
+    const normIntensity = Math.max(0.15, Math.min(1.0, intensity));
+    const t = curTime;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const filter = this.ctx.createBiquadFilter();
+
+    // Steep low-pass filter to eliminate any sharp clicking edges or transients
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(210, t);
+    filter.Q.setValueAtTime(0.60, t);
+
+    // Warm, deep rubber body: 135Hz -> 50Hz
+    osc.type = 'sine';
+    const startFreq = 125 + Math.random() * 18;
+    osc.frequency.setValueAtTime(startFreq, t);
+    osc.frequency.exponentialRampToValueAtTime(50, t + 0.032);
+
+    // Ultra-soft whisper gain envelope (0.005 - 0.009 peak)
+    const peakGain = 0.0065 * normIntensity;
+    gain.gain.setValueAtTime(peakGain, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.034);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain || this.ctx.destination);
+
+    osc.start(t);
+    osc.stop(t + 0.036);
+  }
+
   // Soft subtle UI micro-tap on click
   playClick() {
     if (!this.enabled) return;
@@ -384,17 +427,17 @@ export class AudioEngine {
     const gain = this.ctx.createGain();
 
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(520, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(180, this.ctx.currentTime + 0.03);
+    osc.frequency.setValueAtTime(420, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(160, this.ctx.currentTime + 0.025);
 
-    gain.gain.setValueAtTime(0.04, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.035);
+    gain.gain.setValueAtTime(0.015, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0005, this.ctx.currentTime + 0.028);
 
     osc.connect(gain);
     gain.connect(this.masterGain || this.ctx.destination);
 
     osc.start();
-    osc.stop(this.ctx.currentTime + 0.04);
+    osc.stop(this.ctx.currentTime + 0.032);
   }
 
   // Subtle pneumatic air puff
@@ -410,29 +453,29 @@ export class AudioEngine {
 
     const t = this.ctx.currentTime;
 
-    // 1. Soft warm low-frequency tonal body (gentle 260Hz -> 85Hz drop)
+    // 1. Soft warm low-frequency tonal body (gentle 220Hz -> 75Hz drop)
     const osc = this.ctx.createOscillator();
     const oscGain = this.ctx.createGain();
     const filter = this.ctx.createBiquadFilter();
 
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(520, t);
-    filter.Q.setValueAtTime(0.7, t);
+    filter.frequency.setValueAtTime(420, t);
+    filter.Q.setValueAtTime(0.65, t);
 
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(240 + Math.random() * 40, t);
-    osc.frequency.exponentialRampToValueAtTime(80, t + 0.042);
+    osc.frequency.setValueAtTime(210 + Math.random() * 30, t);
+    osc.frequency.exponentialRampToValueAtTime(70, t + 0.038);
 
     // Subtle, low-level gain envelope
-    oscGain.gain.setValueAtTime(0.024, t);
-    oscGain.gain.exponentialRampToValueAtTime(0.0005, t + 0.045);
+    oscGain.gain.setValueAtTime(0.012, t);
+    oscGain.gain.exponentialRampToValueAtTime(0.0002, t + 0.040);
 
     osc.connect(filter);
     filter.connect(oscGain);
     oscGain.connect(this.masterGain || this.ctx.destination);
 
     osc.start(t);
-    osc.stop(t + 0.048);
+    osc.stop(t + 0.042);
 
     // 2. Micro soft-air cushion texture (whisper quiet)
     if (this.noiseBuffer) {
@@ -440,19 +483,19 @@ export class AudioEngine {
       noise.buffer = this.noiseBuffer;
       const noiseFilter = this.ctx.createBiquadFilter();
       noiseFilter.type = 'bandpass';
-      noiseFilter.frequency.setValueAtTime(450, t);
-      noiseFilter.Q.setValueAtTime(1.2, t);
+      noiseFilter.frequency.setValueAtTime(380, t);
+      noiseFilter.Q.setValueAtTime(1.0, t);
 
       const noiseGain = this.ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.010, t);
-      noiseGain.gain.exponentialRampToValueAtTime(0.0005, t + 0.030);
+      noiseGain.gain.setValueAtTime(0.005, t);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0002, t + 0.026);
 
       noise.connect(noiseFilter);
       noiseFilter.connect(noiseGain);
       noiseGain.connect(this.masterGain || this.ctx.destination);
 
       noise.start(t);
-      noise.stop(t + 0.035);
+      noise.stop(t + 0.030);
     }
   }
 
@@ -462,7 +505,7 @@ export class AudioEngine {
     this.init();
     if (!this.ctx) return;
 
-    const bufferSize = Math.floor(this.ctx.sampleRate * 0.15);
+    const bufferSize = Math.floor(this.ctx.sampleRate * 0.12);
     const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
@@ -474,18 +517,18 @@ export class AudioEngine {
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(isClose ? 950 : 650, this.ctx.currentTime);
+    filter.frequency.setValueAtTime(isClose ? 750 : 520, this.ctx.currentTime);
 
     const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.035, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.14);
+    gain.gain.setValueAtTime(0.016, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0005, this.ctx.currentTime + 0.11);
 
     noise.connect(filter);
     filter.connect(gain);
     gain.connect(this.masterGain || this.ctx.destination);
 
     noise.start();
-    noise.stop(this.ctx.currentTime + 0.15);
+    noise.stop(this.ctx.currentTime + 0.12);
   }
 
   // Emergency stop alert

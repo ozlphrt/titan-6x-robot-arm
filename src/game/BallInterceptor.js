@@ -376,8 +376,8 @@ export class BallInterceptor {
             b.velocity.z *= 0.93;
             b.bounces++;
 
-            if (Math.abs(vDotN) > 0.6) {
-              this.audio.playClick();
+            if (Math.abs(vDotN) > 0.8) {
+              this.audio.playBallBounce(Math.min(1.0, Math.abs(vDotN) / 2.5));
             }
           } else {
             b.velocity.y = (normal.y - 1.0) * 0.08;
@@ -431,18 +431,18 @@ export class BallInterceptor {
                 }
 
                 b.bounces++;
-                if (Math.abs(vDotN) > 0.35) {
-                  this.audio.playClick();
+                if (Math.abs(vDotN) > 0.6) {
+                  this.audio.playBallBounce(Math.min(1.0, Math.abs(vDotN) / 2.5));
                 }
               }
             }
           } else if (pos.y <= 0.65 + b.radius && hDist < 0.24 + b.radius) {
             // Landing on top of shoulder/turntable horizontal shelf
             pos.y = 0.65 + b.radius;
-            if (b.velocity.y < -0.1) {
+            if (b.velocity.y < -0.3) {
               b.velocity.y = Math.abs(b.velocity.y) * 0.50;
               b.bounces++;
-              this.audio.playClick();
+              this.audio.playBallBounce(0.35);
             }
           }
         }
@@ -551,8 +551,8 @@ export class BallInterceptor {
               const s2 = b2.velocity.length();
               if (s2 > maxSpeedLimit) b2.velocity.multiplyScalar(maxSpeedLimit / s2);
 
-              if (Math.abs(vNormal) > 0.8) {
-                this.audio.playClick();
+              if (Math.abs(vNormal) > 1.2) {
+                this.audio.playBallBounce(Math.min(1.0, Math.abs(vNormal) / 3.0));
               }
             }
           }
@@ -930,7 +930,9 @@ export class BallInterceptor {
                 }
                 b.velocity.addScaledVector(outBaseDir, 0.70 + Math.random() * 0.35);
                 b.bounces++;
-                this.audio.playClick();
+                if (Math.abs(vDotN) > 0.4) {
+                  this.audio.playBallBounce(Math.min(1.0, Math.abs(vDotN) / 2.0));
+                }
               }
             }
           }
@@ -966,7 +968,7 @@ export class BallInterceptor {
             ap.heldBall = ap.throwBall;
             ap.heldBall.isHeld = true;
             ap.heldBall.velocity.set(0, 0, 0);
-            this.audio.playClick();
+            this.audio.playPneumatic(true);
             ap.throwState = 'WINDUP';
             ap.throwTimer = 0.26;
 
