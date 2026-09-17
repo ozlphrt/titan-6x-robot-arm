@@ -34,12 +34,15 @@ function createRoundedBoxGeometry(width, height, depth, radius, smoothness = 4) 
 export class RobotModel {
   constructor(scene, options = {}) {
     this.scene = scene;
-    this.options = options;
     this.group = new THREE.Group();
     this.group.name = options.name || 'IndustrialRobotArm';
 
     if (options.position) {
-      this.group.position.copy(options.position);
+      if (Array.isArray(options.position)) {
+        this.group.position.set(options.position[0], options.position[1], options.position[2]);
+      } else if (options.position && typeof options.position.x === 'number') {
+        this.group.position.set(options.position.x, options.position.y, options.position.z);
+      }
     }
     if (options.rotationY !== undefined) {
       this.group.rotation.y = options.rotationY;
