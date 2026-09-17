@@ -10,7 +10,6 @@ import { AudioEngine } from './audio/AudioEngine.js';
 import { ProgramSequencer } from './app/ProgramSequencer.js';
 import { TelemetryManager } from './app/TelemetryManager.js';
 import { BallInterceptor } from './game/BallInterceptor.js';
-import { JointRangeVisualizer } from './scene/JointRangeVisualizer.js';
 
 class RobotApp {
   constructor() {
@@ -96,9 +95,6 @@ class RobotApp {
 
     // Autonomous Ball Dropper & Interceptor Game AI
     this.ballInterceptor = new BallInterceptor(this.scene, this.robot, this.kinematics, this.audio);
-
-    // 3D Joint Range-of-Motion (ROM) Visual Helpers & Gauges
-    this.romVisualizer = new JointRangeVisualizer(this.scene, this.robot);
 
     // Set initial ready pose
     this.kinematics.moveToPreset('ready', 1.0);
@@ -663,14 +659,6 @@ class RobotApp {
       this.robot.setWireframe(active);
       this.audio.playClick();
     });
-
-    // 3D Joint Range-of-Motion (ROM) Helpers
-    const romBtn = document.getElementById('btn-toggle-rom');
-    romBtn?.addEventListener('click', () => {
-      const active = this.romVisualizer.toggle();
-      romBtn.classList.toggle('active', active);
-      this.audio.playClick();
-    });
   }
 
   bindThemeSelector() {
@@ -972,11 +960,6 @@ class RobotApp {
         const camOffset = new THREE.Vector3(0, 0.25, 0.4).applyQuaternion(tcpQuat);
         this.camera.position.copy(tcpPos).add(camOffset);
         this.controls.target.copy(tcpPos);
-      }
-
-      // 8. Update 3D Joint ROM Helpers & Angle Needles
-      if (this.romVisualizer) {
-        this.romVisualizer.update();
       }
     }
 
