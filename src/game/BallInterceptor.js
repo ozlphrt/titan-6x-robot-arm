@@ -1562,11 +1562,12 @@ export class BallInterceptor {
 
         // 1. Scan for any foreign/alien intruder balls strictly INSIDE this arm's home circle (radius <= 1.35m)
         let hasAlienBallsInBase = false;
+        const basePos = ap.basePos;
         for (let i = 0; i < this.balls.length; i++) {
           const b = this.balls[i];
           if (!b || !b.mesh || b.isHeld || b.teamId === armTeam || (now < (b.lastPushTime || 0))) continue;
           const pos = b.mesh.position;
-          const hDist = Math.hypot(pos.x - ap.basePos.x, pos.z - basePos.z);
+          const hDist = Math.hypot(pos.x - basePos.x, pos.z - basePos.z);
           if (hDist <= 1.35 && pos.y >= 0.02 && pos.y <= 1.85) {
             hasAlienBallsInBase = true;
             break;
@@ -1593,7 +1594,7 @@ export class BallInterceptor {
           const b = this.balls[i];
           if (!b || !b.mesh || b.isHeld || (now < (b.lastPushTime || 0))) continue;
           const pos = b.mesh.position;
-          const hDist = Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z);
+          const hDist = Math.hypot(pos.x - basePos.x, pos.z - basePos.z);
 
           // Full extended reach envelope covering defense station and boundary corridors (r <= 2.15m)
           if (hDist > 2.15 || pos.y < 0.02) continue;
@@ -1621,7 +1622,7 @@ export class BallInterceptor {
             if (hDist <= 1.35) {
               // Inside home circle: Absolute top priority (clear out all intruders!)
               const speedUrgency = ballSpeed > 0.20 ? 0.08 : 0.0;
-              priorityScore = 0.005 + (hDist / 1.35) * 0.015 - speedUrgency;
+              priorityScore = -0.50 + (hDist / 1.35) * 0.05 - speedUrgency;
             } else {
               // In boundary corridor / outer reach: Proactive arena-wide clearance
               priorityScore = 0.15 + (hDist / 2.15) * 0.08;
@@ -1630,8 +1631,8 @@ export class BallInterceptor {
             // OWN COLOR BALL
             if (hDist > 1.35) {
               // OUTSIDE THE CIRCLE: Top Priority Retrieval to bring it inside!
-              const dxBase = ap.basePos.x - pos.x;
-              const dzBase = ap.basePos.z - pos.z;
+              const dxBase = basePos.x - pos.x;
+              const dzBase = basePos.z - pos.z;
               const dBase = Math.hypot(dxBase, dzBase);
               targetDir = dBase > 0.001 ? new THREE.Vector3(dxBase / dBase, 0, dzBase / dBase) : new THREE.Vector3(0, 0, 0);
 
@@ -1642,8 +1643,8 @@ export class BallInterceptor {
               // If already settled inside the circle, leave undisturbed so it remains secure
               if (ballSpeed < 0.25) continue;
 
-              const dxBase = ap.basePos.x - pos.x;
-              const dzBase = ap.basePos.z - pos.z;
+              const dxBase = basePos.x - pos.x;
+              const dzBase = basePos.z - pos.z;
               const dBase = Math.hypot(dxBase, dzBase);
               targetDir = dBase > 0.001 ? new THREE.Vector3(dxBase / dBase, 0, dzBase / dBase) : new THREE.Vector3(0, 0, 0);
               priorityScore = 0.12;
@@ -1652,7 +1653,7 @@ export class BallInterceptor {
 
           const angleOffset = (b === ap.lastAttemptBall) ? ap.currentAngleOffset : 0;
           const yOffset = (b === ap.lastAttemptBall) ? ap.currentYOffset : 0;
-          const prediction = this.predictInterception(b, tcpPos, ap.basePos, targetDir, angleOffset, yOffset);
+          const prediction = this.predictInterception(b, tcpPos, basePos, targetDir, angleOffset, yOffset);
 
           if (prediction) {
             let score = prediction.time * 0.8 + prediction.dist * 0.5 + priorityScore;
