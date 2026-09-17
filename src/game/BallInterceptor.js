@@ -740,19 +740,20 @@ export class BallInterceptor {
     const dHoriz = Math.max(0.25, Math.hypot(dx, dz));
     const dY = targetPos.y - releasePos.y; // Height difference to target landing surface
 
-    // Optimal launch elevation angle theta (26 deg for short toss up to 35 deg for cross-arena throw)
-    const angleRatio = Math.max(0, Math.min(1.0, (dHoriz - 0.6) / 3.2));
-    const theta = (26.0 + 9.0 * angleRatio) * (Math.PI / 180.0); // in radians
+    // Optimal launch elevation angle theta (22 deg for short toss up to 30 deg for cross-arena throw)
+    const angleRatio = Math.max(0, Math.min(1.0, (dHoriz - 0.5) / 3.0));
+    const theta = (22.0 + 8.0 * angleRatio) * (Math.PI / 180.0); // in radians
     const tanTheta = Math.tan(theta);
 
-    const g = 9.81;
+    // Exact match to world physics simulation gravity (3.8 m/s^2)
+    const g = Math.abs(this.gravity);
     // Ballistic trajectory: dY = dHoriz * tanTheta - (g * dHoriz^2) / (2 * vHoriz^2)
     // => 2 * vHoriz^2 = (g * dHoriz^2) / (dHoriz * tanTheta - dY)
-    const denom = 2.0 * Math.max(0.05, dHoriz * tanTheta - dY);
+    const denom = 2.0 * Math.max(0.04, dHoriz * tanTheta - dY);
     let vHoriz = Math.sqrt(Math.max(0.1, (g * dHoriz * dHoriz) / denom));
 
-    // Slight aerodynamic drag compensation (damping is 0.998 per step in physics engine)
-    vHoriz *= 1.08;
+    // Drag compensation for gentle air resistance
+    vHoriz *= 1.05;
     const vY = vHoriz * tanTheta;
 
     const horizDir = new THREE.Vector3(dx / dHoriz, 0, dz / dHoriz);
@@ -1078,10 +1079,11 @@ export class BallInterceptor {
               ap.targetThrowPos = ap.basePos.clone().add(new THREE.Vector3(Math.cos(angle) * rIn, 0, Math.sin(angle) * rIn));
               ap.targetThrowDir.set(ap.targetThrowPos.x - ap.basePos.x, 0, ap.targetThrowPos.z - ap.basePos.z).normalize();
             } else {
-              // Target: land directly at the opponent arm's base pedestal
+              // Target: land directly inside the opponent arm's scoring ring (0.55m in front of base)
               const targetArm = this.armPursuits[ap.heldBall.teamId];
               const targetBase = targetArm ? targetArm.basePos : new THREE.Vector3(0, 0, 0);
-              const landingSpot = targetBase.clone();
+              const dirToCenter = new THREE.Vector3(-targetBase.x, 0, -targetBase.z).normalize();
+              const landingSpot = targetBase.clone().addScaledVector(dirToCenter, 0.55);
               landingSpot.y = 0.065;
               ap.targetThrowPos = landingSpot;
               ap.targetThrowDir.set(landingSpot.x - ap.basePos.x, 0, landingSpot.z - ap.basePos.z).normalize();
@@ -1369,20 +1371,9 @@ export class BallInterceptor {
           robot.setGripper(0.0);
           this.audio.playPneumatic(false);
 
-          const ballisticVel = (ap.requiredLaunchVel && ap.requiredLaunchVel.lengthSq() > 0.5) ? ap.requiredLaunchVel : null;
-          let finalLaunchVel;
-          if (ballisticVel && vGripper.lengthSq() > 0.2) {
-            const gDir = vGripper.clone().normalize();
-            const bDir = ballisticVel.clone().normalize();
-            const blendDir = new THREE.Vector3().addVectors(gDir.multiplyScalar(0.35), bDir.multiplyScalar(0.65)).normalize();
-            finalLaunchVel = blendDir.multiplyScalar(ballisticVel.length());
-          } else if (ballisticVel) {
-            finalLaunchVel = ballisticVel;
-          } else if (vGripper.lengthSq() > 0.5) {
-            finalLaunchVel = vGripper;
-          } else {
-            finalLaunchVel = ap.targetThrowDir.clone().multiplyScalar(4.0);
-          }
+          // Calculate mathematically exact launch velocity from release position directly to target landing spot
+          const launchSolution = this.calculateBallisticLaunchVelocity(tcpPos, ap.targetThrowPos || ap.basePos);
+          const finalLaunchVel = launchSolution.velocity;
 
           const launchDir = finalLaunchVel.clone().normalize();
           ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(launchDir, ap.heldBall.radius + 0.05);
