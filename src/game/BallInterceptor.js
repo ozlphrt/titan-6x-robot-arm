@@ -537,7 +537,7 @@ export class BallInterceptor {
     // 3. 3D Rolling Spin with Pure Spherical Integrity (scale always exactly 1, 1, 1)
     for (let i = 0; i < numBalls; i++) {
       const b = this.balls[i];
-      if (!b || !b.mesh) continue;
+      if (!b || !b.mesh || b.isHeld) continue;
 
       // 3D Rolling spin based on velocity
       const speed = b.velocity.length();
@@ -996,8 +996,7 @@ export class BallInterceptor {
           }
         }
       } else if (ap.throwState === 'WINDUP') {
-        if (ap.heldBall && ap.heldBall.mesh) {
-          ap.heldBall.mesh.position.copy(tcpPos);
+        if (ap.heldBall) {
           ap.heldBall.velocity.set(0, 0, 0);
         }
 
@@ -1022,8 +1021,7 @@ export class BallInterceptor {
           ap.throwTimer = 0.12;
         }
       } else if (ap.throwState === 'RELEASE') {
-        if (ap.heldBall && ap.heldBall.mesh) {
-          ap.heldBall.mesh.position.copy(tcpPos);
+        if (ap.heldBall) {
           ap.heldBall.velocity.set(0, 0, 0);
         }
 
@@ -1438,6 +1436,14 @@ export class BallInterceptor {
         ap.pursuitPos.copy(newPos);
 
         kinematics.solveIK(ap.pursuitPos, 18, 0.002, false, ap.currentWristRoll, ap.currentWristPitch);
+        robot.group.updateMatrixWorld(true);
+
+        // Immediate post-IK synchronization: eliminates 1-frame transform lag and jitter/vibration
+        if (ap.heldBall && ap.heldBall.mesh) {
+          robot.getTCPWorldPosition(tcpPos);
+          ap.heldBall.mesh.position.copy(tcpPos);
+          ap.heldBall.velocity.set(0, 0, 0);
+        }
 
         if (ap.currentTargetBall) {
           robot.setGripper(0.0);
