@@ -39,64 +39,23 @@ export class WorkcellScene {
     this.backLight.position.set(0, 3.0, -3.5);
     this.scene.add(this.backLight);
 
-    // 2. High-Tech Industrial Rectangular Base Plate Platform (3.6m x 3.6m, Top at y=0)
-    this.basePlateWidth = 3.6;
-    this.basePlateDepth = 3.6;
-
-    // Rectangular Platform Slab (Top surface at y=0, height 0.08m)
-    const platformGeo = new THREE.BoxGeometry(3.6, 0.08, 3.6);
+    // 2. Single Monolithic Precision Base Plate Floor (Top surface at y = 0)
+    const floorGeo = new THREE.PlaneGeometry(16, 16);
     this.platformMat = new THREE.MeshStandardMaterial({
       color: 0xe2e8f0,
       roughness: 0.35,
       metalness: 0.25,
       envMapIntensity: 1.0
     });
-    this.platformMesh = new THREE.Mesh(platformGeo, this.platformMat);
-    this.platformMesh.position.y = -0.04;
-    this.platformMesh.receiveShadow = true;
-    this.scene.add(this.platformMesh);
+    this.floorMesh = new THREE.Mesh(floorGeo, this.platformMat);
+    this.floorMesh.rotation.x = -Math.PI / 2;
+    this.floorMesh.position.y = 0;
+    this.floorMesh.receiveShadow = true;
+    this.scene.add(this.floorMesh);
 
-    // Beveled Border Edge Frame around Rectangular Base Plate
-    this.borderMat = new THREE.MeshStandardMaterial({
-      color: 0x94a3b8,
-      roughness: 0.4,
-      metalness: 0.6
-    });
-
-    // Perimeter border rails
-    const railThickness = 0.04;
-    const railHeight = 0.015;
-    // North & South rails
-    [-1.8 + railThickness / 2, 1.8 - railThickness / 2].forEach(z => {
-      const railGeo = new THREE.BoxGeometry(3.6, railHeight, railThickness);
-      const railMesh = new THREE.Mesh(railGeo, this.borderMat);
-      railMesh.position.set(0, 0.005, z);
-      this.scene.add(railMesh);
-    });
-    // East & West rails
-    [-1.8 + railThickness / 2, 1.8 - railThickness / 2].forEach(x => {
-      const railGeo = new THREE.BoxGeometry(railThickness, railHeight, 3.6);
-      const railMesh = new THREE.Mesh(railGeo, this.borderMat);
-      railMesh.position.set(x, 0.005, 0);
-      this.scene.add(railMesh);
-    });
-
-    // Lower Sub-Floor in the Void Below (at y = -1.2m)
-    const lowerFloorGeo = new THREE.PlaneGeometry(18, 18);
-    this.lowerFloorMat = new THREE.MeshStandardMaterial({
-      color: 0xdbeafe,
-      roughness: 0.8,
-      metalness: 0.1
-    });
-    this.lowerFloor = new THREE.Mesh(lowerFloorGeo, this.lowerFloorMat);
-    this.lowerFloor.rotation.x = -Math.PI / 2;
-    this.lowerFloor.position.y = -1.2;
-    this.lowerFloor.receiveShadow = true;
-    this.scene.add(this.lowerFloor);
-
-    // 3. Precision Grid across the Rectangular Base Plate
-    this.gridHelper = new THREE.GridHelper(3.6, 24, 0x0284c7, 0xcbd5e1);
-    this.gridHelper.position.y = 0.002;
+    // 3. Precision Engineering Grid across the Base Plate Floor
+    this.gridHelper = new THREE.GridHelper(8.0, 40, 0x0284c7, 0xcbd5e1);
+    this.gridHelper.position.y = 0.001;
     this.scene.add(this.gridHelper);
 
     // 4. Concentric Circular Defense Envelope (The zone the robot arm reaches & defends)
@@ -118,7 +77,7 @@ export class WorkcellScene {
         side: THREE.DoubleSide
       });
       const ring = new THREE.Mesh(ringGeo, ringMat);
-      ring.position.y = 0.003;
+      ring.position.y = 0.002;
       this.ringsGroup.add(ring);
     });
     this.scene.add(this.ringsGroup);
@@ -197,12 +156,10 @@ export class WorkcellScene {
       this.scene.fog.density = cfg.fogDensity;
     }
 
-    // Platform & Floor
+    // Platform Floor Material
     this.platformMat.color.setHex(cfg.platform);
     this.platformMat.roughness = cfg.platformRoughness;
     this.platformMat.metalness = cfg.platformMetalness;
-    this.borderMat.color.setHex(cfg.rails);
-    this.lowerFloorMat.color.setHex(cfg.floor);
 
     // Lights
     if (this.ambientLight) this.ambientLight.intensity = cfg.ambient;
@@ -214,8 +171,8 @@ export class WorkcellScene {
     if (this.gridHelper) {
       this.scene.remove(this.gridHelper);
       this.gridHelper.geometry.dispose();
-      this.gridHelper = new THREE.GridHelper(3.6, 24, cfg.gridCenter, cfg.gridLines);
-      this.gridHelper.position.y = 0.002;
+      this.gridHelper = new THREE.GridHelper(8.0, 40, cfg.gridCenter, cfg.gridLines);
+      this.gridHelper.position.y = 0.001;
       this.gridHelper.visible = this.gridVisible;
       this.scene.add(this.gridHelper);
     }
