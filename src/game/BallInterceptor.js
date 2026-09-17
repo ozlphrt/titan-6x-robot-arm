@@ -30,7 +30,7 @@ export class BallInterceptor {
     };
 
     // The reach zone the robot arms actively defend (extended reach envelope with longer telescoping forearm)
-    this.maxDefenseRadius = 1.85;
+    this.maxDefenseRadius = 2.05;
     this.minWorkspaceRadius = 0.18;
 
     this.score = 0;
@@ -671,13 +671,13 @@ export class BallInterceptor {
         // Strike target: drive TCP directly into and through the ball along attack vector
         const strikePos = simPos.clone().addScaledVector(rotatedAttackDir, ball.radius * 0.15);
         
-        // Clamp strikePos to robot's physical reach envelope (<= 1.85m with extended telescoping forearm)
+        // Clamp strikePos to robot's physical reach envelope (<= 2.05m with extended telescoping forearm)
         const sDx = strikePos.x - basePos.x;
         const sDz = strikePos.z - basePos.z;
         const sH = Math.hypot(sDx, sDz);
-        if (sH > 1.85) {
-          strikePos.x = basePos.x + (sDx / sH) * 1.85;
-          strikePos.z = basePos.z + (sDz / sH) * 1.85;
+        if (sH > 2.05) {
+          strikePos.x = basePos.x + (sDx / sH) * 2.05;
+          strikePos.z = basePos.z + (sDz / sH) * 2.05;
         }
         
         strikePos.y = Math.max(floorAtPos.y + ball.radius + yOffset, Math.min(simPos.y + yOffset, 0.40));
@@ -698,7 +698,7 @@ export class BallInterceptor {
     const fallbackPos = ball.mesh.position.clone().addScaledVector(ball.velocity, 0.10);
     const offset = new THREE.Vector3().subVectors(fallbackPos, basePos);
     const fbH = Math.hypot(offset.x, offset.z);
-    const safeH = Math.max(0.20, Math.min(1.85, fbH));
+    const safeH = Math.max(0.20, Math.min(2.05, fbH));
     if (fbH > 0.001) {
       fallbackPos.x = basePos.x + (offset.x / fbH) * safeH;
       fallbackPos.z = basePos.z + (offset.z / fbH) * safeH;
@@ -710,9 +710,9 @@ export class BallInterceptor {
     const sfDx = strikeFallback.x - basePos.x;
     const sfDz = strikeFallback.z - basePos.z;
     const sfH = Math.hypot(sfDx, sfDz);
-    if (sfH > 1.85) {
-      strikeFallback.x = basePos.x + (sfDx / sfH) * 1.85;
-      strikeFallback.z = basePos.z + (sfDz / sfH) * 1.85;
+    if (sfH > 2.05) {
+      strikeFallback.x = basePos.x + (sfDx / sfH) * 2.05;
+      strikeFallback.z = basePos.z + (sfDz / sfH) * 2.05;
     }
     strikeFallback.y = Math.max(fbFloor.y + ball.radius + yOffset, strikeFallback.y);
 
@@ -955,6 +955,13 @@ export class BallInterceptor {
               ap.throwBall = b;
               ap.throwTimer = 0;
               robot.setGripper(0.0);
+            } else if (isOwnColor && hDistBase > 1.35 && hDistBase <= 2.05) {
+              // Initiate Grab & Retrieve for outside own ball
+              ap.throwState = 'APPROACH';
+              ap.throwMode = 'RETRIEVE_CARRY';
+              ap.throwBall = b;
+              ap.throwTimer = 0;
+              robot.setGripper(0.0);
             }
           }
         }
@@ -1108,16 +1115,25 @@ export class BallInterceptor {
             robot.setTargetTelescope(savedTele);
             robot.setTelescope(savedTele);
           } else if (ap.throwTimer > 0.85) {
-            // CLUSTER JAM BREAKER: If obstructed or unable to clamp inside dense ball pile, execute dynamic kinetic swat/sweep
-            const oppBase = this.armPursuits[ap.throwBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
-            const pushDir = new THREE.Vector3(oppBase.x - ballPos.x, 0, oppBase.z - ballPos.z).normalize();
-            if (pushDir.lengthSq() < 0.001) pushDir.set(ballPos.x - ap.basePos.x, 0, ballPos.z - ap.basePos.z).normalize();
+            // CLUSTER JAM / CORNER REACH BREAKER: If obstructed or at max reach near perimeter walls, execute inward swat/sweep
+            if (ap.throwMode === 'RETRIEVE_CARRY') {
+              const pushDir = new THREE.Vector3(ap.basePos.x - ballPos.x, 0, ap.basePos.z - ballPos.z).normalize();
+              ap.throwBall.velocity.set(pushDir.x * 3.6, 0.75, pushDir.z * 3.6);
+              ap.throwBall.lastPushTime = now + 600;
+              ap.throwBall.isHeld = false;
+              this.audio.playPneumatic(false);
+              if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.1);
+            } else {
+              const oppBase = this.armPursuits[ap.throwBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
+              const pushDir = new THREE.Vector3(oppBase.x - ballPos.x, 0, oppBase.z - ballPos.z).normalize();
+              if (pushDir.lengthSq() < 0.001) pushDir.set(ballPos.x - ap.basePos.x, 0, ballPos.z - ap.basePos.z).normalize();
 
-            ap.throwBall.velocity.set(pushDir.x * 5.5, 1.35, pushDir.z * 5.5);
-            ap.throwBall.lastPushTime = now + 500;
-            ap.throwBall.isHeld = false;
-            this.audio.playPneumatic(false);
-            if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.3);
+              ap.throwBall.velocity.set(pushDir.x * 5.5, 1.35, pushDir.z * 5.5);
+              ap.throwBall.lastPushTime = now + 500;
+              ap.throwBall.isHeld = false;
+              this.audio.playPneumatic(false);
+              if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.3);
+            }
 
             ap.throwBall = null;
             ap.centerTargetBall = null;
@@ -1186,22 +1202,21 @@ export class BallInterceptor {
           ap.throwTimer = ap.windupDuration;
         }
       } else if (ap.throwState === 'RETRIEVE_CARRY') {
-        // Smoothly lift and carry ball over to the home sanctuary behind the robot arm
+        // Smoothly lift and carry ball over into the home circle (r <= 0.85m < 1.35m)
         if (ap.heldBall && ap.heldBall.mesh) {
           ap.heldBall.velocity.set(0, 0, 0);
         }
         robot.setGripper(1.0);
 
-        const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
-        const perpDir = new THREE.Vector3(-behindDir.z, 0, behindDir.x);
-        const slotSpread = (((ap.retainsCount || 0) % 5) - 2) * 0.12;
-        const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48).addScaledVector(perpDir, slotSpread);
+        const angle = ((ap.retainsCount || 0) * 1.35) % (Math.PI * 2);
+        const rIn = 0.55 + ((ap.retainsCount || 0) % 3) * 0.14;
+        const sanctuaryPos = ap.basePos.clone().add(new THREE.Vector3(Math.cos(angle) * rIn, 0, Math.sin(angle) * rIn));
 
-        const cDuration = ap.carryDuration || 0.65;
+        const cDuration = ap.carryDuration || 0.60;
         const carryT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / cDuration));
         // Quintic smoothstep for horizontal carry trajectory
         const pCarry = carryT * carryT * carryT * (carryT * (carryT * 6.0 - 15.0) + 10.0);
-        const arcY = 0.15 + Math.sin(carryT * Math.PI) * 0.32;
+        const arcY = 0.16 + Math.sin(carryT * Math.PI) * 0.28;
         ap.pursuitTarget.set(
           ap.graspStartPos.x + (sanctuaryPos.x - ap.graspStartPos.x) * pCarry,
           arcY,
@@ -1212,22 +1227,21 @@ export class BallInterceptor {
         const hDistToSanctuary = Math.hypot(tcpPos.x - sanctuaryPos.x, tcpPos.z - sanctuaryPos.z);
         if (ap.throwTimer <= 0 || hDistToSanctuary < 0.10) {
           ap.throwState = 'RETRIEVE_PLACE';
-          ap.placeDuration = 0.38;
-          ap.throwTimer = 0.38;
+          ap.placeDuration = 0.35;
+          ap.throwTimer = 0.35;
         }
       } else if (ap.throwState === 'RETRIEVE_PLACE') {
-        // Lower down smoothly and gently place into organized rear sanctuary
+        // Lower down smoothly and gently place inside home circle
         if (ap.heldBall && ap.heldBall.mesh) {
           ap.heldBall.velocity.set(0, 0, 0);
         }
-        const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
-        const perpDir = new THREE.Vector3(-behindDir.z, 0, behindDir.x);
-        const slotSpread = (((ap.retainsCount || 0) % 5) - 2) * 0.12;
-        const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48).addScaledVector(perpDir, slotSpread);
+        const angle = ((ap.retainsCount || 0) * 1.35) % (Math.PI * 2);
+        const rIn = 0.55 + ((ap.retainsCount || 0) % 3) * 0.14;
+        const sanctuaryPos = ap.basePos.clone().add(new THREE.Vector3(Math.cos(angle) * rIn, 0, Math.sin(angle) * rIn));
         const floorInfo = this.getFloorInfo(sanctuaryPos.x, sanctuaryPos.z);
-        ap.pursuitTarget.set(sanctuaryPos.x, floorInfo.y + (ap.heldBall ? ap.heldBall.radius : 0.065), sanctuaryPos.z);
+        ap.pursuitTarget.set(sanctuaryPos.x, floorInfo.y + (ap.heldBall ? ap.heldBall.radius : 0.065) + 0.015, sanctuaryPos.z);
 
-        const pDuration = ap.placeDuration || 0.38;
+        const pDuration = ap.placeDuration || 0.35;
         const placeT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / pDuration));
         const pPlace = placeT * placeT * placeT * (placeT * (placeT * 6.0 - 15.0) + 10.0);
         robot.setGripper(1.0 - pPlace); // Progressive release
@@ -1239,8 +1253,10 @@ export class BallInterceptor {
 
           if (ap.heldBall && ap.heldBall.mesh) {
             ap.heldBall.isHeld = false;
-            ap.heldBall.velocity.set(0, 0, 0); // Settles gently in place behind arm
-            ap.heldBall.lastPushTime = now + 600;
+            // Gentle inward settling nudge towards circle center
+            const dirIn = new THREE.Vector3(ap.basePos.x - ap.heldBall.mesh.position.x, 0, ap.basePos.z - ap.heldBall.mesh.position.z).normalize();
+            ap.heldBall.velocity.set(dirIn.x * 0.18, 0, dirIn.z * 0.18);
+            ap.heldBall.lastPushTime = now + 800;
             ap.retainsCount = (ap.retainsCount || 0) + 1;
             this.pushCount++;
             this.score += 50;
@@ -1449,7 +1465,7 @@ export class BallInterceptor {
           const b = this.balls[i];
           if (!b || !b.mesh || b.teamId === armTeam) continue;
           const distBase = Math.hypot(b.mesh.position.x - ap.basePos.x, b.mesh.position.z - ap.basePos.z);
-          if (distBase <= 1.75) {
+          if (distBase <= 1.35) {
             hasForeignInZone = true;
             break;
           }
@@ -1543,7 +1559,7 @@ export class BallInterceptor {
           const bIndex = this.balls.indexOf(b);
           const pos = b && b.mesh ? b.mesh.position : null;
           const hDist = pos ? Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z) : 999;
-          const isStillValid = bIndex !== -1 && !b.isHeld && hDist <= 1.75 && pos.y >= 0.02 && pos.y <= 1.85;
+          const isStillValid = bIndex !== -1 && !b.isHeld && hDist <= 2.05 && pos.y >= 0.02 && pos.y <= 1.85;
 
           // Target tracking timeout: if arm is unable to reach target within 2.0s, release lock and re-evaluate
           if (!isStillValid || ap.lockTimer > 2.0) {
@@ -1555,20 +1571,20 @@ export class BallInterceptor {
           ap.lockTimer = 0;
         }
 
-        // 1. Scan for any foreign/alien intruder balls within arm's defense perimeter
+        // 1. Scan for any foreign/alien intruder balls strictly INSIDE this arm's home circle (radius <= 1.35m)
         let hasAlienBallsInBase = false;
         for (let i = 0; i < this.balls.length; i++) {
           const b = this.balls[i];
           if (!b || !b.mesh || b.isHeld || b.teamId === armTeam || (now < (b.lastPushTime || 0))) continue;
           const pos = b.mesh.position;
           const hDist = Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z);
-          if (hDist <= 1.75 && pos.y >= 0.02 && pos.y <= 1.85) {
+          if (hDist <= 1.35 && pos.y >= 0.02 && pos.y <= 1.85) {
             hasAlienBallsInBase = true;
             break;
           }
         }
 
-        // Strict priority override: If an alien intruder enters while arm was pursuing an own ball, abort own-ball task immediately
+        // Strict priority override: If an alien intruder enters home circle while arm was retrieving own ball, abort and eject intruder
         if (hasAlienBallsInBase) {
           if (ap.lockedTargetBall && ap.lockedTargetBall.teamId === armTeam) {
             ap.lockedTargetBall = null;
@@ -1590,12 +1606,12 @@ export class BallInterceptor {
           const pos = b.mesh.position;
           const hDist = Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z);
 
-          // Full extended reach envelope covering defense station and boundary corridors (r <= 1.75m)
-          if (hDist > 1.75 || pos.y < 0.02) continue;
+          // Full extended reach envelope covering defense station and boundary corridors (r <= 2.05m)
+          if (hDist > 2.05 || pos.y < 0.02) continue;
 
           const isOwnColor = (b.teamId === armTeam);
 
-          // ABSOLUTE DEFENSE RULE: While ANY alien intruder ball is in the base, NEVER touch or organize own balls!
+          // ABSOLUTE DEFENSE RULE: While ANY alien intruder ball is inside the circle (r <= 1.35), clear intruder first
           if (hasAlienBallsInBase && isOwnColor) {
             continue;
           }
@@ -1606,42 +1622,43 @@ export class BallInterceptor {
           let priorityScore = 0;
 
           if (!isOwnColor) {
-            // FOREIGN INTRUDER BALL: Eject towards its owner station (Highest Priority)
+            // FOREIGN INTRUDER BALL: Eject towards its owner station
             const oppBase = this.armPursuits[b.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
             const dxOpp = oppBase.x - pos.x;
             const dzOpp = oppBase.z - pos.z;
             const dOpp = Math.hypot(dxOpp, dzOpp);
             targetDir = dOpp > 0.001 ? new THREE.Vector3(dxOpp / dOpp, 0, dzOpp / dOpp) : new THREE.Vector3(1, 0, 0);
 
-            if (hDist <= 1.45) {
+            if (hDist <= 1.35) {
               // Inside home circle: Absolute top priority (clear out all intruders!)
               const speedUrgency = ballSpeed > 0.20 ? 0.08 : 0.0;
-              priorityScore = 0.01 + (hDist / 1.45) * 0.12 - speedUrgency;
+              priorityScore = 0.01 + (hDist / 1.35) * 0.08 - speedUrgency;
             } else {
               // In boundary corridor / outer reach: Proactive arena-wide clearance
-              priorityScore = 0.22 + (hDist / 1.75) * 0.20;
+              priorityScore = 0.40 + (hDist / 2.05) * 0.20;
             }
           } else {
-            // OWN COLOR BALL: Check if already organized in rear sanctuary behind arm
-            const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
-            const vecFromBase = new THREE.Vector3().subVectors(pos, ap.basePos);
-            const projBehind = vecFromBase.dot(behindDir);
-            const isOrganizedBehind = (projBehind > 0.32 && hDist <= 0.78);
+            // OWN COLOR BALL
+            if (hDist > 1.35) {
+              // OUTSIDE THE CIRCLE: Top Priority Retrieval to bring it inside!
+              const dxBase = ap.basePos.x - pos.x;
+              const dzBase = ap.basePos.z - pos.z;
+              const dBase = Math.hypot(dxBase, dzBase);
+              targetDir = dBase > 0.001 ? new THREE.Vector3(dxBase / dBase, 0, dzBase / dBase) : new THREE.Vector3(0, 0, 0);
 
-            // If already organized in the rear sanctuary and settled, leave it undisturbed
-            if (isOrganizedBehind && ballSpeed < 0.25) continue;
+              // Prioritize closer outside balls first, higher priority than foreign balls outside circle
+              priorityScore = 0.03 + (hDist - 1.35) * 0.04;
+            } else {
+              // ALREADY INSIDE THE CIRCLE
+              // If already settled inside the circle, leave undisturbed so it remains secure
+              if (ballSpeed < 0.25) continue;
 
-            if (hDist > 1.78) continue; // Out of reach for arm
-
-            // Active Organization: Pick up own ball and carry it behind the arm to organize!
-            const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48);
-            const dxS = sanctuaryPos.x - pos.x;
-            const dzS = sanctuaryPos.z - pos.z;
-            const dS = Math.hypot(dxS, dzS);
-            targetDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
-
-            // When no alien balls are present, arm actively organizes all un-organized own balls
-            priorityScore = 0.12 + (hDist / 1.78) * 0.18;
+              const dxBase = ap.basePos.x - pos.x;
+              const dzBase = ap.basePos.z - pos.z;
+              const dBase = Math.hypot(dxBase, dzBase);
+              targetDir = dBase > 0.001 ? new THREE.Vector3(dxBase / dBase, 0, dzBase / dBase) : new THREE.Vector3(0, 0, 0);
+              priorityScore = 0.20;
+            }
           }
 
           const angleOffset = (b === ap.lastAttemptBall) ? ap.currentAngleOffset : 0;

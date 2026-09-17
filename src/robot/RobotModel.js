@@ -101,7 +101,7 @@ export class RobotModel {
       elbowOffset: 0.08,
       baseForearmLength: 0.44,
       forearmLength: 0.44,
-      maxTelescopeExtension: 0.58,
+      maxTelescopeExtension: 0.72,
       wristLength: 0.13,
       flangeLength: 0.05
     };
