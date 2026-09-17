@@ -463,19 +463,19 @@ export class BallInterceptor {
     const simPos = ball.mesh.position.clone();
     const simVel = ball.velocity.clone();
     const dt = 0.035; // 35ms simulation slice
-    const maxSteps = 40; // ~1.4 seconds lookahead
-    const armSpeed = 3.8; // m/s effective robotic intercept capability
+    const maxSteps = 45; // ~1.55 seconds lookahead
+    const armSpeed = 4.2; // m/s effective robotic intercept capability
 
     for (let step = 1; step <= maxSteps; step++) {
       const t = step * dt;
       simPos.addScaledVector(simVel, dt);
 
-      // Check if candidate point is within reachable defense envelope
+      // Check if candidate point is within physical reachable defense envelope
       const hDist = Math.sqrt(simPos.x * simPos.x + simPos.z * simPos.z);
-      if (hDist <= this.maxDefenseRadius && hDist >= this.minWorkspaceRadius && simPos.y >= 0.15 && simPos.y <= 1.65) {
+      if (hDist <= 1.25 && hDist >= 0.18 && simPos.y >= 0.15 && simPos.y <= 1.35) {
         const distFromTcp = currentTcp.distanceTo(simPos);
         const timeNeeded = distFromTcp / armSpeed;
-        if (timeNeeded <= (t + 0.12)) {
+        if (timeNeeded <= (t + 0.15)) {
           return {
             interceptPos: simPos.clone(),
             time: t,
@@ -485,12 +485,17 @@ export class BallInterceptor {
       }
     }
 
-    // Fallback: short lead along flight vector
-    const fallbackPos = ball.mesh.position.clone().addScaledVector(ball.velocity, 0.20);
-    fallbackPos.y = Math.max(0.20, Math.min(1.4, fallbackPos.y));
+    // Fallback: direct lead clamped within reach envelope
+    const fallbackPos = ball.mesh.position.clone().addScaledVector(ball.velocity, 0.18);
+    const fbH = Math.sqrt(fallbackPos.x * fallbackPos.x + fallbackPos.z * fallbackPos.z);
+    if (fbH > 1.18) {
+      fallbackPos.x = (fallbackPos.x / fbH) * 1.18;
+      fallbackPos.z = (fallbackPos.z / fbH) * 1.18;
+    }
+    fallbackPos.y = Math.max(0.18, Math.min(1.25, fallbackPos.y));
     return {
       interceptPos: fallbackPos,
-      time: 0.22,
+      time: 0.20,
       dist: currentTcp.distanceTo(fallbackPos)
     };
   }
@@ -609,18 +614,18 @@ export class BallInterceptor {
       }
     }
 
-    // 4. Intelligent Ball Targeting with Lock-On Commitment & Spacetime Rendezvous
+    // 4. Intelligent Dynamic Ball Targeting with Adaptive Priority Scoring
     let bestTarget = null;
     let lowestScore = Infinity;
 
     if (this.enabled) {
-      // Check if existing locked target is still valid
+      // Validate locked target
       if (this.lockedTargetBall) {
         const b = this.lockedTargetBall;
         const bIndex = this.balls.indexOf(b);
         const pos = b ? b.mesh.position : null;
         const hDist = pos ? Math.sqrt(pos.x * pos.x + pos.z * pos.z) : 999;
-        const isStillValid = bIndex !== -1 && !b.burst && hDist <= (this.maxDefenseRadius + 0.40);
+        const isStillValid = bIndex !== -1 && !b.burst && hDist <= 1.45 && pos.y >= 0.10 && pos.y <= 1.55;
         if (!isStillValid) {
           this.lockedTargetBall = null;
         }
@@ -631,16 +636,17 @@ export class BallInterceptor {
         const pos = b.mesh.position;
         const hDist = Math.sqrt(pos.x * pos.x + pos.z * pos.z);
 
-        if (hDist > (this.maxDefenseRadius + 0.35)) continue;
+        // Candidate filtering
+        if (hDist > 1.50 || pos.y < 0.08) continue;
 
         const prediction = this.predictInterception(b, currentTcp);
         if (prediction) {
-          // Priority Score: Lower is better
-          let score = prediction.time * 2.0 + prediction.dist * 1.4 + (1.6 - pos.y) * 0.4;
+          // Dynamic Priority Score: Lower is better
+          let score = prediction.time * 1.6 + prediction.dist * 1.8 + Math.abs(pos.y - 0.70) * 0.4;
 
-          // Strong Sticky Lock-On Bonus (eliminates hesitation and ensures decisive catches)
+          // Balanced lock-on hysteresis (smooth tracking without being locked into distant targets)
           if (b === this.lockedTargetBall) {
-            score -= 3.5;
+            score -= 0.35;
           }
 
           if (score < lowestScore) {
@@ -659,7 +665,7 @@ export class BallInterceptor {
       }
     }
 
-    // 5. Agile Arm Pursuit, Gripper Aiming & HUD Reticle
+    // 5. Agile Arm Pursuit, Kinematics & HUD Reticle
     if (this.enabled) {
       if (bestTarget) {
         this.currentTargetBall = bestTarget.ball;
@@ -682,8 +688,8 @@ export class BallInterceptor {
       }
 
       // Fast, agile critically damped Cartesian pursuit (SmoothDamp)
-      const smoothTime = 0.07; // Snappy pursuit
-      const maxSpeed = 5.2; // High-speed robotic interception
+      const smoothTime = 0.06; // Snappy, responsive pursuit
+      const maxSpeed = 5.8; // High-speed robotic interception
 
       const omega = 2.0 / smoothTime;
       const x = omega * deltaTime;
@@ -710,46 +716,12 @@ export class BallInterceptor {
       }
       this.pursuitPos.copy(newPos);
 
-      // Solve IK target configuration smoothly into targetAngles
-      this.kinematics.solveIK(this.pursuitPos, 28, 0.002, false);
+      // Solve IK target configuration smoothly into targetAngles with unified analytical Elbow-Up solver
+      this.kinematics.solveIK(this.pursuitPos, 16, 0.002, false);
 
-      // --- Precise 3D Gripper Pointing & Direct Target Ball Tracking ---
+      // Open gripper jaws on approach
       if (this.currentTargetBall) {
-        const ballPos = this.currentTargetBall.mesh.position;
-        const wristPos = new THREE.Vector3();
-        this.robot.j5.getWorldPosition(wristPos);
-
-        // 1. Direct Base Yaw Alignment: keep arm plane aimed straight at target ball
-        const targetYaw = Math.atan2(ballPos.x, ballPos.z);
-        this.robot.targetAngles[0] = targetYaw;
-
-        // 2. Direct 3D Gripper Vector Pointing along line of sight to ball
-        const worldDirToBall = new THREE.Vector3().subVectors(ballPos, wristPos);
-        if (worldDirToBall.lengthSq() > 0.0001) {
-          worldDirToBall.normalize();
-
-          // Transform target direction vector into J4 (forearm) coordinate frame
-          const j4WorldQuat = new THREE.Quaternion();
-          this.robot.j4.getWorldQuaternion(j4WorldQuat);
-          const localDir = worldDirToBall.clone().applyQuaternion(j4WorldQuat.clone().invert());
-
-          // In J4's local frame: +Y is along forearm towards wrist, +Z is forward pitch
-          const targetJ5 = Math.atan2(localDir.z, localDir.y);
-
-          // Clamp to physical mechanical limits (-120° to +120°)
-          const minJ5 = THREE.MathUtils.degToRad(-120);
-          const maxJ5 = THREE.MathUtils.degToRad(120);
-          this.robot.targetAngles[4] = Math.max(minJ5, Math.min(maxJ5, targetJ5));
-        }
-
-        // 3. Keep roll axes stable & jaws open wide on approach
-        this.robot.targetAngles[3] = 0;
-        this.robot.targetAngles[5] = 0;
-
-        const distFromWrist = wristPos.distanceTo(ballPos);
-        if (distFromWrist < 0.80) {
-          this.robot.setGripper(0.0);
-        }
+        this.robot.setGripper(0.0);
       }
     }
   }

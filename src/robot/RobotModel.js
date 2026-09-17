@@ -56,13 +56,13 @@ export class RobotModel {
     // Max angular speeds (rad/s) for agile, high-performance robotic tracking [J1..J6]
     this.jointSpeeds = [5.2, 4.6, 5.2, 6.5, 6.5, 8.0]; // Fast, agile industrial servo speed
 
-    // Joint Angle Limits in Degrees
+    // Joint Angle Limits in Degrees (Physical Hard Stops for Solid Machine Structure)
     this.limits = [
       { min: -180, max: 180 }, // J1: Base Yaw
-      { min: -90, max: 90 },   // J2: Shoulder Pitch
-      { min: -135, max: 135 }, // J3: Elbow Pitch
+      { min: -105, max: 20 },  // J2: Shoulder Pitch (hard stop prevents crashing backward into base)
+      { min: -145, max: 25 },  // J3: Elbow Pitch (hard stop prevents forearm folding into upper arm/base)
       { min: -180, max: 180 }, // J4: Forearm Roll
-      { min: -120, max: 120 }, // J5: Wrist Pitch
+      { min: -115, max: 115 }, // J5: Wrist Pitch
       { min: -360, max: 360 }  // J6: Tool Roll
     ];
 
@@ -781,10 +781,75 @@ export class RobotModel {
     return this.telescopeExtension;
   }
 
-  setTargetJointAngles(anglesRad) {
+  /**
+   * Enforces physical solid body non-penetration constraints:
+   * Prevents upper arm, elbow, forearm, or wrist from passing through the solid base pedestal cylinder or floor.
+   */
+  enforceSolidArmPhysics(angles) {
+    // 1. Clamp to mechanical hard-stop limits
     for (let i = 0; i < 6; i++) {
-      if (anglesRad[i] !== undefined) {
-        this.targetAngles[i] = anglesRad[i];
+      const limit = this.limits[i];
+      const minRad = THREE.MathUtils.degToRad(limit.min);
+      const maxRad = THREE.MathUtils.degToRad(limit.max);
+      angles[i] = Math.max(minRad, Math.min(maxRad, angles[i]));
+    }
+
+    // 2. Solid Base Turntable & Ground Clearance Enforcement
+    const shoulderY = 0.48; // Base height + shoulder yoke height
+    const j2 = angles[1];
+    const j3 = angles[2];
+
+    const upperLen = this.dimensions.upperArmLength;
+    const rElbow = -Math.sin(j2) * upperLen;
+    const yElbow = shoulderY + Math.cos(j2) * upperLen;
+
+    const foreLen = this.dimensions.forearmLength;
+    const armAngle2 = j2 + j3;
+    const rWrist = rElbow - Math.sin(armAngle2) * foreLen;
+    const yWrist = yElbow + Math.cos(armAngle2) * foreLen;
+
+    // Solid Floor Clearance (Y >= 0.05m)
+    if (yWrist < 0.05) {
+      const deficit = 0.05 - yWrist;
+      angles[1] -= deficit * 0.75;
+      angles[2] += deficit * 0.45;
+    }
+
+    // Solid Base Turntable Cylinder (Radius <= 0.27m, Height <= 0.46m)
+    const baseRadius = 0.27;
+    const baseHeight = 0.46;
+    if (Math.abs(rWrist) < baseRadius && yWrist < baseHeight) {
+      // Forearm is attempting to penetrate the solid turntable! Push arm forward
+      if (angles[1] > -0.22) {
+        angles[1] = -0.22;
+      }
+      if (angles[2] > -0.15) {
+        angles[2] = -0.15;
+      }
+    }
+
+    if (Math.abs(rElbow) < baseRadius && yElbow < baseHeight) {
+      if (angles[1] > -0.18) {
+        angles[1] = -0.18;
+      }
+    }
+
+    // Re-clamp to limits
+    for (let i = 0; i < 6; i++) {
+      const limit = this.limits[i];
+      const minRad = THREE.MathUtils.degToRad(limit.min);
+      const maxRad = THREE.MathUtils.degToRad(limit.max);
+      angles[i] = Math.max(minRad, Math.min(maxRad, angles[i]));
+    }
+    return angles;
+  }
+
+  setTargetJointAngles(anglesRad) {
+    const valid = [...anglesRad];
+    this.enforceSolidArmPhysics(valid);
+    for (let i = 0; i < 6; i++) {
+      if (valid[i] !== undefined) {
+        this.targetAngles[i] = valid[i];
       }
     }
   }
@@ -794,10 +859,12 @@ export class RobotModel {
   }
 
   setJointAngles(anglesRad) {
+    const valid = [...anglesRad];
+    this.enforceSolidArmPhysics(valid);
     for (let i = 0; i < 6; i++) {
-      if (anglesRad[i] !== undefined) {
-        this.angles[i] = anglesRad[i];
-        this.targetAngles[i] = anglesRad[i];
+      if (valid[i] !== undefined) {
+        this.angles[i] = valid[i];
+        this.targetAngles[i] = valid[i];
       }
     }
     this.applyJointAngles();
@@ -805,8 +872,11 @@ export class RobotModel {
 
   setJointAngleDeg(index, deg) {
     const rad = THREE.MathUtils.degToRad(deg);
-    this.angles[index] = rad;
-    this.targetAngles[index] = rad;
+    const candidate = [...this.angles];
+    candidate[index] = rad;
+    this.enforceSolidArmPhysics(candidate);
+    this.angles = candidate;
+    this.targetAngles = [...candidate];
     this.applyJointAngles();
   }
 
@@ -823,6 +893,7 @@ export class RobotModel {
     let hasMoved = false;
 
     // 1. Smooth 6-Axis Joint Servo Motors
+    const nextAngles = [...this.angles];
     for (let i = 0; i < 6; i++) {
       const current = this.angles[i];
       const target = this.targetAngles[i];
@@ -844,16 +915,16 @@ export class RobotModel {
         this.jointVelocities[i] = 0;
       }
 
-      // Clamp to mechanical limits
-      const limit = this.limits[i];
-      const minRad = THREE.MathUtils.degToRad(limit.min);
-      const maxRad = THREE.MathUtils.degToRad(limit.max);
-      newAngle = Math.max(minRad, Math.min(maxRad, newAngle));
+      nextAngles[i] = newAngle;
+    }
 
-      if (Math.abs(newAngle - this.angles[i]) > 0.0001) {
+    this.enforceSolidArmPhysics(nextAngles);
+
+    for (let i = 0; i < 6; i++) {
+      if (Math.abs(nextAngles[i] - this.angles[i]) > 0.0001) {
         hasMoved = true;
       }
-      this.angles[i] = newAngle;
+      this.angles[i] = nextAngles[i];
     }
 
     // 2. Smooth Telescopic Forearm Piston Motor

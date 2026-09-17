@@ -4,13 +4,13 @@ export class Kinematics {
   constructor(robotModel) {
     this.robot = robotModel;
     
-    // Preset Poses in Radians [J1, J2, J3, J4, J5, J6]
+    // Preset Poses in Radians [J1, J2, J3, J4, J5, J6] (Solid collision-safe configurations)
     this.presets = {
       home: [0, 0, 0, 0, 0, 0],
-      ready: [0, -0.35, 0.75, 0, -0.4, 0],
-      reach: [0, -0.85, 0.45, 0, 0.4, 0],
-      inspect: [0.78, -0.5, 0.9, 0.3, -0.4, 0.5],
-      compact: [0, 1.1, -2.1, 0, 1.0, 0]
+      ready: [0, -0.45, -0.55, 0, 0.60, 0],
+      reach: [0, -0.85, -0.30, 0, 0.45, 0],
+      inspect: [0.78, -0.50, -0.65, 0.3, 0.40, 0.5],
+      compact: [0, -0.20, -1.85, 0, 1.15, 0]
     };
 
     // Current interpolation state
@@ -69,39 +69,75 @@ export class Kinematics {
   }
 
   /**
-   * Solve Inverse Kinematics using CCD (Cyclic Coordinate Descent) with joint limits
+   * Solve Inverse Kinematics using Analytical Geometric Elbow-Up Seeding + CCD Refinement
    * @param {THREE.Vector3} targetPos - Target 3D Cartesian position in world space
    * @param {number} maxIterations - Maximum solver iterations per frame
    * @param {number} threshold - Stop distance threshold in meters
    * @param {boolean} applyImmediately - If false, updates target angles for smooth servo motor motion
    */
-  solveIK(targetPos, maxIterations = 24, threshold = 0.003, applyImmediately = false) {
+  solveIK(targetPos, maxIterations = 16, threshold = 0.002, applyImmediately = false) {
     const initialAngles = [...this.robot.angles];
     const initialTelescope = this.robot.getTelescope();
 
-    // Only use structural positioning joints (J1 Base, J2 Shoulder, J3 Elbow, J5 Wrist Pitch)
-    // J4 (Forearm Roll) and J6 (Tool Roll) are kept stable to avoid unwanted gripper spinning
+    // 1. Analytical Base Yaw (J1): Always face target directly in XZ plane
+    const targetYaw = Math.atan2(targetPos.x, targetPos.z);
+    
+    // 2. Planar Coordinates relative to shoulder pivot
+    const shoulderWorldY = 0.48; // Base height + shoulder yoke height
+    const hDist = Math.sqrt(targetPos.x * targetPos.x + targetPos.z * targetPos.z);
+    const dy = targetPos.y - shoulderWorldY;
+    const targetDist = Math.sqrt(hDist * hDist + dy * dy);
+
+    // 3. Adaptive Telescoping Extension
+    const baseArmReach = 0.72;
+    const maxArmReach = 1.18;
+    const desiredExt = Math.max(0, Math.min(1.0, (targetDist - baseArmReach) / (maxArmReach - baseArmReach)));
+    const currentExt = this.robot.getTelescope();
+    const newExt = currentExt + (desiredExt - currentExt) * 0.45;
+    this.robot.setTelescope(newExt);
+
+    // 4. Analytical 2-Link Geometric "Elbow-Up" Seed
+    const L1 = this.robot.dimensions.upperArmLength; // 0.45m
+    const L2 = this.robot.dimensions.forearmLength + this.robot.dimensions.wristLength + 0.15; // Forearm + Wrist + Gripper TCP
+    const dClamped = Math.max(0.18, Math.min(L1 + L2 - 0.01, targetDist));
+
+    const cosBeta = Math.max(-1.0, Math.min(1.0, (L1 * L1 + L2 * L2 - dClamped * dClamped) / (2 * L1 * L2)));
+    const beta = Math.acos(cosBeta);
+
+    const cosGamma = Math.max(-1.0, Math.min(1.0, (L1 * L1 + dClamped * dClamped - L2 * L2) / (2 * L1 * dClamped)));
+    const gamma = Math.acos(cosGamma);
+
+    const phi = Math.atan2(hDist, dy); // Angle from +Y towards +Z
+    const seedJ2 = -(phi - gamma); // Forward shoulder pitch
+    const seedJ3 = Math.PI - beta; // Forward elbow pitch
+    const seedJ5 = -seedJ2 - seedJ3; // Wrist alignment
+
+    // Seed robot with canonical forward-reaching pose
+    this.robot.angles[0] = targetYaw;
+    this.robot.angles[1] = seedJ2;
+    this.robot.angles[2] = seedJ3;
+    this.robot.angles[3] = 0.0;
+    this.robot.angles[4] = seedJ5;
+    this.robot.angles[5] = 0.0;
+
+    // Apply joint limits to seed
+    for (let i = 0; i < 6; i++) {
+      const limit = this.robot.limits[i];
+      const minRad = THREE.MathUtils.degToRad(limit.min);
+      const maxRad = THREE.MathUtils.degToRad(limit.max);
+      this.robot.angles[i] = Math.max(minRad, Math.min(maxRad, this.robot.angles[i]));
+    }
+
+    this.robot.applyJointAngles();
+    this.robot.group.updateMatrixWorld(true);
+
+    // 5. CCD Refinement Passes for Millimeter-Precise Convergence
     const joints = [
       { obj: this.robot.j1, axis: new THREE.Vector3(0, 1, 0), idx: 0 },
       { obj: this.robot.j2, axis: new THREE.Vector3(1, 0, 0), idx: 1 },
       { obj: this.robot.j3, axis: new THREE.Vector3(1, 0, 0), idx: 2 },
       { obj: this.robot.j5, axis: new THREE.Vector3(1, 0, 0), idx: 4 }
     ];
-
-    // Adaptive Telescoping Reach Extension based on target distance
-    const shoulderPos = new THREE.Vector3();
-    this.robot.j2.getWorldPosition(shoulderPos);
-    const distFromShoulder = shoulderPos.distanceTo(targetPos);
-    const baseReach = 0.50;
-    const maxReach = 1.30;
-    const desiredExt = Math.max(0, Math.min(1.0, (distFromShoulder - baseReach) / (maxReach - baseReach)));
-    const currentExt = this.robot.getTelescope();
-    const newExt = currentExt + (desiredExt - currentExt) * 0.35;
-    this.robot.setTelescope(newExt);
-
-    // Gently relax roll joints (J4, J6) towards neutral so the gripper stays stable and untwisted
-    this.robot.angles[3] *= 0.92;
-    this.robot.angles[5] *= 0.92;
 
     const currentTcp = new THREE.Vector3();
     const jointWorldPos = new THREE.Vector3();
@@ -115,7 +151,6 @@ export class Kinematics {
         break; // Converged
       }
 
-      // Iterate joints backward from wrist to base
       for (let j = joints.length - 1; j >= 0; j--) {
         const joint = joints[j];
         joint.obj.getWorldPosition(jointWorldPos);
@@ -129,31 +164,24 @@ export class Kinematics {
         toTcp.normalize();
         toTarget.normalize();
 
-        // Get world orientation of the joint axis
-        joint.obj.getWorldDirection(jointWorldAxis);
         const jointQuat = new THREE.Quaternion();
         joint.obj.getWorldQuaternion(jointQuat);
         jointWorldAxis.copy(joint.axis).applyQuaternion(jointQuat).normalize();
 
-        // Project vectors onto the plane perpendicular to the rotation axis
         const toTcpProj = toTcp.clone().sub(jointWorldAxis.clone().multiplyScalar(toTcp.dot(jointWorldAxis))).normalize();
         const toTargetProj = toTarget.clone().sub(jointWorldAxis.clone().multiplyScalar(toTarget.dot(jointWorldAxis))).normalize();
 
-        let dot = toTcpProj.dot(toTargetProj);
-        dot = Math.max(-1.0, Math.min(1.0, dot));
+        let dot = Math.max(-1.0, Math.min(1.0, toTcpProj.dot(toTargetProj)));
         let angleDelta = Math.acos(dot);
 
-        // Cross product to find rotation sign
         const cross = new THREE.Vector3().crossVectors(toTcpProj, toTargetProj);
         if (cross.dot(jointWorldAxis) < 0) {
           angleDelta = -angleDelta;
         }
 
-        // Adaptive damping factor for rapid stable convergence
-        const damping = 0.72;
+        const damping = 0.85;
         let newAngle = this.robot.angles[joint.idx] + angleDelta * damping;
 
-        // Apply Joint Limits
         const limit = this.robot.limits[joint.idx];
         const minRad = THREE.MathUtils.degToRad(limit.min);
         const maxRad = THREE.MathUtils.degToRad(limit.max);
