@@ -682,12 +682,14 @@ export class BallInterceptor {
               ap.ejectionsCount++;
               this.score += 50;
             } else {
-              // RETAIN OWN BALL
-              const dxIn = basePos.x - pos.x;
-              const dzIn = basePos.z - pos.z;
-              const dIn = Math.hypot(dxIn, dzIn);
-              pushDir = dIn > 0.001 ? new THREE.Vector3(dxIn / dIn, 0, dzIn / dIn) : new THREE.Vector3(0, 0, 0);
-              pushForce = 1.3 + Math.random() * 0.4;
+              // RETAIN OWN BALL: Guide & shield it safely behind the robot arm
+              const behindDir = new THREE.Vector3(basePos.x, 0, basePos.z).normalize();
+              const sanctuaryPos = basePos.clone().addScaledVector(behindDir, 0.50);
+              const dxS = sanctuaryPos.x - pos.x;
+              const dzS = sanctuaryPos.z - pos.z;
+              const dS = Math.hypot(dxS, dzS);
+              pushDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
+              pushForce = 1.4 + Math.random() * 0.35;
               ap.retainsCount++;
               this.score += 20;
             }
@@ -952,17 +954,25 @@ export class BallInterceptor {
             // Balls deeper inside circle (smaller hDist) have lower score (higher urgency)
             priorityScore = 0.05 + (hDist / 1.40) * 0.35;
           } else {
-            // Own balls: keep inside circle
-            if (hDist <= 0.85) continue; // Already safely nestled inside core base
-            if (hDist > 1.40) continue;
+            // OWN COLOR BALL: Proactively guide & shield behind the arm!
+            if (hDist > 1.40) continue; // Outside this arm's territory
 
-            const dxIn = ap.basePos.x - pos.x;
-            const dzIn = ap.basePos.z - pos.z;
-            const dIn = Math.hypot(dxIn, dzIn);
-            targetDir = dIn > 0.001 ? new THREE.Vector3(dxIn / dIn, 0, dzIn / dIn) : new THREE.Vector3(0, 0, 0);
+            // Sanctuary position: tucked in the rear corner behind the robot arm
+            const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
+            const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.50);
+            const distToSanctuary = Math.hypot(pos.x - sanctuaryPos.x, pos.z - sanctuaryPos.z);
 
-            // Own color recovery has lower priority than ejecting invaders
-            priorityScore = 2.2 + (1.40 - hDist) * 0.4;
+            // If already safely nestled in the rear sanctuary behind the arm, do not disturb
+            if (distToSanctuary <= 0.30) continue;
+
+            // Direct vector towards the safe sanctuary behind the arm
+            const dxS = sanctuaryPos.x - pos.x;
+            const dzS = sanctuaryPos.z - pos.z;
+            const dS = Math.hypot(dxS, dzS);
+            targetDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
+
+            // Priority: exposed own balls outside the sanctuary are prioritized to herd & protect behind the arm!
+            priorityScore = 0.20 + (distToSanctuary / 1.40) * 0.40;
           }
 
           const prediction = this.predictInterception(b, tcpPos, ap.basePos, targetDir);
