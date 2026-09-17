@@ -2,10 +2,12 @@ import * as THREE from 'three';
 
 /**
  * Evaluates real-time 3D elevation, normal vector, and slope gradients across the entire arena floor.
- * Includes:
- * 1. An enhanced central convex dome with high outward roll acceleration.
- * 2. Four elevated convex corridor ridges connecting between adjacent arm base circles
- *    (+X, -X, +Z, -Z corridors) that actively roll trapped balls sideways into active arm territories.
+ * 
+ * Features:
+ * 1. High-Convexity Central Dome: Outward radial slope that continuously rolls balls from center to stations.
+ * 2. 4 Inter-Arm Corridor Ridges: Convex ridges along the 4 neutral gaps (+X, -X, +Z, -Z) that push
+ *    idle/trapped balls sideways directly into adjacent arm defense circles.
+ * 3. Level Arm Base Zones: Guarantees flat, calm gathering floor within each arm's base sanctuary (radius <= 1.30m).
  */
 export function evaluateArenaTerrain(x, z) {
   const r = Math.hypot(x, z);
@@ -27,7 +29,7 @@ export function evaluateArenaTerrain(x, z) {
   }
 
   // 4 Cardinal Corridor Ridges (+X, -X, +Z, -Z) between adjacent arm base circles
-  const ridgeWidth = 0.88;  // Half-width of corridor ridge (covers the gap between circles)
+  const ridgeWidth = 0.88;  // Half-width of corridor ridge (covers neutral gap between circles)
   const ridgeHeight = 0.052; // Height of the ridge crest
   const ridgeReach = 2.45;  // Reaches past the outer arm perimeter
 
@@ -102,6 +104,21 @@ export function evaluateArenaTerrain(x, z) {
     y = yRidgeZ;
     gx = gradRidgeZX;
     gz = gradRidgeZZ;
+  }
+
+  // Level Arm Base Sanctuaries: smoothly fade elevation inside each arm's station circle
+  const dArmAlpha = Math.hypot(x - 1.4, z - (-1.4));
+  const dArmBeta  = Math.hypot(x - (-1.4), z - (-1.4));
+  const dArmGamma = Math.hypot(x - (-1.4), z - 1.4);
+  const dArmDelta = Math.hypot(x - 1.4, z - 1.4);
+  const minArmDist = Math.min(dArmAlpha, dArmBeta, dArmGamma, dArmDelta);
+
+  if (minArmDist < 1.30) {
+    const fade = Math.max(0, Math.min(1.0, (minArmDist - 0.75) / 0.55));
+    const smoothFade = (1 - Math.cos(Math.PI * fade)) / 2;
+    y *= smoothFade;
+    gx *= smoothFade;
+    gz *= smoothFade;
   }
 
   const nLen = Math.hypot(gx, 1.0, gz);

@@ -104,14 +104,19 @@ export class WorkcellScene {
       const mat = new THREE.MeshBasicMaterial({
         map: texture,
         transparent: true,
-        opacity: 0.95,
+        opacity: 0.98,
         depthWrite: false,
+        depthTest: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -4,
+        polygonOffsetUnits: -4,
         toneMapped: false
       });
 
       const hudMesh = new THREE.Mesh(hudPlaneGeo, mat);
+      hudMesh.renderOrder = 30; // High renderOrder ensures radar circles & progress dials are always clearly visible
       hudMesh.rotation.x = -Math.PI / 2;
-      hudMesh.position.set(pos.x, 0.002, pos.z);
+      hudMesh.position.set(pos.x, 0.0035, pos.z);
       this.ringsGroup.add(hudMesh);
 
       this.armHudCanvases.push(canvas);
@@ -123,25 +128,26 @@ export class WorkcellScene {
     // Render initial pie chart decals
     this.renderTacticalHUD(false);
 
-    // 5. Central Shared Interaction Arena - Smooth Convex Dome
+    // 5. Central Shared Interaction Arena - Smooth Convex Dome & Corridor Ridges
     this.createCenterConvexDome();
 
     this.scene.add(this.ringsGroup);
   }
 
   createCenterConvexDome() {
-    // 1. Full Arena Convex Terrain Surface Mesh (Central Dome + 4 Inter-Arm Corridor Ridges)
-    const geom = new THREE.PlaneGeometry(5.2, 5.2, 110, 110);
-    geom.rotateX(-Math.PI / 2);
+    // 1. Central Convex Dome Dish (Radius = 1.15m)
+    const domeRadius = 1.15;
+    const domeGeom = new THREE.CircleGeometry(domeRadius, 72);
+    domeGeom.rotateX(-Math.PI / 2);
 
-    const posAttr = geom.attributes.position;
+    const posAttr = domeGeom.attributes.position;
     for (let i = 0; i < posAttr.count; i++) {
       const x = posAttr.getX(i);
       const z = posAttr.getZ(i);
       const info = evaluateArenaTerrain(x, z);
       posAttr.setY(i, info.y);
     }
-    geom.computeVertexNormals();
+    domeGeom.computeVertexNormals();
 
     this.centerDishMat = new THREE.MeshStandardMaterial({
       color: 0x131824,
@@ -150,11 +156,43 @@ export class WorkcellScene {
       flatShading: false
     });
 
-    this.centerDishMesh = new THREE.Mesh(geom, this.centerDishMat);
+    this.centerDishMesh = new THREE.Mesh(domeGeom, this.centerDishMat);
     this.centerDishMesh.receiveShadow = true;
     this.ringsGroup.add(this.centerDishMesh);
 
-    // 2. Decorative Concentric Contour Elevation Rings on the Central Convex Dome
+    // 2. Four Inter-Arm Elevated Convex Corridor Ridges (Connecting neutral dead-zones between base circles)
+    const corridorMat = new THREE.MeshStandardMaterial({
+      color: 0x182030,
+      roughness: 0.32,
+      metalness: 0.38,
+      flatShading: false
+    });
+
+    const corridorConfigs = [
+      { center: new THREE.Vector3(1.70, 0, 0), w: 1.40, h: 0.82 },
+      { center: new THREE.Vector3(-1.70, 0, 0), w: 1.40, h: 0.82 },
+      { center: new THREE.Vector3(0, 0, 1.70), w: 0.82, h: 1.40 },
+      { center: new THREE.Vector3(0, 0, -1.70), w: 0.82, h: 1.40 }
+    ];
+
+    corridorConfigs.forEach(cfg => {
+      const cGeom = new THREE.PlaneGeometry(cfg.w, cfg.h, 32, 24);
+      cGeom.rotateX(-Math.PI / 2);
+      const cPosAttr = cGeom.attributes.position;
+      for (let i = 0; i < cPosAttr.count; i++) {
+        const vx = cPosAttr.getX(i) + cfg.center.x;
+        const vz = cPosAttr.getZ(i) + cfg.center.z;
+        const info = evaluateArenaTerrain(vx, vz);
+        cPosAttr.setY(i, info.y);
+      }
+      cGeom.computeVertexNormals();
+      const cMesh = new THREE.Mesh(cGeom, corridorMat);
+      cMesh.position.set(cfg.center.x, 0, cfg.center.z);
+      cMesh.receiveShadow = true;
+      this.ringsGroup.add(cMesh);
+    });
+
+    // 3. Decorative Concentric Contour Elevation Rings on the Central Convex Dome
     const contourRadii = [0.35, 0.65, 0.95, 1.15];
     this.contourRings = [];
 
@@ -179,7 +217,7 @@ export class WorkcellScene {
       this.contourRings.push(ringMesh);
     });
 
-    // 3. Decorative Corridor Elevation Ridge Lines along cardinal directions (+X, -X, +Z, -Z)
+    // 4. Decorative Corridor Elevation Ridge Lines along cardinal directions (+X, -X, +Z, -Z)
     const corridorAxes = [
       { dir: new THREE.Vector3(1, 0, 0), rotY: 0 },
       { dir: new THREE.Vector3(-1, 0, 0), rotY: Math.PI },
@@ -189,7 +227,7 @@ export class WorkcellScene {
 
     corridorAxes.forEach(ax => {
       [1.35, 1.70, 2.05].forEach(dist => {
-        const segGeo = new THREE.PlaneGeometry(0.012, 1.10);
+        const segGeo = new THREE.PlaneGeometry(0.012, 1.05);
         segGeo.rotateX(-Math.PI / 2);
         const segMat = new THREE.MeshBasicMaterial({
           color: 0x0284c7,
