@@ -89,6 +89,45 @@ export class AudioEngine {
     this.lastSwatTime = 0;
     this.lastTransientTime = 0;
     this.prevJointVelocities = [0, 0, 0, 0, 0, 0];
+
+    this.setupGestureAutoUnlock();
+  }
+
+  setupGestureAutoUnlock() {
+    if (typeof window === 'undefined') return;
+
+    const unlockEvents = [
+      'pointerdown', 'pointerup', 'pointermove',
+      'mousedown', 'mouseup', 'click',
+      'touchstart', 'touchend', 'touchmove',
+      'keydown', 'keyup', 'wheel', 'scroll', 'focus'
+    ];
+
+    const tryUnlock = () => {
+      this.init();
+      if (this.ctx) {
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume().then(() => {
+            if (this.ctx.state === 'running') {
+              unlockEvents.forEach(evt => {
+                window.removeEventListener(evt, tryUnlock, true);
+                document.removeEventListener(evt, tryUnlock, true);
+              });
+            }
+          }).catch(() => {});
+        } else if (this.ctx.state === 'running') {
+          unlockEvents.forEach(evt => {
+            window.removeEventListener(evt, tryUnlock, true);
+            document.removeEventListener(evt, tryUnlock, true);
+          });
+        }
+      }
+    };
+
+    unlockEvents.forEach(evt => {
+      window.addEventListener(evt, tryUnlock, { capture: true, passive: true });
+      document.addEventListener(evt, tryUnlock, { capture: true, passive: true });
+    });
   }
 
   setSchema(schemaKey) {
@@ -134,7 +173,7 @@ export class AudioEngine {
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
   }
 
