@@ -297,15 +297,15 @@ export class AudioEngine {
 
   /**
    * Modulates warm, low-pitch articulated mechanical sounds for each joint (J1 to J6)
-   * with grounded pitch sweeps, non-linear velocity gating, and subtle torque-bite transients.
+   * with grounded pitch sweeps, steep non-linear velocity gating, and distinct quiet moments.
    */
   updateJointMotors(jointVelocities = [], teleVelocity = 0, deltaTime = 0.016) {
     if (!this.enabled) {
       if (this.ctx && this.jointVoices.length > 0) {
-        this.jointVoices.forEach(v => v.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.03));
+        this.jointVoices.forEach(v => v.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.015));
         if (this.hydraulicVoice) {
-          this.hydraulicVoice.pistonGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.03);
-          this.hydraulicVoice.fluidGainNode.gain.setTargetAtTime(0, this.ctx.currentTime, 0.03);
+          this.hydraulicVoice.pistonGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.015);
+          this.hydraulicVoice.fluidGainNode.gain.setTargetAtTime(0, this.ctx.currentTime, 0.015);
         }
       }
       return;
@@ -318,11 +318,12 @@ export class AudioEngine {
     const schema = SOUND_SCHEMAS[this.currentSchemaKey] || SOUND_SCHEMAS.cyber_actuators;
     const dt = Math.max(0.001, deltaTime);
 
-    // Deadband threshold: Below 0.08 rad/s, silence the motor to eliminate continuous background droning
-    const DEADBAND = 0.08;
+    // Steep Deadband threshold: Speeds below 0.32 rad/s are 100% SILENT.
+    // This provides clean quiet "dull moments" whenever arms are resting or moving slowly.
+    const DEADBAND = 0.32;
     let maxAccel = 0;
 
-    // 1. Update each joint J1 to J6 with warm low-pitch articulation
+    // 1. Update each joint J1 to J6 with articulated dynamic sound
     for (let i = 0; i < 6; i++) {
       const voice = this.jointVoices[i];
       if (!voice) continue;
@@ -334,52 +335,57 @@ export class AudioEngine {
 
       if (vel > DEADBAND) {
         const p = voice.profile;
-        const rawNorm = Math.min(1.0, (vel - DEADBAND) / 2.5);
-        const norm = Math.pow(rawNorm, 1.25);
+        const rawNorm = Math.min(1.0, (vel - DEADBAND) / 2.2);
+        // Non-linear cubic response curve: only energetic active moves produce sound
+        const norm = Math.pow(rawNorm, 2.6);
 
-        // Grounded Low-Pitch Sweep
+        // Dynamic Low-Pitch Sweep
         const targetFreq = p.baseFreq + norm * (p.maxFreq - p.baseFreq);
-        const targetVol = Math.min(p.maxVol, norm * p.maxVol);
-        const targetFilter = p.filterFreq + norm * (p.filterFreq * 0.35);
+        const targetVol = norm * p.maxVol;
+        const targetFilter = p.filterFreq + norm * (p.filterFreq * 0.45);
         const targetFriction = p.frictionFreq + norm * 120;
 
-        voice.osc1.frequency.setTargetAtTime(targetFreq, curTime, 0.040);
-        voice.osc2.frequency.setTargetAtTime(targetFreq * p.harmRatio, curTime, 0.040);
-        voice.filter.frequency.setTargetAtTime(targetFilter, curTime, 0.040);
-        voice.frictionFilter.frequency.setTargetAtTime(targetFriction, curTime, 0.040);
-        voice.gain.gain.setTargetAtTime(targetVol, curTime, 0.035);
+        voice.osc1.frequency.setTargetAtTime(targetFreq, curTime, 0.025);
+        voice.osc2.frequency.setTargetAtTime(targetFreq * p.harmRatio, curTime, 0.025);
+        voice.filter.frequency.setTargetAtTime(targetFilter, curTime, 0.025);
+        voice.frictionFilter.frequency.setTargetAtTime(targetFriction, curTime, 0.025);
+        voice.gain.gain.setTargetAtTime(targetVol, curTime, 0.020);
       } else {
-        voice.gain.gain.setTargetAtTime(0, curTime, 0.040);
+        // Fast cutoff to absolute silence as soon as velocity drops below threshold
+        voice.gain.gain.setTargetAtTime(0, curTime, 0.015);
       }
 
       this.prevJointVelocities[i] = vel;
     }
 
-    // 2. Low-Frequency Torque Bite on sudden acceleration or direction change
-    if (maxAccel > 5.2 && curTime - this.lastTransientTime > 0.075) {
+    // 2. Low-Frequency Torque Bite on sudden acceleration spikes
+    if (maxAccel > 7.5 && curTime - this.lastTransientTime > 0.10) {
       this.lastTransientTime = curTime;
-      this.playTorqueBite(Math.min(1.0, maxAccel / 12.0));
+      this.playTorqueBite(Math.min(1.0, maxAccel / 15.0));
     }
 
     // 3. Update Telescopic Linear Piston / Hydraulic Voice
     if (this.hydraulicVoice) {
       const pCfg = schema.piston;
-      const normTele = Math.min(1.0, teleVelocity / 1.5);
-      if (normTele > 0.04) {
+      const TELE_DEADBAND = 0.22;
+      if (teleVelocity > TELE_DEADBAND) {
         this.wasPistonMoving = true;
+        const rawTele = Math.min(1.0, (teleVelocity - TELE_DEADBAND) / 1.0);
+        const normTele = Math.pow(rawTele, 2.2);
+
         const carrierFreq = pCfg.carrierFreq + normTele * (pCfg.carrierMax - pCfg.carrierFreq);
         const carrierVol = normTele * pCfg.carrierVol;
-        this.hydraulicVoice.pistonCarrier.frequency.setTargetAtTime(carrierFreq, curTime, 0.04);
-        this.hydraulicVoice.pistonFilter.frequency.setTargetAtTime(pCfg.filterFreq + normTele * 35, curTime, 0.04);
-        this.hydraulicVoice.pistonGain.gain.setTargetAtTime(carrierVol, curTime, 0.04);
+        this.hydraulicVoice.pistonCarrier.frequency.setTargetAtTime(carrierFreq, curTime, 0.025);
+        this.hydraulicVoice.pistonFilter.frequency.setTargetAtTime(pCfg.filterFreq + normTele * 35, curTime, 0.025);
+        this.hydraulicVoice.pistonGain.gain.setTargetAtTime(carrierVol, curTime, 0.020);
 
         const fluidFreq = pCfg.fluidCutoff + normTele * 50;
         const fluidVol = normTele * pCfg.fluidVol;
-        this.hydraulicVoice.fluidFilt.frequency.setTargetAtTime(fluidFreq, curTime, 0.04);
-        this.hydraulicVoice.fluidGainNode.gain.setTargetAtTime(fluidVol, curTime, 0.04);
+        this.hydraulicVoice.fluidFilt.frequency.setTargetAtTime(fluidFreq, curTime, 0.025);
+        this.hydraulicVoice.fluidGainNode.gain.setTargetAtTime(fluidVol, curTime, 0.020);
       } else {
-        this.hydraulicVoice.pistonGain.gain.setTargetAtTime(0, curTime, 0.05);
-        this.hydraulicVoice.fluidGainNode.gain.setTargetAtTime(0, curTime, 0.05);
+        this.hydraulicVoice.pistonGain.gain.setTargetAtTime(0, curTime, 0.020);
+        this.hydraulicVoice.fluidGainNode.gain.setTargetAtTime(0, curTime, 0.020);
 
         if (this.wasPistonMoving) {
           this.wasPistonMoving = false;
@@ -614,36 +620,79 @@ export class AudioEngine {
     }
   }
 
-  // Subtle pneumatic air puff
+  // Crisp, distinctive dual-stage pneumatic clamp / release transient
   playPneumatic(isClose = true) {
     if (!this.enabled) return;
     this.init();
     if (!this.ctx) return;
 
-    const bufferSize = Math.floor(this.ctx.sampleRate * 0.12);
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.4));
+    const t = this.ctx.currentTime;
+
+    if (isClose) {
+      // 1. Crisp Solenoid / Mechanical Jaws Clamp Snap Click
+      const osc = this.ctx.createOscillator();
+      const oscGain = this.ctx.createGain();
+      const oscFilt = this.ctx.createBiquadFilter();
+
+      oscFilt.type = 'lowpass';
+      oscFilt.frequency.setValueAtTime(600, t);
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(480, t);
+      osc.frequency.exponentialRampToValueAtTime(110, t + 0.022);
+
+      oscGain.gain.setValueAtTime(0.022, t);
+      oscGain.gain.exponentialRampToValueAtTime(0.0002, t + 0.025);
+
+      osc.connect(oscFilt);
+      oscFilt.connect(oscGain);
+      oscGain.connect(this.masterGain || this.ctx.destination);
+
+      osc.start(t);
+      osc.stop(t + 0.028);
+
+      // 2. High-Pressure Pneumatic Seal Hiss Burst (short 40ms)
+      if (this.noiseBuffer) {
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const noiseFilt = this.ctx.createBiquadFilter();
+        noiseFilt.type = 'bandpass';
+        noiseFilt.frequency.setValueAtTime(680, t);
+        noiseFilt.Q.setValueAtTime(1.2, t);
+
+        const noiseGain = this.ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.012, t);
+        noiseGain.gain.exponentialRampToValueAtTime(0.0003, t + 0.045);
+
+        noise.connect(noiseFilt);
+        noiseFilt.connect(noiseGain);
+        noiseGain.connect(this.masterGain || this.ctx.destination);
+
+        noise.start(t);
+        noise.stop(t + 0.048);
+      }
+    } else {
+      // Pneumatic Release / Exhaust Puff (sharp 35ms burst)
+      if (this.noiseBuffer) {
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.noiseBuffer;
+        const noiseFilt = this.ctx.createBiquadFilter();
+        noiseFilt.type = 'bandpass';
+        noiseFilt.frequency.setValueAtTime(520, t);
+        noiseFilt.Q.setValueAtTime(0.9, t);
+
+        const noiseGain = this.ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.010, t);
+        noiseGain.gain.exponentialRampToValueAtTime(0.0002, t + 0.038);
+
+        noise.connect(noiseFilt);
+        noiseFilt.connect(noiseGain);
+        noiseGain.connect(this.masterGain || this.ctx.destination);
+
+        noise.start(t);
+        noise.stop(t + 0.040);
+      }
     }
-
-    const noise = this.ctx.createBufferSource();
-    noise.buffer = buffer;
-
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(isClose ? 750 : 520, this.ctx.currentTime);
-
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.016, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.0005, this.ctx.currentTime + 0.11);
-
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.masterGain || this.ctx.destination);
-
-    noise.start();
-    noise.stop(this.ctx.currentTime + 0.12);
   }
 
   // Emergency stop alert

@@ -1218,23 +1218,36 @@ class RobotApp {
       this.robot.getTCPWorldPosition(tcpPos);
       this.visualizer.addPoint(tcpPos);
 
-      // 6. Update Telemetry & Multi-Voice Joint Audio Synthesizer across all arms
+      // 6. Update Telemetry & Joint Audio Synthesizer (Focused on active arm & high-speed sweeps)
       this.telemetries.forEach((t) => t.update(delta));
 
-      const maxJointSpeeds = [0, 0, 0, 0, 0, 0];
-      let maxTeleSpeed = 0;
+      const activeTel = this.telemetries[this.activeArmIndex] || this.telemetries[0];
+      const activeRobot = this.robots[this.activeArmIndex] || this.robot;
 
-      this.robots.forEach((r, rIdx) => {
+      const jointSpeeds = [0, 0, 0, 0, 0, 0];
+      for (let j = 0; j < 6; j++) {
+        jointSpeeds[j] = Math.max(activeTel?.jointVelocities[j] || 0, Math.abs(activeRobot?.jointVelocities[j] || 0));
+      }
+      let teleSpeed = Math.abs(activeRobot?.telescopeVelocity || 0);
+
+      // Only incorporate other background arms if they execute high-velocity power throws (> 1.2 rad/s)
+      for (let rIdx = 0; rIdx < this.robots.length; rIdx++) {
+        if (rIdx === this.activeArmIndex) continue;
+        const r = this.robots[rIdx];
         const tel = this.telemetries[rIdx];
         for (let j = 0; j < 6; j++) {
-          const spd = Math.max(tel.jointVelocities[j] || 0, Math.abs(r.jointVelocities[j] || 0));
-          if (spd > maxJointSpeeds[j]) maxJointSpeeds[j] = spd;
+          const spd = Math.max(tel?.jointVelocities[j] || 0, Math.abs(r?.jointVelocities[j] || 0));
+          if (spd > 1.2 && spd > jointSpeeds[j]) {
+            jointSpeeds[j] = spd;
+          }
         }
-        const tSpd = Math.abs(r.telescopeVelocity || 0);
-        if (tSpd > maxTeleSpeed) maxTeleSpeed = tSpd;
-      });
+        const tSpd = Math.abs(r?.telescopeVelocity || 0);
+        if (tSpd > 0.8 && tSpd > teleSpeed) {
+          teleSpeed = tSpd;
+        }
+      }
 
-      this.audio.updateJointMotors(maxJointSpeeds, maxTeleSpeed, delta);
+      this.audio.updateJointMotors(jointSpeeds, teleSpeed, delta);
 
       // 7. Follow Gripper Camera Preset for active arm
       if (this.activeCamPreset === 'tcp') {
