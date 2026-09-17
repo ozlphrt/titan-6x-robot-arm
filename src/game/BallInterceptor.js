@@ -821,7 +821,7 @@ export class BallInterceptor {
           }
         }
 
-        // --- Active Direct Grasp Trigger on Approach ---
+        // --- Active Direct Grasp Trigger on Approach for Intruder Balls ---
         if (ap.throwState === 'IDLE') {
           const distToTcp = pos.distanceTo(tcpPos);
           const isDirectContact = (distToTcp <= b.radius + 0.08);
@@ -830,14 +830,7 @@ export class BallInterceptor {
             const isOwnColor = (b.teamId === armTeam);
             const hDistBase = Math.hypot(pos.x - basePos.x, pos.z - basePos.z);
 
-            if (isOwnColor && hDistBase > 1.20) {
-              // Initiate Pick & Carry Home for outside own ball
-              ap.throwState = 'APPROACH';
-              ap.throwMode = 'RETRIEVE_CARRY';
-              ap.throwBall = b;
-              ap.throwTimer = 0;
-              robot.setGripper(0.0);
-            } else if (!isOwnColor && hDistBase <= 1.45) {
+            if (!isOwnColor && hDistBase <= 1.55) {
               // Initiate Grab & Catapult Eject for intruder ball
               ap.throwState = 'APPROACH';
               ap.throwMode = 'EJECT';
@@ -1405,6 +1398,32 @@ export class BallInterceptor {
           ap.lockTimer = 0;
         }
 
+        // 1. Scan for any foreign/alien intruder balls within arm's defense perimeter
+        let hasAlienBallsInBase = false;
+        for (let i = 0; i < this.balls.length; i++) {
+          const b = this.balls[i];
+          if (!b || !b.mesh || b.isHeld || b.teamId === armTeam || (now < (b.lastPushTime || 0))) continue;
+          const pos = b.mesh.position;
+          const hDist = Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z);
+          if (hDist <= 1.75 && pos.y >= 0.02 && pos.y <= 1.85) {
+            hasAlienBallsInBase = true;
+            break;
+          }
+        }
+
+        // Strict priority override: If an alien intruder enters while arm was pursuing an own ball, abort own-ball task immediately
+        if (hasAlienBallsInBase) {
+          if (ap.lockedTargetBall && ap.lockedTargetBall.teamId === armTeam) {
+            ap.lockedTargetBall = null;
+            ap.lockTimer = 0;
+          }
+          if (ap.throwState === 'APPROACH' && ap.throwMode === 'RETRIEVE_CARRY') {
+            ap.throwBall = null;
+            ap.throwState = 'IDLE';
+            robot.setGripper(0.0);
+          }
+        }
+
         let bestTarget = null;
         let lowestScore = Infinity;
 
@@ -1418,6 +1437,12 @@ export class BallInterceptor {
           if (hDist > 1.75 || pos.y < 0.02) continue;
 
           const isOwnColor = (b.teamId === armTeam);
+
+          // ABSOLUTE DEFENSE RULE: While ANY alien intruder ball is in the base, NEVER touch or organize own balls!
+          if (hasAlienBallsInBase && isOwnColor) {
+            continue;
+          }
+
           const ballSpeed = b.velocity.length();
 
           let targetDir;
