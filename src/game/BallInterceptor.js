@@ -105,7 +105,14 @@ export class BallInterceptor {
         throwTimer: 0,
         targetThrowDir: new THREE.Vector3(0, 0, 0),
         ejectionsCount: 0,
-        retainsCount: 0
+        retainsCount: 0,
+        approachAttempts: 0,
+        lastAttemptBall: null,
+        attemptTimer: 0,
+        currentAngleOffset: 0,
+        currentWristRoll: 0,
+        currentWristPitch: 0,
+        currentYOffset: 0
       };
     });
 
@@ -511,12 +518,24 @@ export class BallInterceptor {
    * Spacetime Target & Interception Predictor:
    * Supports both Outward Ejections (Opponent balls) and Inward Keep-In Nudges (Own balls).
    */
-  predictInterception(ball, currentTcp, basePos, targetDir) {
+  predictInterception(ball, currentTcp, basePos, targetDir, angleOffset = 0, yOffset = 0) {
     const simPos = ball.mesh.position.clone();
     const simVel = ball.velocity.clone();
     const dt = 0.033;
     const maxSteps = 30;
     const armSpeed = 6.0;
+
+    // Rotate attack vector horizontally around vertical Y axis if retry angleOffset is applied
+    let rotatedAttackDir = targetDir;
+    if (Math.abs(angleOffset) > 0.001) {
+      const cosA = Math.cos(angleOffset);
+      const sinA = Math.sin(angleOffset);
+      rotatedAttackDir = new THREE.Vector3(
+        targetDir.x * cosA - targetDir.z * sinA,
+        0,
+        targetDir.x * sinA + targetDir.z * cosA
+      ).normalize();
+    }
 
     for (let step = 0; step <= maxSteps; step++) {
       const t = step * dt;
@@ -539,9 +558,9 @@ export class BallInterceptor {
 
       if (hDist <= this.maxDefenseRadius + 0.20 && hDist >= 0.15 && simPos.y <= 1.55) {
         const floorAtPos = this.getFloorInfo(simPos.x, simPos.z);
-        // Strike target: position TCP slightly behind the ball relative to targetDir
-        const strikePos = simPos.clone().addScaledVector(targetDir, -ball.radius * 0.45);
-        strikePos.y = Math.max(floorAtPos.y + ball.radius * 0.75, simPos.y);
+        // Strike target: position TCP slightly behind the ball relative to rotated attack direction
+        const strikePos = simPos.clone().addScaledVector(rotatedAttackDir, -ball.radius * 0.45);
+        strikePos.y = Math.max(floorAtPos.y + ball.radius * 0.75 + yOffset, simPos.y + yOffset);
 
         const distFromTcp = currentTcp.distanceTo(strikePos);
         const timeNeeded = distFromTcp / armSpeed;
@@ -565,10 +584,10 @@ export class BallInterceptor {
       fallbackPos.z = basePos.z + (offset.z / fbH) * safeH;
     }
     const fbFloor = this.getFloorInfo(fallbackPos.x, fallbackPos.z);
-    fallbackPos.y = Math.max(fbFloor.y + ball.radius * 0.75, Math.min(1.40, fallbackPos.y));
+    fallbackPos.y = Math.max(fbFloor.y + ball.radius * 0.75 + yOffset, Math.min(1.40, fallbackPos.y));
 
-    const strikeFallback = fallbackPos.clone().addScaledVector(targetDir, -ball.radius * 0.45);
-    strikeFallback.y = Math.max(fbFloor.y + ball.radius * 0.75, strikeFallback.y);
+    const strikeFallback = fallbackPos.clone().addScaledVector(rotatedAttackDir, -ball.radius * 0.45);
+    strikeFallback.y = Math.max(fbFloor.y + ball.radius * 0.75 + yOffset, strikeFallback.y);
 
     return {
       interceptPos: strikeFallback,
@@ -764,7 +783,19 @@ export class BallInterceptor {
               } else {
                 pushDir = distBase > 0.001 ? new THREE.Vector3(dxBase / distBase, 0, dzBase / distBase) : new THREE.Vector3(1, 0, 0);
               }
-              pushForce = 3.4 + Math.random() * 0.8;
+
+              // If approaching with retry orientation offset, deflect push direction to bypass obstruction
+              if (ap.approachAttempts > 0 && Math.abs(ap.currentAngleOffset) > 0.001) {
+                const cosA = Math.cos(ap.currentAngleOffset * 0.45);
+                const sinA = Math.sin(ap.currentAngleOffset * 0.45);
+                pushDir = new THREE.Vector3(
+                  pushDir.x * cosA - pushDir.z * sinA,
+                  0,
+                  pushDir.x * sinA + pushDir.z * cosA
+                ).normalize();
+              }
+
+              pushForce = 3.5 + Math.random() * 0.8;
               ap.ejectionsCount++;
               this.score += 50;
             } else {
@@ -784,6 +815,14 @@ export class BallInterceptor {
             b.velocity.z = pushDir.z * pushForce;
             b.velocity.y = 0.45 + Math.random() * 0.30;
             b.bounces++;
+
+            // Successful contact: reset retry counter & orientation
+            ap.approachAttempts = 0;
+            ap.attemptTimer = 0;
+            ap.currentAngleOffset = 0;
+            ap.currentWristRoll = 0;
+            ap.currentWristPitch = 0;
+            ap.currentYOffset = 0;
 
             this.pushCount++;
             this.combo++;
@@ -1019,7 +1058,7 @@ export class BallInterceptor {
           }
           ap.pursuitPos.copy(newPos);
 
-          kinematics.solveIK(ap.pursuitPos, 18, 0.002, false);
+          kinematics.solveIK(ap.pursuitPos, 18, 0.002, false, ap.currentWristRoll, ap.currentWristPitch);
           continue;
         }
 
@@ -1033,16 +1072,17 @@ export class BallInterceptor {
 
           ap.lockTimer = (ap.lockTimer || 0) + deltaTime;
 
-          // Anti-stall: If locked on same stationary ball for > 1.4s without clearing, pop it and re-evaluate
-          if (!isStillValid || ap.lockTimer > 1.4) {
-            if (ap.lockTimer > 1.4 && b && b.mesh) {
+          // Anti-stall: If locked on same stationary ball for > 1.2s without clearing, pop it and re-evaluate
+          if (!isStillValid || ap.lockTimer > 1.2) {
+            if (ap.lockTimer > 1.2 && b && b.mesh) {
               const outDir = new THREE.Vector3(pos.x - ap.basePos.x, 0, pos.z - ap.basePos.z).normalize();
-              b.velocity.addScaledVector(outDir, 2.5);
+              b.velocity.addScaledVector(outDir, 2.8);
               b.velocity.y = 0.40;
               b.lastPushTime = now;
             }
             ap.lockedTargetBall = null;
             ap.lockTimer = 0;
+            ap.approachAttempts = 0;
           }
         } else {
           ap.lockTimer = 0;
@@ -1102,7 +1142,10 @@ export class BallInterceptor {
             priorityScore = 0.50 + (distToSanctuary / 1.65) * 0.25 - (ballSpeed > 0.20 ? 0.10 : 0.0);
           }
 
-          const prediction = this.predictInterception(b, tcpPos, ap.basePos, targetDir);
+          const angleOffset = (b === ap.lastAttemptBall) ? ap.currentAngleOffset : 0;
+          const yOffset = (b === ap.lastAttemptBall) ? ap.currentYOffset : 0;
+          const prediction = this.predictInterception(b, tcpPos, ap.basePos, targetDir, angleOffset, yOffset);
+
           if (prediction) {
             let score = prediction.time * 0.8 + prediction.dist * 0.5 + priorityScore;
 
@@ -1122,13 +1165,76 @@ export class BallInterceptor {
         }
 
         if (bestTarget) {
-          ap.lockedTargetBall = bestTarget.ball;
-          ap.currentTargetBall = bestTarget.ball;
+          const targetBall = bestTarget.ball;
+
+          // Adaptive Retry Angle & Orientation Cycling:
+          // If stuck on the same ball without clearing it, systematically cycle approach angles and wrist orientation
+          if (ap.lastAttemptBall === targetBall) {
+            ap.attemptTimer += deltaTime;
+            if (ap.attemptTimer > 0.45 && targetBall.velocity.length() < 0.28) {
+              ap.attemptTimer = 0;
+              ap.approachAttempts++;
+
+              const cycle = ap.approachAttempts % 5;
+              if (cycle === 1) {
+                // 1. Left Flank Attack: approach from +55 deg side with +45 deg wrist roll
+                ap.currentAngleOffset = 0.96;
+                ap.currentWristRoll = 0.78;
+                ap.currentWristPitch = 0.26;
+                ap.currentYOffset = 0.015;
+              } else if (cycle === 2) {
+                // 2. Right Flank Attack: approach from -55 deg side with -45 deg wrist roll
+                ap.currentAngleOffset = -0.96;
+                ap.currentWristRoll = -0.78;
+                ap.currentWristPitch = 0.26;
+                ap.currentYOffset = 0.015;
+              } else if (cycle === 3) {
+                // 3. Low Shovel Scoop: approach under ball with upward wrist pitch
+                ap.currentAngleOffset = 0.0;
+                ap.currentWristRoll = 0.0;
+                ap.currentWristPitch = -0.44;
+                ap.currentYOffset = -0.020;
+              } else if (cycle === 4) {
+                // 4. High Overhead Hook / Side Flick
+                ap.currentAngleOffset = 1.35;
+                ap.currentWristRoll = 1.57;
+                ap.currentWristPitch = 0.35;
+                ap.currentYOffset = 0.035;
+              } else {
+                // 5. Direct approach reset with energy pulse
+                const outDir = new THREE.Vector3(targetBall.mesh.position.x - ap.basePos.x, 0, targetBall.mesh.position.z - ap.basePos.z).normalize();
+                targetBall.velocity.addScaledVector(outDir, 2.4);
+                targetBall.velocity.y = 0.40;
+                ap.currentAngleOffset = 0;
+                ap.currentWristRoll = 0;
+                ap.currentWristPitch = 0;
+                ap.currentYOffset = 0;
+              }
+            }
+          } else {
+            ap.lastAttemptBall = targetBall;
+            ap.attemptTimer = 0;
+            ap.approachAttempts = 0;
+            ap.currentAngleOffset = 0;
+            ap.currentWristRoll = 0;
+            ap.currentWristPitch = 0;
+            ap.currentYOffset = 0;
+          }
+
+          ap.lockedTargetBall = targetBall;
+          ap.currentTargetBall = targetBall;
           ap.pursuitTarget.copy(bestTarget.interceptPos);
-          if (!primaryTargetBall) primaryTargetBall = bestTarget.ball;
+          if (!primaryTargetBall) primaryTargetBall = targetBall;
         } else {
           ap.currentTargetBall = null;
           ap.lockedTargetBall = null;
+          ap.lastAttemptBall = null;
+          ap.attemptTimer = 0;
+          ap.approachAttempts = 0;
+          ap.currentAngleOffset = 0;
+          ap.currentWristRoll = 0;
+          ap.currentWristPitch = 0;
+          ap.currentYOffset = 0;
           const dirToCenter = new THREE.Vector3(-ap.basePos.x, 0, -ap.basePos.z).normalize();
           const restX = ap.basePos.x + dirToCenter.x * 0.45;
           const restZ = ap.basePos.z + dirToCenter.z * 0.45;
@@ -1165,7 +1271,7 @@ export class BallInterceptor {
         }
         ap.pursuitPos.copy(newPos);
 
-        kinematics.solveIK(ap.pursuitPos, 18, 0.002, false);
+        kinematics.solveIK(ap.pursuitPos, 18, 0.002, false, ap.currentWristRoll, ap.currentWristPitch);
 
         if (ap.currentTargetBall) {
           robot.setGripper(0.0);

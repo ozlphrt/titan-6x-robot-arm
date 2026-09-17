@@ -74,8 +74,10 @@ export class Kinematics {
    * @param {number} maxIterations - Maximum solver iterations per frame
    * @param {number} threshold - Stop distance threshold in meters
    * @param {boolean} applyImmediately - If false, updates target angles for smooth servo motor motion
+   * @param {number} wristRoll - Optional wrist J4/J6 roll offset in radians for orientation variation
+   * @param {number} wristPitchOffset - Optional wrist J5 pitch offset in radians
    */
-  solveIK(targetPos, maxIterations = 16, threshold = 0.002, applyImmediately = false) {
+  solveIK(targetPos, maxIterations = 16, threshold = 0.002, applyImmediately = false, wristRoll = 0.0, wristPitchOffset = 0.0) {
     const initialAngles = [...this.robot.angles];
     const initialTelescope = this.robot.getTelescope();
 
@@ -117,13 +119,13 @@ export class Kinematics {
     const seedJ3 = Math.PI - beta; // Forward elbow pitch
     const seedJ5 = -seedJ2 - seedJ3; // Wrist alignment
 
-    // Seed robot with canonical forward-reaching pose
+    // Seed robot with canonical forward-reaching pose & adaptive orientation
     this.robot.angles[0] = targetYaw;
     this.robot.angles[1] = seedJ2;
     this.robot.angles[2] = seedJ3;
-    this.robot.angles[3] = 0.0;
-    this.robot.angles[4] = seedJ5;
-    this.robot.angles[5] = 0.0;
+    this.robot.angles[3] = wristRoll || 0.0;
+    this.robot.angles[4] = seedJ5 + (wristPitchOffset || 0.0);
+    this.robot.angles[5] = -(wristRoll || 0.0) * 0.5;
 
     // Apply joint limits to seed
     for (let i = 0; i < 6; i++) {
