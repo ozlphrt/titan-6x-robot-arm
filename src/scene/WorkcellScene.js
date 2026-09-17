@@ -135,84 +135,21 @@ export class WorkcellScene {
   }
 
   createCenterConvexDome() {
-    // 1. Central Convex Dome Dish (Radius = 1.15m)
-    const domeRadius = 1.15;
-    const domeGeom = new THREE.CircleGeometry(domeRadius, 72);
-    domeGeom.rotateX(-Math.PI / 2);
-
-    const posAttr = domeGeom.attributes.position;
-    for (let i = 0; i < posAttr.count; i++) {
-      const x = posAttr.getX(i);
-      const z = posAttr.getZ(i);
-      const info = evaluateArenaTerrain(x, z);
-      posAttr.setY(i, info.y);
-    }
-    domeGeom.computeVertexNormals();
-
-    this.centerDishMat = new THREE.MeshStandardMaterial({
-      color: 0x0284c7,
-      transparent: true,
-      opacity: 0.14,
-      roughness: 0.20,
-      metalness: 0.10,
-      depthWrite: false,
-      side: THREE.DoubleSide
-    });
-
-    this.centerDishMesh = new THREE.Mesh(domeGeom, this.centerDishMat);
-    this.centerDishMesh.receiveShadow = false;
-    this.ringsGroup.add(this.centerDishMesh);
-
-    // 2. Four Inter-Arm Elevated Convex Corridor Ridges (Transparent overlay with active slope physics)
-    this.corridorMat = new THREE.MeshStandardMaterial({
-      color: 0x0284c7,
-      transparent: true,
-      opacity: 0.12,
-      roughness: 0.20,
-      metalness: 0.10,
-      depthWrite: false,
-      side: THREE.DoubleSide
-    });
-
-    const corridorConfigs = [
-      { center: new THREE.Vector3(1.70, 0, 0), w: 1.40, h: 0.82 },
-      { center: new THREE.Vector3(-1.70, 0, 0), w: 1.40, h: 0.82 },
-      { center: new THREE.Vector3(0, 0, 1.70), w: 0.82, h: 1.40 },
-      { center: new THREE.Vector3(0, 0, -1.70), w: 0.82, h: 1.40 }
-    ];
-
-    corridorConfigs.forEach(cfg => {
-      const cGeom = new THREE.PlaneGeometry(cfg.w, cfg.h, 32, 24);
-      cGeom.rotateX(-Math.PI / 2);
-      const cPosAttr = cGeom.attributes.position;
-      for (let i = 0; i < cPosAttr.count; i++) {
-        const vx = cPosAttr.getX(i) + cfg.center.x;
-        const vz = cPosAttr.getZ(i) + cfg.center.z;
-        const info = evaluateArenaTerrain(vx, vz);
-        cPosAttr.setY(i, info.y);
-      }
-      cGeom.computeVertexNormals();
-      const cMesh = new THREE.Mesh(cGeom, this.corridorMat);
-      cMesh.position.set(cfg.center.x, 0, cfg.center.z);
-      cMesh.receiveShadow = false;
-      this.ringsGroup.add(cMesh);
-    });
-
-    // 3. Decorative Concentric Contour Elevation Rings on the Central Convex Dome
+    // 1. Subtle Concentric Contour Elevation Rings on the Central Convex Dome
     const contourRadii = [0.35, 0.65, 0.95, 1.15];
     this.contourRings = [];
 
     contourRadii.forEach(r => {
-      const ringGeo = new THREE.RingGeometry(r - 0.007, r + 0.007, 64);
+      const ringGeo = new THREE.RingGeometry(r - 0.005, r + 0.005, 64);
       ringGeo.rotateX(-Math.PI / 2);
 
       const info = evaluateArenaTerrain(r, 0);
       const y = info.y + 0.0015;
 
       const ringMat = new THREE.MeshBasicMaterial({
-        color: 0x0284c7,
+        color: 0x94a3b8,
         transparent: true,
-        opacity: r === 1.15 ? 0.75 : 0.28,
+        opacity: r === 1.15 ? 0.45 : 0.20,
         side: THREE.DoubleSide,
         depthWrite: false
       });
@@ -221,34 +158,6 @@ export class WorkcellScene {
       ringMesh.position.y = y;
       this.ringsGroup.add(ringMesh);
       this.contourRings.push(ringMesh);
-    });
-
-    // 4. Decorative Corridor Elevation Ridge Lines along cardinal directions (+X, -X, +Z, -Z)
-    const corridorAxes = [
-      { dir: new THREE.Vector3(1, 0, 0), rotY: 0 },
-      { dir: new THREE.Vector3(-1, 0, 0), rotY: Math.PI },
-      { dir: new THREE.Vector3(0, 0, 1), rotY: -Math.PI / 2 },
-      { dir: new THREE.Vector3(0, 0, -1), rotY: Math.PI / 2 }
-    ];
-
-    corridorAxes.forEach(ax => {
-      [1.35, 1.70, 2.05].forEach(dist => {
-        const segGeo = new THREE.PlaneGeometry(0.012, 1.05);
-        segGeo.rotateX(-Math.PI / 2);
-        const segMat = new THREE.MeshBasicMaterial({
-          color: 0x0284c7,
-          transparent: true,
-          opacity: 0.25,
-          side: THREE.DoubleSide,
-          depthWrite: false
-        });
-        const segMesh = new THREE.Mesh(segGeo, segMat);
-        const pt = ax.dir.clone().multiplyScalar(dist);
-        const info = evaluateArenaTerrain(pt.x, pt.z);
-        segMesh.position.set(pt.x, info.y + 0.0018, pt.z);
-        segMesh.rotation.y = ax.rotY;
-        this.ringsGroup.add(segMesh);
-      });
     });
   }
 
