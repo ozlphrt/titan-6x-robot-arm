@@ -112,8 +112,12 @@ class RobotApp {
     this.currentEnvTheme = 'light_studio';
     this.setEnvironmentTheme('light_studio');
 
-    // Set initial ready pose on all 4 arms
-    this.kinematicsList.forEach(k => k.moveToPreset('ready', 1.0));
+    // Set initial ready pose immediately on all 4 arms without startup interpolation freeze
+    const readyPose = [0, -0.45, -0.55, 0, 0.60, 0];
+    this.robots.forEach(r => {
+      r.setJointAngles(readyPose);
+      r.setTargetAngles(readyPose);
+    });
   }
 
   initUI() {

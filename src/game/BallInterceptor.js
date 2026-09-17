@@ -30,7 +30,7 @@ export class BallInterceptor {
     };
 
     // The reach zone the robot arms actively defend (extended reach envelope with longer telescoping forearm)
-    this.maxDefenseRadius = 2.05;
+    this.maxDefenseRadius = 2.15;
     this.minWorkspaceRadius = 0.18;
 
     this.score = 0;
@@ -151,7 +151,7 @@ export class BallInterceptor {
 
     this.scene.add(this.targetReticle);
 
-    // Initial staggered spawn of 80 balls matching all 4 arm colors
+    // Initial instant spawn of 80 balls distributed dynamically across arena
     this.spawnInitialBalls(this.targetFlockSize);
   }
 
@@ -164,31 +164,40 @@ export class BallInterceptor {
   }
 
   spawnInitialBalls(count = 80) {
-    // Stagger initial ball drops for a lively fountain effect
+    // Instantaneous active ball distribution for immediate 4-arm concurrent battle
     for (let i = 0; i < count; i++) {
       const teamId = i % 4;
-      setTimeout(() => {
-        if (this.balls.length < this.targetFlockSize) {
-          this.spawnBall(true, teamId);
-        }
-      }, i * 45);
+      this.spawnBall(false, teamId);
     }
   }
 
   /**
-   * Spawns / drops a ball at the center circle with designated arm team solid color
+   * Spawns / drops a ball at the center circle or distributed with designated arm team solid color
    */
-  spawnBall(dropAtCenter = true, specificTeamId = null) {
-    let x = (Math.random() - 0.5) * 0.16;
-    let z = (Math.random() - 0.5) * 0.16;
-    let y = 1.30 + Math.random() * 0.50; // Dropping vertically from 1.30m - 1.80m height
+  spawnBall(dropAtCenter = false, specificTeamId = null) {
+    let x, z, y;
+    let vx, vz, vy;
 
-    if (!dropAtCenter) {
+    if (dropAtCenter) {
+      x = (Math.random() - 0.5) * 0.20;
+      z = (Math.random() - 0.5) * 0.20;
+      y = 0.50 + Math.random() * 0.30;
       const angle = Math.random() * Math.PI * 2;
-      const dist = 0.3 + Math.random() * 0.4;
+      const speed = 0.35 + Math.random() * 0.45;
+      vx = Math.cos(angle) * speed;
+      vz = Math.sin(angle) * speed;
+      vy = -0.50;
+    } else {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 0.25 + Math.random() * 1.85;
       x = Math.cos(angle) * dist;
       z = Math.sin(angle) * dist;
-      y = 0.8 + Math.random() * 0.4;
+      y = 0.30 + Math.random() * 0.40;
+      const vAngle = angle + (Math.random() - 0.5) * 1.0;
+      const speed = 0.20 + Math.random() * 0.40;
+      vx = Math.cos(vAngle) * speed;
+      vz = Math.sin(vAngle) * speed;
+      vy = -0.60;
     }
 
     const teamId = specificTeamId !== null ? specificTeamId : (this.spawnIndex++ % 4);
@@ -200,11 +209,6 @@ export class BallInterceptor {
     // Damped dense rubber elasticity (low bounciness, natural tactile dead-drop & roll)
     const baseRestitution = 0.16 + Math.random() * 0.04;
     const mass = Math.pow(ballRadius / 0.070, 3) * 0.08;
-
-    // Gentle vertical initial drop
-    const vx = (Math.random() - 0.5) * 0.04;
-    const vz = (Math.random() - 0.5) * 0.04;
-    const vy = -0.20;
 
     const geo = new THREE.SphereGeometry(ballRadius, 24, 24);
     const mesh = new THREE.Mesh(geo, mat);
@@ -635,7 +639,7 @@ export class BallInterceptor {
     const simVel = ball.velocity.clone();
     const dt = 0.033;
     const maxSteps = 30;
-    const armSpeed = 6.0;
+    const armSpeed = 12.0;
 
     // Rotate attack vector horizontally around vertical Y axis if retry angleOffset is applied
     let rotatedAttackDir = targetDir;
@@ -673,13 +677,13 @@ export class BallInterceptor {
         // Strike target: drive TCP directly into and through the ball along attack vector
         const strikePos = simPos.clone().addScaledVector(rotatedAttackDir, ball.radius * 0.15);
         
-        // Clamp strikePos to robot's physical reach envelope (<= 2.05m with extended telescoping forearm)
+        // Clamp strikePos to robot's physical reach envelope (<= 2.15m with extended telescoping forearm)
         const sDx = strikePos.x - basePos.x;
         const sDz = strikePos.z - basePos.z;
         const sH = Math.hypot(sDx, sDz);
-        if (sH > 2.05) {
-          strikePos.x = basePos.x + (sDx / sH) * 2.05;
-          strikePos.z = basePos.z + (sDz / sH) * 2.05;
+        if (sH > 2.15) {
+          strikePos.x = basePos.x + (sDx / sH) * 2.15;
+          strikePos.z = basePos.z + (sDz / sH) * 2.15;
         }
         
         strikePos.y = Math.max(floorAtPos.y + ball.radius + yOffset, Math.min(simPos.y + yOffset, 0.40));
@@ -700,7 +704,7 @@ export class BallInterceptor {
     const fallbackPos = ball.mesh.position.clone().addScaledVector(ball.velocity, 0.10);
     const offset = new THREE.Vector3().subVectors(fallbackPos, basePos);
     const fbH = Math.hypot(offset.x, offset.z);
-    const safeH = Math.max(0.20, Math.min(2.05, fbH));
+    const safeH = Math.max(0.20, Math.min(2.15, fbH));
     if (fbH > 0.001) {
       fallbackPos.x = basePos.x + (offset.x / fbH) * safeH;
       fallbackPos.z = basePos.z + (offset.z / fbH) * safeH;
@@ -712,9 +716,9 @@ export class BallInterceptor {
     const sfDx = strikeFallback.x - basePos.x;
     const sfDz = strikeFallback.z - basePos.z;
     const sfH = Math.hypot(sfDx, sfDz);
-    if (sfH > 2.05) {
-      strikeFallback.x = basePos.x + (sfDx / sfH) * 2.05;
-      strikeFallback.z = basePos.z + (sfDz / sfH) * 2.05;
+    if (sfH > 2.15) {
+      strikeFallback.x = basePos.x + (sfDx / sfH) * 2.15;
+      strikeFallback.z = basePos.z + (sfDz / sfH) * 2.15;
     }
     strikeFallback.y = Math.max(fbFloor.y + ball.radius + yOffset, strikeFallback.y);
 
@@ -858,11 +862,11 @@ export class BallInterceptor {
           b.centerStuckTime = Math.max(0, (b.centerStuckTime || 0) - deltaTime * 1.5);
         }
 
-        if (b.centerStuckTime > 1.4) {
+        if (b.centerStuckTime > 0.25) {
           const armIdx = b.teamId;
           const ap = this.armPursuits[armIdx];
 
-          if (ap && ap.throwState === 'IDLE' && !this.hasActiveThreatsInZone(armIdx, b)) {
+          if (ap && ap.throwState === 'IDLE') {
             // Find a resting own-color ball in this arm's zone to use as projectile ammo
             let ammoBall = null;
             let closestDist = Infinity;
@@ -871,10 +875,10 @@ export class BallInterceptor {
               if (!ab || !ab.mesh || ab.isHeld || ab === b) continue;
               if (ab.teamId === armIdx) {
                 const abSpeed = ab.velocity.length();
-                if (abSpeed > 0.35) continue; // Pick a slow/resting ball as ammo
+                if (abSpeed > 0.45) continue; // Pick a slow/resting ball as ammo
 
                 const d = Math.hypot(ab.mesh.position.x - ap.basePos.x, ab.mesh.position.z - ap.basePos.z);
-                if (d >= 0.22 && d <= 1.45 && d < closestDist) {
+                if (d >= 0.22 && d <= 1.55 && d < closestDist) {
                   closestDist = d;
                   ammoBall = ab;
                 }
@@ -921,17 +925,17 @@ export class BallInterceptor {
         const dzBase = pos.z - basePos.z;
         const distBase = Math.hypot(dxBase, dzBase);
 
-        // Stuck detection: opponent ball lingering in circle without leaving
+        // Instant stuck detection: opponent ball lingering in circle without leaving
         if (!isOwnColor && distBase <= 1.45) {
           const speed = b.velocity.length();
-          if (speed < 0.25) {
+          if (speed < 0.30) {
             b.stuckTime = (b.stuckTime || 0) + deltaTime;
           } else {
             b.stuckTime = Math.max(0, (b.stuckTime || 0) - deltaTime * 0.8);
           }
 
-          // If ball has been stuck for > 0.9s and no dynamic fast threats, initiate Grab & Throw
-          if (b.stuckTime > 0.9 && ap.throwState === 'IDLE' && !this.hasActiveThreatsInZone(rIdx, b)) {
+          // If ball has been stuck for > 0.08s, immediately initiate Grab & Catapult Eject
+          if (b.stuckTime > 0.08 && ap.throwState === 'IDLE') {
             ap.throwState = 'APPROACH';
             ap.throwMode = 'EJECT';
             ap.throwBall = b;
@@ -944,20 +948,20 @@ export class BallInterceptor {
         // --- Active Direct Grasp Trigger on Approach for Intruder Balls ---
         if (ap.throwState === 'IDLE') {
           const distToTcp = pos.distanceTo(tcpPos);
-          const isDirectContact = (distToTcp <= b.radius + 0.08);
+          const isDirectContact = (distToTcp <= b.radius + 0.12);
 
-          if (isDirectContact && pos.y >= 0.02 && (now - (b.lastPushTime || 0)) > 200) {
+          if (isDirectContact && pos.y >= 0.02 && (now - (b.lastPushTime || 0)) > 60) {
             const isOwnColor = (b.teamId === armTeam);
             const hDistBase = Math.hypot(pos.x - basePos.x, pos.z - basePos.z);
 
-            if (!isOwnColor && hDistBase <= 1.55) {
+            if (!isOwnColor && hDistBase <= 1.65) {
               // Initiate Grab & Catapult Eject for intruder ball
               ap.throwState = 'APPROACH';
               ap.throwMode = 'EJECT';
               ap.throwBall = b;
               ap.throwTimer = 0;
               robot.setGripper(0.0);
-            } else if (isOwnColor && hDistBase > 1.35 && hDistBase <= 2.05) {
+            } else if (isOwnColor && hDistBase > 1.35 && hDistBase <= 2.15) {
               // Initiate Grab & Retrieve for outside own ball
               ap.throwState = 'APPROACH';
               ap.throwMode = 'RETRIEVE_CARRY';
@@ -1036,11 +1040,11 @@ export class BallInterceptor {
           const distToBall = tcpPos.distanceTo(ballPos);
           const graspThreshold = ap.throwBall.radius + 0.22; // Generous reach for open 26cm jaws
 
-          if ((distToBall <= graspThreshold || (ap.throwTimer > 0.40 && distToBall <= graspThreshold + 0.14)) && now > (ap.throwBall.lastPushTime || 0)) {
-            // Initiate Smooth Clamping Phase (0.28s progressive calm jaw closure)
+          if ((distToBall <= graspThreshold || (ap.throwTimer > 0.25 && distToBall <= graspThreshold + 0.14)) && now > (ap.throwBall.lastPushTime || 0)) {
+            // Initiate Smooth Clamping Phase (0.10s fast progressive jaw closure)
             ap.throwState = 'CLAMPING';
-            ap.clampDuration = 0.28;
-            ap.throwTimer = 0.28;
+            ap.clampDuration = 0.10;
+            ap.throwTimer = 0.10;
             ap.graspStartPos = tcpPos.clone();
 
             ap.heldBall = ap.throwBall;
@@ -1118,12 +1122,12 @@ export class BallInterceptor {
               robot.setTargetTelescope(savedTele);
               robot.setTelescope(savedTele);
             }
-          } else if (distToBall <= 0.38 && ap.throwTimer > 1.6) {
+          } else if (distToBall <= 0.38 && ap.throwTimer > 0.8) {
             // CORNER / EDGE RAKE: Close enough but blocked from full clamping
             if (ap.throwMode === 'RETRIEVE_CARRY') {
               const pushDir = new THREE.Vector3(ap.basePos.x - ballPos.x, 0, ap.basePos.z - ballPos.z).normalize();
-              ap.throwBall.velocity.set(pushDir.x * 3.8, 0.85, pushDir.z * 3.8);
-              ap.throwBall.lastPushTime = now + 500;
+              ap.throwBall.velocity.set(pushDir.x * 4.2, 0.85, pushDir.z * 4.2);
+              ap.throwBall.lastPushTime = now + 180;
               ap.throwBall.isHeld = false;
               this.audio.playPneumatic(false);
               if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.2);
@@ -1132,8 +1136,8 @@ export class BallInterceptor {
               const pushDir = new THREE.Vector3(oppBase.x - ballPos.x, 0, oppBase.z - ballPos.z).normalize();
               if (pushDir.lengthSq() < 0.001) pushDir.set(ballPos.x - ap.basePos.x, 0, ballPos.z - ap.basePos.z).normalize();
 
-              ap.throwBall.velocity.set(pushDir.x * 5.5, 1.35, pushDir.z * 5.5);
-              ap.throwBall.lastPushTime = now + 500;
+              ap.throwBall.velocity.set(pushDir.x * 6.0, 1.35, pushDir.z * 6.0);
+              ap.throwBall.lastPushTime = now + 180;
               ap.throwBall.isHeld = false;
               this.audio.playPneumatic(false);
               if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.3);
@@ -1148,10 +1152,10 @@ export class BallInterceptor {
             ap.centerTargetBall = null;
             ap.throwMode = 'EJECT';
             ap.throwState = 'IDLE';
-          } else if (ap.throwTimer > 2.8) {
-            // Generous 2.8s timeout for maximum reach extension
+          } else if (ap.throwTimer > 1.8) {
+            // Rapid 1.8s timeout for maximum reach extension
             if (ap.throwBall) {
-              ap.throwBall.lastPushTime = now + 1200;
+              ap.throwBall.lastPushTime = now + 250;
             }
             robot.getTCPWorldPosition(tcpPos);
             ap.pursuitPos.copy(tcpPos);
@@ -1165,11 +1169,10 @@ export class BallInterceptor {
           }
         }
       } else if (ap.throwState === 'CLAMPING') {
-        // Step 2: HOLD THE BALL (Smooth progressive clamp & zero-jerk hold)
-        const cDuration = ap.clampDuration || 0.28;
+        // Step 2: HOLD THE BALL (Rapid 0.10s progressive clamp & zero-jerk hold)
+        const cDuration = ap.clampDuration || 0.10;
         const clampT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / cDuration));
-        // Quintic smoothstep for smooth ease-in/ease-out jaw closure
-        const pClamp = clampT * clampT * clampT * (clampT * (clampT * 6.0 - 15.0) + 10.0);
+        const pClamp = clampT * clampT * (3.0 - 2.0 * clampT);
         robot.setGripper(pClamp);
 
         if (ap.heldBall && ap.heldBall.mesh) {
@@ -1182,47 +1185,17 @@ export class BallInterceptor {
           robot.setGripper(1.0);
           if (ap.throwMode === 'RETRIEVE_CARRY') {
             ap.throwState = 'RETRIEVE_CARRY';
-            ap.throwTimer = 0.55;
-            ap.carryDuration = 0.55;
+            ap.throwTimer = 0.22;
+            ap.carryDuration = 0.22;
           } else {
             // Step 3: Capture current joint angles and go directly to WINDUP
             ap.throwState = 'WINDUP';
             ap.windupStartAngles = [...robot.angles];
             ap.windupStartTele = robot.getTelescope();
             const alpha = ap.throwPowerRatio || 0.5;
-            ap.windupDuration = 0.30 + 0.20 * alpha;
+            ap.windupDuration = 0.14 + 0.08 * alpha;
             ap.throwTimer = ap.windupDuration;
           }
-        }
-      } else if (ap.throwState === 'LIFT') {
-        // Step 3: LIFT THE BALL smoothly straight up from the grasp spot (zero lateral jerk)
-        const lDuration = ap.liftDuration || 0.38;
-        const liftT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / lDuration));
-        const p = liftT * liftT * liftT * (liftT * (liftT * 6.0 - 15.0) + 10.0);
-
-        // Pure vertical lift directly above the grasp point
-        const liftPos = ap.graspStartPos.clone();
-        liftPos.y = Math.min(0.40, ap.graspStartPos.y + 0.28);
-        const pCart = ap.graspStartPos.clone().lerp(liftPos, p);
-
-        kinematics.solveIK(pCart, 16, 0.002, true);
-        robot.getTCPWorldPosition(tcpPos);
-
-        if (ap.heldBall && ap.heldBall.mesh) {
-          ap.heldBall.velocity.set(0, 0, 0);
-          ap.heldBall.mesh.position.copy(tcpPos);
-        }
-        robot.setGripper(1.0);
-
-        ap.throwTimer -= deltaTime;
-        if (ap.throwTimer <= 0) {
-          // Step 4: Capture current angles and go to WINDUP in joint space
-          ap.throwState = 'WINDUP';
-          ap.windupStartAngles = [...robot.angles];
-          ap.windupStartTele = robot.getTelescope();
-          const alpha = ap.throwPowerRatio || 0.5;
-          ap.windupDuration = 0.30 + 0.20 * alpha;
-          ap.throwTimer = ap.windupDuration;
         }
       } else if (ap.throwState === 'RETRIEVE_CARRY') {
         // Smoothly lift and carry ball over into the home circle (r <= 0.85m < 1.35m)
@@ -1237,11 +1210,10 @@ export class BallInterceptor {
         const rIn = 0.55 + ((ap.retainsCount || 0) % 3) * 0.14;
         const sanctuaryPos = ap.basePos.clone().add(new THREE.Vector3(Math.cos(angle) * rIn, 0, Math.sin(angle) * rIn));
 
-        const cDuration = ap.carryDuration || 0.60;
+        const cDuration = ap.carryDuration || 0.22;
         const carryT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / cDuration));
-        // Quintic smoothstep for horizontal carry trajectory
-        const pCarry = carryT * carryT * carryT * (carryT * (carryT * 6.0 - 15.0) + 10.0);
-        const arcY = 0.20 + Math.sin(carryT * Math.PI) * 0.28;
+        const pCarry = carryT * carryT * (3.0 - 2.0 * carryT);
+        const arcY = 0.20 + Math.sin(carryT * Math.PI) * 0.24;
         ap.pursuitTarget.set(
           ap.graspStartPos.x + (sanctuaryPos.x - ap.graspStartPos.x) * pCarry,
           arcY,
@@ -1252,8 +1224,8 @@ export class BallInterceptor {
         const hDistToSanctuary = Math.hypot(tcpPos.x - sanctuaryPos.x, tcpPos.z - sanctuaryPos.z);
         if (ap.throwTimer <= 0 || hDistToSanctuary < 0.10) {
           ap.throwState = 'RETRIEVE_PLACE';
-          ap.placeDuration = 0.35;
-          ap.throwTimer = 0.35;
+          ap.placeDuration = 0.12;
+          ap.throwTimer = 0.12;
         }
       } else if (ap.throwState === 'RETRIEVE_PLACE') {
         // Lower down smoothly and gently place inside home circle
@@ -1268,9 +1240,9 @@ export class BallInterceptor {
         const floorInfo = this.getFloorInfo(sanctuaryPos.x, sanctuaryPos.z);
         ap.pursuitTarget.set(sanctuaryPos.x, floorInfo.y + (ap.heldBall ? ap.heldBall.radius : 0.065) + 0.015, sanctuaryPos.z);
 
-        const pDuration = ap.placeDuration || 0.35;
+        const pDuration = ap.placeDuration || 0.12;
         const placeT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / pDuration));
-        const pPlace = placeT * placeT * placeT * (placeT * (placeT * 6.0 - 15.0) + 10.0);
+        const pPlace = placeT * placeT * (3.0 - 2.0 * placeT);
         robot.setGripper(1.0 - pPlace); // Progressive release
 
         ap.throwTimer -= deltaTime;
@@ -1283,8 +1255,8 @@ export class BallInterceptor {
             ap.heldBall.isHeld = false;
             // Gentle inward settling nudge towards circle center
             const dirIn = new THREE.Vector3(ap.basePos.x - ap.heldBall.mesh.position.x, 0, ap.basePos.z - ap.heldBall.mesh.position.z).normalize();
-            ap.heldBall.velocity.set(dirIn.x * 0.18, 0, dirIn.z * 0.18);
-            ap.heldBall.lastPushTime = now + 800;
+            ap.heldBall.velocity.set(dirIn.x * 0.22, 0, dirIn.z * 0.22);
+            ap.heldBall.lastPushTime = now + 150;
             ap.retainsCount = (ap.retainsCount || 0) + 1;
             this.pushCount++;
             this.score += 50;
@@ -1302,12 +1274,11 @@ export class BallInterceptor {
           ap.throwState = 'IDLE';
         }
       } else if (ap.throwState === 'WINDUP') {
-        // Step 4: Smooth joint-space interpolation from grasp pose → cocked/windup pose
+        // Step 4: Rapid joint-space pullback
         const alpha = ap.throwPowerRatio || 0.5;
-        const wDuration = ap.windupDuration || 0.40;
+        const wDuration = ap.windupDuration || 0.16;
         const windT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / wDuration));
-        // Quintic ease-in/out for smooth, zero-jerk pullback
-        const p = windT * windT * windT * (windT * (windT * 6.0 - 15.0) + 10.0);
+        const p = windT * windT * (3.0 - 2.0 * windT);
 
         const startAngles = ap.windupStartAngles || [...robot.angles];
         const targetAngles = ap.throwCockedAngles;
@@ -1336,11 +1307,11 @@ export class BallInterceptor {
           const releaseA = ap.throwReleaseAngles || ap.cockedAngles;
           const angStroke = ap.cockedAngles.reduce((s, c, i) => s + Math.abs((releaseA[i] || c) - c), 0);
           const reqSpeed = Math.max(2.0, ap.requiredLaunchSpeed || 3.5);
-          ap.swingDuration = Math.max(0.16, Math.min(0.42, angStroke / (reqSpeed * 1.2)));
+          ap.swingDuration = Math.max(0.08, Math.min(0.20, angStroke / (reqSpeed * 2.2)));
 
           // Brief pause at full windup before explosive snap
           ap.throwState = 'COCK_PAUSE';
-          ap.throwTimer = 0.08 + 0.06 * alpha;
+          ap.throwTimer = 0.03 + 0.03 * alpha;
           ap.prevSwingTcpPos = null;
         }
       } else if (ap.throwState === 'COCK_PAUSE') {
@@ -1358,12 +1329,12 @@ export class BallInterceptor {
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
           ap.throwState = 'SWING_THROW';
-          ap.throwTimer = ap.swingDuration || 0.24;
+          ap.throwTimer = ap.swingDuration || 0.12;
           ap.prevSwingTcpPos = null;
         }
       } else if (ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
         // Step 5-7: JOINT-SPACE THROW — whip curve from cocked → release → follow-through
-        const sDuration = ap.swingDuration || 0.24;
+        const sDuration = ap.swingDuration || 0.12;
         const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / sDuration));
         const tRelease = 0.80; // Release at 80% (peak velocity moment)
 
@@ -1376,9 +1347,9 @@ export class BallInterceptor {
 
         let swingAngles, swingTele;
         if (swingT <= tRelease) {
-          // ACCELERATION: whip polynomial u^2.8 — stays slow then snaps explosively near release
+          // ACCELERATION: whip polynomial u^2.5
           const u = swingT / tRelease;
-          const wh = Math.pow(u, 2.8);
+          const wh = Math.pow(u, 2.5);
           swingAngles = cockedA.map((c, i) => c + ((releaseA[i] ?? c) - c) * wh);
           swingTele = cockedTele + (releaseTele - cockedTele) * wh;
         } else {
@@ -1424,7 +1395,7 @@ export class BallInterceptor {
           } else if (vGripper.lengthSq() > 0.5) {
             finalLaunchVel = vGripper;
           } else {
-            finalLaunchVel = ap.targetThrowDir.clone().multiplyScalar(3.5);
+            finalLaunchVel = ap.targetThrowDir.clone().multiplyScalar(4.0);
           }
 
           const launchDir = finalLaunchVel.clone().normalize();
@@ -1433,7 +1404,7 @@ export class BallInterceptor {
           ap.heldBall.bounces = 0;
           ap.heldBall.stuckTime = 0;
           ap.heldBall.isHeld = false;
-          ap.heldBall.lastPushTime = now + 1200;
+          ap.heldBall.lastPushTime = now + 200;
 
           if (this.audio && typeof this.audio.playArmSwat === 'function') {
             this.audio.playArmSwat(Math.min(1.6, 0.5 + finalLaunchVel.length() * 0.20));
@@ -1463,6 +1434,7 @@ export class BallInterceptor {
             ap.throwBall.isHeld = false;
             ap.throwBall = null;
           }
+          ap.lockedTargetBall = null;
           ap.centerTargetBall = null;
           ap.throwMode = 'EJECT';
           ap.throwState = 'IDLE';
@@ -1555,9 +1527,9 @@ export class BallInterceptor {
 
         // If arm is currently performing Grab / Carry waypoints, smooth tracking applies
         if (ap.throwState !== 'IDLE') {
-          // Smooth tracking towards throw waypoints
-          const smoothTime = 0.048;
-          const maxSpeed = 7.2;
+          // Hyper-agile snappy tracking towards throw waypoints
+          const smoothTime = 0.016;
+          const maxSpeed = 18.0;
 
           const omega = 2.0 / smoothTime;
           const x = omega * deltaTime;
@@ -1601,11 +1573,11 @@ export class BallInterceptor {
           const bIndex = this.balls.indexOf(b);
           const pos = b && b.mesh ? b.mesh.position : null;
           const hDist = pos ? Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z) : 999;
-          const isStillValid = bIndex !== -1 && !b.isHeld && hDist <= 2.05 && pos.y >= 0.02 && pos.y <= 1.85;
+          const isStillValid = bIndex !== -1 && !b.isHeld && hDist <= 2.15 && pos.y >= 0.02 && pos.y <= 1.85;
 
-          // Target tracking timeout: if arm is unable to reach target within 2.0s, release lock and re-evaluate
-          if (!isStillValid || ap.lockTimer > 2.0) {
-            if (b) b.lastPushTime = now + 1200;
+          // Target tracking timeout: if arm is unable to reach target within 1.2s, release lock and re-evaluate immediately
+          if (!isStillValid || ap.lockTimer > 1.2) {
+            if (b) b.lastPushTime = now + 100;
             ap.lockedTargetBall = null;
             ap.lockTimer = 0;
             ap.approachAttempts = 0;
@@ -1624,7 +1596,7 @@ export class BallInterceptor {
           const b = this.balls[i];
           if (!b || !b.mesh || b.isHeld || b.teamId === armTeam || (now < (b.lastPushTime || 0))) continue;
           const pos = b.mesh.position;
-          const hDist = Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z);
+          const hDist = Math.hypot(pos.x - ap.basePos.x, pos.z - basePos.z);
           if (hDist <= 1.35 && pos.y >= 0.02 && pos.y <= 1.85) {
             hasAlienBallsInBase = true;
             break;
@@ -1653,8 +1625,8 @@ export class BallInterceptor {
           const pos = b.mesh.position;
           const hDist = Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z);
 
-          // Full extended reach envelope covering defense station and boundary corridors (r <= 2.05m)
-          if (hDist > 2.05 || pos.y < 0.02) continue;
+          // Full extended reach envelope covering defense station and boundary corridors (r <= 2.15m)
+          if (hDist > 2.15 || pos.y < 0.02) continue;
 
           const isOwnColor = (b.teamId === armTeam);
 
@@ -1679,10 +1651,10 @@ export class BallInterceptor {
             if (hDist <= 1.35) {
               // Inside home circle: Absolute top priority (clear out all intruders!)
               const speedUrgency = ballSpeed > 0.20 ? 0.08 : 0.0;
-              priorityScore = 0.01 + (hDist / 1.35) * 0.08 - speedUrgency;
+              priorityScore = 0.005 + (hDist / 1.35) * 0.015 - speedUrgency;
             } else {
               // In boundary corridor / outer reach: Proactive arena-wide clearance
-              priorityScore = 0.40 + (hDist / 2.05) * 0.20;
+              priorityScore = 0.15 + (hDist / 2.15) * 0.08;
             }
           } else {
             // OWN COLOR BALL
@@ -1694,7 +1666,7 @@ export class BallInterceptor {
               targetDir = dBase > 0.001 ? new THREE.Vector3(dxBase / dBase, 0, dzBase / dBase) : new THREE.Vector3(0, 0, 0);
 
               // Prioritize closer outside balls first, higher priority than foreign balls outside circle
-              priorityScore = 0.03 + (hDist - 1.35) * 0.04;
+              priorityScore = 0.008 + (hDist - 1.35) * 0.015;
             } else {
               // ALREADY INSIDE THE CIRCLE
               // If already settled inside the circle, leave undisturbed so it remains secure
@@ -1704,7 +1676,7 @@ export class BallInterceptor {
               const dzBase = ap.basePos.z - pos.z;
               const dBase = Math.hypot(dxBase, dzBase);
               targetDir = dBase > 0.001 ? new THREE.Vector3(dxBase / dBase, 0, dzBase / dBase) : new THREE.Vector3(0, 0, 0);
-              priorityScore = 0.20;
+              priorityScore = 0.12;
             }
           }
 
@@ -1764,8 +1736,8 @@ export class BallInterceptor {
         }
 
         // Fast, agile critically damped Cartesian pursuit (SmoothDamp)
-        const smoothTime = 0.048;
-        const maxSpeed = 6.8;
+        const smoothTime = 0.016;
+        const maxSpeed = 18.0;
 
         const omega = 2.0 / smoothTime;
         const x = omega * deltaTime;
