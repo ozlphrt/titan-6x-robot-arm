@@ -40,8 +40,21 @@ export class WorkcellScene {
     this.backLight.position.set(0, 3.0, -3.5);
     this.scene.add(this.backLight);
 
-    // 2. Single Monolithic Precision Base Plate Floor (Top surface at y = 0)
-    const floorGeo = new THREE.PlaneGeometry(16, 16);
+    // 2. High-Precision Displaced Arena Ground Floor
+    const arenaSize = 5.80; // Covers entire enclosure (|x| <= 2.75, |z| <= 2.75) with margin
+    const segments = 160;
+    const floorGeo = new THREE.PlaneGeometry(arenaSize, arenaSize, segments, segments);
+    floorGeo.rotateX(-Math.PI / 2);
+
+    const posAttr = floorGeo.attributes.position;
+    for (let i = 0; i < posAttr.count; i++) {
+      const vx = posAttr.getX(i);
+      const vz = posAttr.getZ(i);
+      const info = evaluateArenaTerrain(vx, vz);
+      posAttr.setY(i, info.y);
+    }
+    floorGeo.computeVertexNormals();
+
     this.platformMat = new THREE.MeshStandardMaterial({
       color: 0xe2e8f0,
       roughness: 0.35,
@@ -49,14 +62,24 @@ export class WorkcellScene {
       envMapIntensity: 1.0
     });
     this.floorMesh = new THREE.Mesh(floorGeo, this.platformMat);
-    this.floorMesh.rotation.x = -Math.PI / 2;
-    this.floorMesh.position.y = 0;
     this.floorMesh.receiveShadow = true;
     this.scene.add(this.floorMesh);
 
-    // 3. Precision Engineering Grid across the Base Plate Floor
-    this.gridHelper = new THREE.GridHelper(8.0, 40, 0x0284c7, 0xcbd5e1);
-    this.gridHelper.position.y = 0.001;
+    // Flat outer factory floor plate surrounding the active arena
+    const outerFloorGeo = new THREE.PlaneGeometry(16, 16);
+    outerFloorGeo.rotateX(-Math.PI / 2);
+    this.outerFloorMat = new THREE.MeshStandardMaterial({
+      color: 0xcbd5e1,
+      roughness: 0.55,
+      metalness: 0.15
+    });
+    this.outerFloorMesh = new THREE.Mesh(outerFloorGeo, this.outerFloorMat);
+    this.outerFloorMesh.position.y = -0.001;
+    this.outerFloorMesh.receiveShadow = true;
+    this.scene.add(this.outerFloorMesh);
+
+    // 3. Terrain-Contoured Engineering Grid across the Arena Floor
+    this.gridHelper = this.createContouredGrid(0x0284c7);
     this.scene.add(this.gridHelper);
 
     // 4. Quad-Station Dynamic Pie Chart HUD Floor Decals (Under each of 4 Robot Arms)
@@ -392,28 +415,76 @@ export class WorkcellScene {
     this.scene.add(this.enclosureGroup);
   }
 
+  createContouredGrid(lineColor) {
+    const gridPoints = [];
+    const gridHalf = 2.75;
+    const gridDivs = 22; // ~0.25m grid divisions matching 5.50m enclosure
+    const gridStep = (gridHalf * 2) / gridDivs;
+    const subSegments = 80;
+    const subStep = (gridHalf * 2) / subSegments;
+
+    for (let i = 0; i <= gridDivs; i++) {
+      const lineCoord = -gridHalf + i * gridStep;
+      // Lines parallel to Z
+      for (let s = 0; s < subSegments; s++) {
+        const z1 = -gridHalf + s * subStep;
+        const z2 = -gridHalf + (s + 1) * subStep;
+        const y1 = evaluateArenaTerrain(lineCoord, z1).y + 0.0018;
+        const y2 = evaluateArenaTerrain(lineCoord, z2).y + 0.0018;
+        gridPoints.push(new THREE.Vector3(lineCoord, y1, z1));
+        gridPoints.push(new THREE.Vector3(lineCoord, y2, z2));
+      }
+      // Lines parallel to X
+      for (let s = 0; s < subSegments; s++) {
+        const x1 = -gridHalf + s * subStep;
+        const x2 = -gridHalf + (s + 1) * subStep;
+        const y1 = evaluateArenaTerrain(x1, lineCoord).y + 0.0018;
+        const y2 = evaluateArenaTerrain(x2, lineCoord).y + 0.0018;
+        gridPoints.push(new THREE.Vector3(x1, y1, lineCoord));
+        gridPoints.push(new THREE.Vector3(x2, y2, lineCoord));
+      }
+    }
+
+    const gridGeo = new THREE.BufferGeometry().setFromPoints(gridPoints);
+    const gridMat = new THREE.LineBasicMaterial({
+      color: lineColor || 0x0284c7,
+      transparent: true,
+      opacity: 0.35
+    });
+    const gridMesh = new THREE.LineSegments(gridGeo, gridMat);
+    gridMesh.visible = this.gridVisible;
+    return gridMesh;
+  }
+
   createCenterConvexDome() {
-    // 1. Subtle Concentric Contour Elevation Rings on the Central Convex Dome
+    // 1. Subtle Concentric Contour Elevation Rings on the Elevated Terrain & Central Dome
     const contourRadii = [0.35, 0.65, 0.95, 1.15];
     this.contourRings = [];
 
     contourRadii.forEach(r => {
-      const ringGeo = new THREE.RingGeometry(r - 0.005, r + 0.005, 64);
-      ringGeo.rotateX(-Math.PI / 2);
+      const ringPoints = [];
+      const segments = 96;
+      for (let i = 0; i < segments; i++) {
+        const theta1 = (i / segments) * Math.PI * 2;
+        const theta2 = ((i + 1) / segments) * Math.PI * 2;
+        const x1 = r * Math.cos(theta1);
+        const z1 = r * Math.sin(theta1);
+        const x2 = r * Math.cos(theta2);
+        const z2 = r * Math.sin(theta2);
+        const y1 = evaluateArenaTerrain(x1, z1).y + 0.0022;
+        const y2 = evaluateArenaTerrain(x2, z2).y + 0.0022;
+        ringPoints.push(new THREE.Vector3(x1, y1, z1));
+        ringPoints.push(new THREE.Vector3(x2, y2, z2));
+      }
 
-      const info = evaluateArenaTerrain(r, 0);
-      const y = info.y + 0.0015;
-
-      const ringMat = new THREE.MeshBasicMaterial({
+      const ringGeo = new THREE.BufferGeometry().setFromPoints(ringPoints);
+      const ringMat = new THREE.LineBasicMaterial({
         color: 0x94a3b8,
         transparent: true,
-        opacity: r === 1.15 ? 0.45 : 0.20,
-        side: THREE.DoubleSide,
-        depthWrite: false
+        opacity: r === 1.15 ? 0.55 : 0.28
       });
 
-      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
-      ringMesh.position.y = y;
+      const ringMesh = new THREE.LineSegments(ringGeo, ringMat);
       this.ringsGroup.add(ringMesh);
       this.contourRings.push(ringMesh);
     });
@@ -870,9 +941,7 @@ export class WorkcellScene {
     if (this.gridHelper) {
       this.scene.remove(this.gridHelper);
       this.gridHelper.geometry.dispose();
-      this.gridHelper = new THREE.GridHelper(8.0, 40, cfg.gridCenter, cfg.gridLines);
-      this.gridHelper.position.y = 0.001;
-      this.gridHelper.visible = this.gridVisible;
+      this.gridHelper = this.createContouredGrid(cfg.gridCenter);
       this.scene.add(this.gridHelper);
     }
   }
