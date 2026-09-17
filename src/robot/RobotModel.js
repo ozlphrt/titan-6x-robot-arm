@@ -56,14 +56,14 @@ export class RobotModel {
     // Max angular speeds (rad/s) for agile, high-performance robotic tracking [J1..J6]
     this.jointSpeeds = [5.2, 4.6, 5.2, 6.5, 6.5, 8.0]; // Fast, agile industrial servo speed
 
-    // Joint Angle Limits in Degrees (Physical Hard Stops for Solid Machine Structure)
+    // Joint Angle Limits in Degrees (Realistic Wide Industrial Range of Motion)
     this.limits = [
-      { min: -180, max: 180 }, // J1: Base Yaw
-      { min: -105, max: 20 },  // J2: Shoulder Pitch (hard stop prevents crashing backward into base)
-      { min: -145, max: 25 },  // J3: Elbow Pitch (hard stop prevents forearm folding into upper arm/base)
-      { min: -180, max: 180 }, // J4: Forearm Roll
-      { min: -115, max: 115 }, // J5: Wrist Pitch
-      { min: -360, max: 360 }  // J6: Tool Roll
+      { min: -180, max: 180 }, // J1: Base Yaw (Full 360° rotation)
+      { min: -125, max: 45 },  // J2: Shoulder Pitch (Wide forward/upward/backward articulation)
+      { min: -155, max: 65 },  // J3: Elbow Pitch (Wide elbow flexion & extension)
+      { min: -180, max: 180 }, // J4: Forearm Roll (Full 360° axial roll)
+      { min: -125, max: 125 }, // J5: Wrist Pitch (Wide tool articulation)
+      { min: -360, max: 360 }  // J6: Tool Roll (Continuous flange spin)
     ];
 
     // Link Dimensions
@@ -783,10 +783,10 @@ export class RobotModel {
 
   /**
    * Enforces physical solid body non-penetration constraints:
-   * Prevents upper arm, elbow, forearm, or wrist from passing through the solid base pedestal cylinder or floor.
+   * Prevents upper arm, elbow, forearm, or wrist from passing through the solid base pedestal core or floor.
    */
   enforceSolidArmPhysics(angles) {
-    // 1. Clamp to mechanical hard-stop limits
+    // 1. Clamp to mechanical limits
     for (let i = 0; i < 6; i++) {
       const limit = this.limits[i];
       const minRad = THREE.MathUtils.degToRad(limit.min);
@@ -808,29 +808,18 @@ export class RobotModel {
     const rWrist = rElbow - Math.sin(armAngle2) * foreLen;
     const yWrist = yElbow + Math.cos(armAngle2) * foreLen;
 
-    // Solid Floor Clearance (Y >= 0.05m)
-    if (yWrist < 0.05) {
-      const deficit = 0.05 - yWrist;
-      angles[1] -= deficit * 0.75;
-      angles[2] += deficit * 0.45;
+    // Solid Floor Clearance (Y >= 0.04m)
+    if (yWrist < 0.04) {
+      const deficit = 0.04 - yWrist;
+      angles[1] -= deficit * 0.5;
     }
 
-    // Solid Base Turntable Cylinder (Radius <= 0.27m, Height <= 0.46m)
-    const baseRadius = 0.27;
-    const baseHeight = 0.46;
-    if (Math.abs(rWrist) < baseRadius && yWrist < baseHeight) {
-      // Forearm is attempting to penetrate the solid turntable! Push arm forward
-      if (angles[1] > -0.22) {
-        angles[1] = -0.22;
-      }
-      if (angles[2] > -0.15) {
-        angles[2] = -0.15;
-      }
-    }
-
-    if (Math.abs(rElbow) < baseRadius && yElbow < baseHeight) {
-      if (angles[1] > -0.18) {
-        angles[1] = -0.18;
+    // Solid Base Turntable Core (Radius <= 0.23m, Height <= 0.40m)
+    const baseCoreRadius = 0.23;
+    const baseCoreHeight = 0.40;
+    if (Math.abs(rWrist) < baseCoreRadius && yWrist < baseCoreHeight) {
+      if (angles[1] > -0.15) {
+        angles[1] = -0.15;
       }
     }
 
