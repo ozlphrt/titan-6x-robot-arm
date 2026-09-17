@@ -151,7 +151,7 @@ export class WorkcellScene {
     // Render initial pie chart decals
     this.renderTacticalHUD(false);
 
-    // 5. Central Shared Interaction Arena - Smooth Convex Dome & Contour Rings
+    // 5. Central Shared Interaction Arena (Clean open center)
     this.createCenterConvexDome();
 
     // 6. Quad-Station Safety Enclosure Perimeter Walls (Containment boundary near arms)
@@ -457,37 +457,7 @@ export class WorkcellScene {
   }
 
   createCenterConvexDome() {
-    // 1. Subtle Concentric Contour Elevation Rings on the Elevated Terrain & Central Dome
-    const contourRadii = [0.35, 0.65, 0.95, 1.15];
     this.contourRings = [];
-
-    contourRadii.forEach(r => {
-      const ringPoints = [];
-      const segments = 96;
-      for (let i = 0; i < segments; i++) {
-        const theta1 = (i / segments) * Math.PI * 2;
-        const theta2 = ((i + 1) / segments) * Math.PI * 2;
-        const x1 = r * Math.cos(theta1);
-        const z1 = r * Math.sin(theta1);
-        const x2 = r * Math.cos(theta2);
-        const z2 = r * Math.sin(theta2);
-        const y1 = evaluateArenaTerrain(x1, z1).y + 0.0022;
-        const y2 = evaluateArenaTerrain(x2, z2).y + 0.0022;
-        ringPoints.push(new THREE.Vector3(x1, y1, z1));
-        ringPoints.push(new THREE.Vector3(x2, y2, z2));
-      }
-
-      const ringGeo = new THREE.BufferGeometry().setFromPoints(ringPoints);
-      const ringMat = new THREE.LineBasicMaterial({
-        color: 0x94a3b8,
-        transparent: true,
-        opacity: r === 1.15 ? 0.55 : 0.28
-      });
-
-      const ringMesh = new THREE.LineSegments(ringGeo, ringMat);
-      this.ringsGroup.add(ringMesh);
-      this.contourRings.push(ringMesh);
-    });
   }
 
   /**
@@ -930,11 +900,6 @@ export class WorkcellScene {
     if (this.corridorMat) {
       this.corridorMat.color.setHex(cfg.gridCenter);
       this.corridorMat.opacity = isDark ? 0.18 : 0.12;
-    }
-    if (this.contourRings) {
-      this.contourRings.forEach(rm => {
-        rm.material.color.setHex(cfg.gridCenter);
-      });
     }
 
     // Grid
