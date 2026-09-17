@@ -36,14 +36,14 @@ class RobotApp {
     this.scene.background = new THREE.Color(0xf1f5f9);
     this.scene.fog = new THREE.FogExp2(0xf1f5f9, 0.05);
 
-    // 2. Camera
+    // 2. Camera (Slightly zoomed out to frame the entire 4-station arena)
     this.camera = new THREE.PerspectiveCamera(
       45,
       window.innerWidth / window.innerHeight,
       0.1,
-      50
+      60
     );
-    this.camera.position.set(1.5, 1.2, 1.5);
+    this.camera.position.set(2.8, 2.3, 2.8);
 
     // 3. Renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -55,14 +55,16 @@ class RobotApp {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);
 
-    // 4. Orbit Controls
+    // 4. Orbit Controls (Auto-Orbit ON by default)
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
     this.controls.maxPolarAngle = Math.PI / 2 + 0.02; // Prevent camera going below floor
     this.controls.minDistance = 0.4;
-    this.controls.maxDistance = 5.0;
-    this.controls.target.set(0, 0.45, 0);
+    this.controls.maxDistance = 8.0;
+    this.controls.target.set(0, 0.40, 0);
+    this.controls.autoRotate = true;
+    this.controls.autoRotateSpeed = 1.0;
 
     // Clock
     this.clock = new THREE.Clock();
