@@ -572,7 +572,7 @@ export class BallInterceptor {
         const dirOut = new THREE.Vector3(dx / hDist, 0, dz / hDist);
 
         // Strike target: position TCP slightly on the base side (behind ball) and slightly down to scoop/push
-        const strikePos = simPos.clone().subScaledVector(dirOut, ball.radius * 0.35);
+        const strikePos = simPos.clone().addScaledVector(dirOut, -ball.radius * 0.35);
         strikePos.y = Math.max(0.08, strikePos.y);
 
         const distFromTcp = currentTcp.distanceTo(strikePos);
@@ -603,7 +603,7 @@ export class BallInterceptor {
     }
     fallbackPos.y = Math.max(0.10, Math.min(1.30, fallbackPos.y));
 
-    const strikeFallback = fallbackPos.clone().subScaledVector(dirOut, ball.radius * 0.35);
+    const strikeFallback = fallbackPos.clone().addScaledVector(dirOut, -ball.radius * 0.35);
     strikeFallback.y = Math.max(0.08, strikeFallback.y);
 
     return {
@@ -744,7 +744,7 @@ export class BallInterceptor {
 
               const vDotN = b.velocity.dot(normal);
               if (vDotN < 0) {
-                b.velocity.subScaledVector(normal, (1.0 + b.restitution) * vDotN);
+                b.velocity.addScaledVector(normal, -(1.0 + b.restitution) * vDotN);
               }
               // Add outward boost
               b.velocity.addScaledVector(outBaseDir, 0.75 + Math.random() * 0.35);

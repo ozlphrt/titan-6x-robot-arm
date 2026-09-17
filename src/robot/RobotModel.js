@@ -109,7 +109,7 @@ export class RobotModel {
     const t = this.themes[this.currentTheme];
 
     this.materials = {
-      primaryPaint: new THREE.MeshStandardMaterial({
+      primaryPaint: new THREE.MeshPhysicalMaterial({
         color: t.primary,
         metalness: 0.35,
         roughness: 0.22,
