@@ -56,9 +56,9 @@ export class BallInterceptor {
       {
         id: 2,
         name: 'GAMMA (ARM 3)',
-        label: 'ABB White',
-        primary: '#f8fafc',
-        hex: 0xf8fafc
+        label: 'Emerald Green',
+        primary: '#10b981',
+        hex: 0x10b981
       },
       {
         id: 3,

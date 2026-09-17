@@ -394,7 +394,7 @@ html, body, #app {
 
 .dot-fanuc { background: #ffcc00; box-shadow: 0 0 6px rgba(255, 204, 0, 0.6); }
 .dot-kuka { background: #ff7700; box-shadow: 0 0 6px rgba(255, 119, 0, 0.6); }
-.dot-abb { background: #ffffff; box-shadow: 0 0 6px rgba(255, 255, 255, 0.6); }
+.dot-abb { background: #10b981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.6); }
 .dot-cyber { background: #00f0ff; box-shadow: 0 0 6px rgba(0, 240, 255, 0.6); }
 
 /* ==========================================================================
