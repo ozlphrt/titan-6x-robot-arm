@@ -1,5 +1,20 @@
 import * as THREE from 'three';
 
+const DOT_FONT_5x7 = {
+  '0': [0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110],
+  '1': [0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110],
+  '2': [0b01110, 0b10001, 0b00001, 0b00010, 0b00100, 0b01000, 0b11111],
+  '3': [0b11110, 0b00001, 0b00001, 0b01110, 0b00001, 0b00001, 0b11110],
+  '4': [0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010],
+  '5': [0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110],
+  '6': [0b00110, 0b01000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110],
+  '7': [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000],
+  '8': [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110],
+  '9': [0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b01100],
+  ' ': [0, 0, 0, 0, 0, 0, 0],
+  '-': [0, 0, 0, 0b11111, 0, 0, 0]
+};
+
 /**
  * Creates a rounded box geometry with filleted edges and smooth chamfers
  */
@@ -354,6 +369,15 @@ export class RobotModel {
     counterweight.position.set(0, 0.01, -0.135);
     counterweight.castShadow = true;
     this.j2.add(counterweight);
+
+    // Rear Dot Matrix Display Housing Frame & OLED/LED Bezel
+    const displayBezelGeo = createRoundedBoxGeometry(0.146, 0.116, 0.010, 0.016, 3);
+    const displayBezel = new THREE.Mesh(displayBezelGeo, this.materials.jointBezel);
+    displayBezel.position.set(0, 0.01, -0.211);
+    this.j2.add(displayBezel);
+
+    // Initialize Active Dot Matrix LED Display Screen
+    this.initDotMatrixDisplay();
 
     // =========================================================================
     // 4. JOINT 3 (J3: Authentic Industrial Elbow Knuckle & Drive Housing)
@@ -1077,5 +1101,172 @@ export class RobotModel {
         child.receiveShadow = enabled;
       }
     });
+  }
+
+  /**
+   * Initializes the physical OLED / Dot Matrix LED display attached to the rear of the shoulder counterweight
+   */
+  initDotMatrixDisplay() {
+    this.displayCanvas = document.createElement('canvas');
+    this.displayCanvas.width = 256;
+    this.displayCanvas.height = 192;
+    this.displayCtx = this.displayCanvas.getContext('2d');
+
+    this.displayTexture = new THREE.CanvasTexture(this.displayCanvas);
+    this.displayTexture.anisotropy = 8;
+
+    const displayMat = new THREE.MeshBasicMaterial({
+      map: this.displayTexture,
+      toneMapped: false
+    });
+
+    const displayPlaneGeo = new THREE.PlaneGeometry(0.134, 0.104);
+    this.displayMesh = new THREE.Mesh(displayPlaneGeo, displayMat);
+    this.displayMesh.rotateY(Math.PI); // Face rearward (-Z)
+    this.displayMesh.position.set(0, 0.01, -0.217);
+    this.j2.add(this.displayMesh);
+
+    this.lastDisplayedOwn = -1;
+    this.lastDisplayedForeign = -1;
+    this.updateDisplay(0, 0);
+  }
+
+  getDisplayThemeColors() {
+    const t = this.currentTheme;
+    if (t === 'fanuc') {
+      return { ledOn: '#ffea00', glow: 'rgba(255, 234, 0, 0.45)', ledOff: '#1c1808', bg: '#08080c', text: '#ffe047' };
+    } else if (t === 'kuka') {
+      return { ledOn: '#ff3d00', glow: 'rgba(255, 61, 0, 0.45)', ledOff: '#200c06', bg: '#08080c', text: '#ff6e40' };
+    } else if (t === 'abb') {
+      return { ledOn: '#e0f2fe', glow: 'rgba(224, 242, 254, 0.50)', ledOff: '#0f172a', bg: '#050a12', text: '#38bdf8' };
+    } else if (t === 'cyber') {
+      return { ledOn: '#00f0ff', glow: 'rgba(0, 240, 255, 0.50)', ledOff: '#041620', bg: '#030610', text: '#00ff9d' };
+    }
+    return { ledOn: '#00ff9d', glow: 'rgba(0, 255, 157, 0.45)', ledOff: '#091c14', bg: '#060d0a', text: '#00ff9d' };
+  }
+
+  /**
+   * Updates the rear Dot Matrix display with the number of balls held inside this arm's circle
+   */
+  updateDisplay(ownCount = 0, foreignCount = 0) {
+    if (this.lastDisplayedOwn === ownCount && this.lastDisplayedForeign === foreignCount) {
+      return;
+    }
+    this.lastDisplayedOwn = ownCount;
+    this.lastDisplayedForeign = foreignCount;
+
+    const ctx = this.displayCtx;
+    if (!ctx) return;
+
+    const w = this.displayCanvas.width;
+    const h = this.displayCanvas.height;
+    const colors = this.getDisplayThemeColors();
+
+    // 1. Dark Smoked Industrial Glass Screen Background
+    ctx.fillStyle = colors.bg;
+    ctx.fillRect(0, 0, w, h);
+
+    // Subtle CRT / scanline phosphor grid
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.025)';
+    for (let y = 0; y < h; y += 4) {
+      ctx.fillRect(0, y, w, 1);
+    }
+
+    // Top Header
+    ctx.fillStyle = colors.text;
+    ctx.font = 'bold 12px "Chakra Petch", "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('BALLS IN CIRCLE', w / 2, 8);
+
+    // Format 2-digit number (00 - 99)
+    const countClamped = Math.max(0, Math.min(99, ownCount));
+    const str = String(countClamped).padStart(2, '0');
+    const d1 = str[0];
+    const d2 = str[1];
+
+    const bitmap1 = DOT_FONT_5x7[d1] || DOT_FONT_5x7['0'];
+    const bitmap2 = DOT_FONT_5x7[d2] || DOT_FONT_5x7['0'];
+
+    // 2. Full Dot Matrix LED Grid (28 columns x 17 rows)
+    const cols = 28;
+    const rows = 17;
+    const startX = 12;
+    const startY = 26;
+    const gridW = w - 24;
+    const gridH = h - 42;
+    const stepX = gridW / cols;
+    const stepY = gridH / rows;
+    const dotR = 2.7;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cx = startX + (c + 0.5) * stepX;
+        const cy = startY + (r + 0.5) * stepY;
+
+        let isLit = false;
+
+        // Render big 5x7 digits scaled across center (rows 1..13)
+        if (r >= 1 && r <= 13) {
+          const fontRow = Math.floor((r - 1) / 1.86); // 0..6
+          if (c >= 3 && c <= 12) {
+            const fontCol = Math.floor((c - 3) / 2.0); // 0..4
+            if (fontRow >= 0 && fontRow < 7 && fontCol >= 0 && fontCol < 5) {
+              const bit = (bitmap1[fontRow] >> (4 - fontCol)) & 1;
+              if (bit) isLit = true;
+            }
+          } else if (c >= 15 && c <= 24) {
+            const fontCol = Math.floor((c - 15) / 2.0); // 0..4
+            if (fontRow >= 0 && fontRow < 7 && fontCol >= 0 && fontCol < 5) {
+              const bit = (bitmap2[fontRow] >> (4 - fontCol)) & 1;
+              if (bit) isLit = true;
+            }
+          }
+        }
+
+        // Bottom status LED meter bar (row 15)
+        if (r === 15 && c >= 2 && c <= 25) {
+          const barIdx = c - 2; // 0..23
+          const fillCount = Math.min(24, Math.ceil((countClamped / 20) * 24));
+          if (barIdx < fillCount) isLit = true;
+        }
+
+        if (isLit) {
+          // Glow Halo
+          ctx.fillStyle = colors.glow;
+          ctx.beginPath();
+          ctx.arc(cx, cy, dotR * 2.2, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Bright Core LED Diode
+          ctx.fillStyle = colors.ledOn;
+          ctx.beginPath();
+          ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Center Specular Reflection
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+          ctx.beginPath();
+          ctx.arc(cx - 0.7, cy - 0.7, dotR * 0.45, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          // Unlit Dim Phosphor Diode
+          ctx.fillStyle = colors.ledOff;
+          ctx.beginPath();
+          ctx.arc(cx, cy, dotR * 0.85, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    // Bottom warning label if any opponent ball is intruding
+    if (foreignCount > 0) {
+      ctx.fillStyle = '#ff1744';
+      ctx.font = 'bold 10px "Chakra Petch", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`! ${foreignCount} INTRUDER${foreignCount > 1 ? 'S' : ''} !`, w / 2, h - 3);
+    }
+
+    this.displayTexture.needsUpdate = true;
   }
 }

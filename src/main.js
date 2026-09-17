@@ -1079,6 +1079,13 @@ class RobotApp {
             if (teamEl) {
               teamEl.textContent = `${stats.territoryCounts[t]} HELD`;
             }
+
+            // Update real-time 3D Dot Matrix display on the robot shoulder
+            if (this.robots[t] && typeof this.robots[t].updateDisplay === 'function') {
+              const ownCount = stats.territoryCounts[t] || 0;
+              const foreignCount = stats.foreignCounts ? (stats.foreignCounts[t] || 0) : 0;
+              this.robots[t].updateDisplay(ownCount, foreignCount);
+            }
           }
         }
       }
