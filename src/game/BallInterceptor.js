@@ -910,19 +910,19 @@ export class BallInterceptor {
           const graspThreshold = ap.throwBall.radius + 0.16; // Generous reach for open 26cm jaws
 
           if ((distToBall <= graspThreshold || (ap.throwTimer > 0.35 && distToBall <= graspThreshold + 0.10)) && now > (ap.throwBall.lastPushTime || 0)) {
-            // Initiate Visible Clamping Phase (0.08s smooth jaw closure)
-            robot.setGripper(1.0);
+            // Initiate Smooth Clamping Phase (0.22s progressive jaw closure)
+            ap.throwState = 'CLAMPING';
+            ap.clampDuration = 0.22;
+            ap.throwTimer = 0.22;
+            ap.graspStartPos = tcpPos.clone();
+            ap.graspJointAngles = [...robot.angles];
+            ap.graspTele = robot.telescopeExtension;
+
             ap.heldBall = ap.throwBall;
             ap.heldBall.isHeld = true;
             ap.heldBall.velocity.set(0, 0, 0);
             ap.heldBall.mesh.position.copy(tcpPos);
             this.audio.playPneumatic(true);
-
-            ap.throwState = 'CLAMPING';
-            ap.throwTimer = 0.08;
-            ap.graspStartPos = tcpPos.clone();
-            ap.graspJointAngles = [...robot.angles];
-            ap.graspTele = robot.telescopeExtension;
 
             if (ap.throwMode === 'CENTER_STRIKE') {
               const targetPos = (ap.centerTargetBall && ap.centerTargetBall.mesh) ? ap.centerTargetBall.mesh.position : new THREE.Vector3(0, 0.065, 0);
@@ -965,39 +965,46 @@ export class BallInterceptor {
           }
         }
       } else if (ap.throwState === 'CLAMPING') {
-        // Step 2: HOLD THE BALL (0.08s smooth clamp & capture exact joint pose)
+        // Step 2: HOLD THE BALL (Smooth progressive clamp & zero-jerk hold)
+        const cDuration = ap.clampDuration || 0.22;
+        const clampT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / cDuration));
+        // Quintic smoothstep for smooth ease-in/ease-out jaw closure
+        const pClamp = clampT * clampT * clampT * (clampT * (clampT * 6.0 - 15.0) + 10.0);
+        robot.setGripper(pClamp);
+
         if (ap.heldBall && ap.heldBall.mesh) {
           ap.heldBall.velocity.set(0, 0, 0);
           ap.heldBall.mesh.position.copy(tcpPos);
         }
-        robot.setGripper(1.0);
 
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
+          robot.setGripper(1.0);
           if (ap.throwMode === 'RETRIEVE_CARRY') {
             ap.throwState = 'RETRIEVE_CARRY';
-            ap.throwTimer = 0.45;
+            ap.throwTimer = 0.55;
+            ap.carryDuration = 0.55;
           } else {
             // Step 3: Transition to smooth vertical LIFT
             ap.throwState = 'LIFT';
-            ap.throwTimer = 0.18;
-            ap.liftDuration = 0.18;
+            ap.liftDuration = 0.36;
+            ap.throwTimer = 0.36;
           }
         }
       } else if (ap.throwState === 'LIFT') {
-        // Step 3: LIFT THE BALL smoothly off the ground from exact grasp pose
+        // Step 3: LIFT THE BALL smoothly off the ground with C^2 quintic ease-in & ease-out
         const startJ = ap.graspJointAngles || [0, -0.45, -0.55, 0, 0.60, 0];
         const startTele = (ap.graspTele !== undefined) ? ap.graspTele : 0.40;
 
-        const lDuration = ap.liftDuration || 0.18;
+        const lDuration = ap.liftDuration || 0.36;
         const liftT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / lDuration));
-        // Quintic smoothstep for ultra-smooth vertical lift
+        // Quintic smoothstep (C^2 zero velocity & zero jerk at start and end)
         const p = liftT * liftT * liftT * (liftT * (liftT * 6.0 - 15.0) + 10.0);
 
-        const liftJ2 = startJ[1] + 0.20;
-        const liftJ3 = startJ[2] - 0.18;
-        const liftJ5 = 0.65;
-        const liftTele = Math.max(0.08, startTele - 0.20);
+        const liftJ2 = startJ[1] + 0.22;
+        const liftJ3 = startJ[2] - 0.20;
+        const liftJ5 = startJ[4] - 0.06;
+        const liftTele = Math.max(0.06, startTele - 0.18);
 
         const j1 = startJ[0];
         const j2 = startJ[1] + (liftJ2 - startJ[1]) * p;
@@ -1025,8 +1032,8 @@ export class BallInterceptor {
           ap.liftEndAngles = [j1, j2, j3, j4, j5, j6];
           ap.liftEndTele = tele;
           const alpha = ap.throwPowerRatio || 0.5;
-          ap.throwTimer = 0.16 + 0.16 * alpha; // Proportional windup time (0.18s for flick, 0.32s for deep cocking)
-          ap.windupDuration = ap.throwTimer;
+          ap.windupDuration = 0.32 + 0.16 * alpha; // 0.34s to 0.48s smooth windup
+          ap.throwTimer = ap.windupDuration;
         }
       } else if (ap.throwState === 'RETRIEVE_CARRY') {
         // Smoothly lift and carry ball over to the home sanctuary behind the robot arm
@@ -1040,20 +1047,23 @@ export class BallInterceptor {
         const slotSpread = (((ap.retainsCount || 0) % 5) - 2) * 0.12;
         const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48).addScaledVector(perpDir, slotSpread);
 
-        // Smooth parabolic carry arc over the pedestal
-        const carryT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / 0.45));
+        const cDuration = ap.carryDuration || 0.55;
+        const carryT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / cDuration));
+        // Quintic smoothstep for horizontal carry trajectory
+        const pCarry = carryT * carryT * carryT * (carryT * (carryT * 6.0 - 15.0) + 10.0);
         const arcY = 0.15 + Math.sin(carryT * Math.PI) * 0.32;
         ap.pursuitTarget.set(
-          ap.graspStartPos.x + (sanctuaryPos.x - ap.graspStartPos.x) * carryT,
+          ap.graspStartPos.x + (sanctuaryPos.x - ap.graspStartPos.x) * pCarry,
           arcY,
-          ap.graspStartPos.z + (sanctuaryPos.z - ap.graspStartPos.z) * carryT
+          ap.graspStartPos.z + (sanctuaryPos.z - ap.graspStartPos.z) * pCarry
         );
 
         ap.throwTimer -= deltaTime;
         const hDistToSanctuary = Math.hypot(tcpPos.x - sanctuaryPos.x, tcpPos.z - sanctuaryPos.z);
-        if (ap.throwTimer <= 0 || hDistToSanctuary < 0.12) {
+        if (ap.throwTimer <= 0 || hDistToSanctuary < 0.10) {
           ap.throwState = 'RETRIEVE_PLACE';
-          ap.throwTimer = 0.22;
+          ap.placeDuration = 0.32;
+          ap.throwTimer = 0.32;
         }
       } else if (ap.throwState === 'RETRIEVE_PLACE') {
         // Lower down smoothly and gently place into organized rear sanctuary
@@ -1067,9 +1077,14 @@ export class BallInterceptor {
         const floorInfo = this.getFloorInfo(sanctuaryPos.x, sanctuaryPos.z);
         ap.pursuitTarget.set(sanctuaryPos.x, floorInfo.y + (ap.heldBall ? ap.heldBall.radius : 0.065), sanctuaryPos.z);
 
+        const pDuration = ap.placeDuration || 0.32;
+        const placeT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / pDuration));
+        const pPlace = placeT * placeT * placeT * (placeT * (placeT * 6.0 - 15.0) + 10.0);
+        robot.setGripper(1.0 - pPlace); // Progressive release
+
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
-          robot.setGripper(0.0); // Open wide!
+          robot.setGripper(0.0); // Fully open
           this.audio.playPneumatic(false);
 
           if (ap.heldBall && ap.heldBall.mesh) {
@@ -1087,7 +1102,7 @@ export class BallInterceptor {
           ap.throwState = 'IDLE';
         }
       } else if (ap.throwState === 'WINDUP') {
-        // Step 4: COCK & TARGET (Smooth rotation into pitch azimuth and rear cocking stance)
+        // Step 4: COCK & TARGET (Quintic ease-in & ease-out into pitch azimuth and rear cocking stance)
         const startJ = ap.liftEndAngles || ap.graspJointAngles || [0, -0.45, -0.55, 0, 0.60, 0];
         const startTele = (ap.liftEndTele !== undefined) ? ap.liftEndTele : ((ap.graspTele !== undefined) ? ap.graspTele : 0.40);
 
@@ -1102,9 +1117,9 @@ export class BallInterceptor {
         while (diffJ1 > Math.PI) diffJ1 -= Math.PI * 2;
         while (diffJ1 < -Math.PI) diffJ1 += Math.PI * 2;
 
-        const wDuration = ap.windupDuration || 0.28;
+        const wDuration = ap.windupDuration || 0.36;
         const windT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / wDuration));
-        // Quintic smoothstep for smooth continuous uncoiling into cocked stance
+        // Quintic smoothstep for seamless continuous acceleration from lift end into stationary apex
         const p = windT * windT * windT * (windT * (windT * 6.0 - 15.0) + 10.0);
         const alpha = ap.throwPowerRatio || 0.5;
 
@@ -1148,21 +1163,21 @@ export class BallInterceptor {
         if (ap.throwTimer <= 0) {
           // Step 5: Transition to FORWARD SWING & APEX RELEASE
           ap.throwState = 'SWING_THROW';
-          const swingDuration = 0.18 + 0.16 * alpha; // Proportional pitch duration (0.20s flick -> 0.34s full whip)
+          const swingDuration = 0.26 + 0.16 * alpha; // 0.28s to 0.42s forward pitch duration
           ap.throwTimer = swingDuration;
           ap.swingDuration = swingDuration;
         }
       } else if (ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
-        // Step 5, 6, 7: ONE CONTINUOUS ATHLETIC FORWARD SWING, APEX RELEASE & FOLLOW-THROUGH
+        // Step 5, 6, 7: ATHLETIC FORWARD SWING WITH ZERO-SNAP EASE-IN, APEX RELEASE & CUSHIONED FOLLOW-THROUGH
         const localDir = ap.targetThrowDir.clone();
         const invRot = robot.group.quaternion.clone().invert();
         localDir.applyQuaternion(invRot);
         const j1 = Math.atan2(localDir.x, localDir.z);
 
-        const sDuration = ap.swingDuration || 0.26;
+        const sDuration = ap.swingDuration || 0.32;
         const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / sDuration));
-        // Single monotonic forward power whip curve (0 -> 1 smoothly)
-        const p = Math.sin(swingT * Math.PI * 0.5);
+        // Quintic smoothstep for smooth acceleration from rest into peak speed, followed by cushioned follow-through
+        const p = swingT * swingT * swingT * (swingT * (swingT * 6.0 - 15.0) + 10.0);
         const alpha = ap.throwPowerRatio || 0.5;
 
         let j2, j3, j4 = 0, j5, j6 = 0, tele;
@@ -1198,8 +1213,8 @@ export class BallInterceptor {
         robot.group.updateMatrixWorld(true);
         robot.getTCPWorldPosition(tcpPos);
 
-        // Step 6: APEX RELEASE TOWARDS THE END OF SWING (at 90% forward extension)
-        if (swingT < 0.90) {
+        // Step 6: APEX RELEASE TOWARDS THE END OF SWING (at 88% forward extension)
+        if (swingT < 0.88) {
           robot.setGripper(1.0);
           if (ap.heldBall && ap.heldBall.mesh) {
             ap.heldBall.velocity.set(0, 0, 0);
