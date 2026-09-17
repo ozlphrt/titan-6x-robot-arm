@@ -877,13 +877,13 @@ export class BallInterceptor {
         const vRad = (b.velocity.x * dxBase + b.velocity.z * dzBase) / Math.max(0.001, distBase);
         if (vRad > 0.35 && pos.y > 0.08) continue;
 
-        const isAlienInBase = (!isOwnColor && distBase <= 1.45);
+        const isAlienInBase = (!isOwnColor && distBase <= 1.85);
 
         // Alien balls in territory ignore residual cooldown timers to ensure immediate action
         if (!isAlienInBase && (now < (b.lastPushTime || 0))) continue;
 
-        // Instant intruder engagement: any opponent ball in the home circle immediately triggers grab & eject
-        if (!isOwnColor && distBase <= 1.45 && ap.throwState === 'IDLE') {
+        // Instant intruder engagement: any opponent ball in the defense zone immediately triggers grab & eject
+        if (!isOwnColor && distBase <= 1.85 && ap.throwState === 'IDLE') {
           ap.throwState = 'APPROACH';
           ap.throwMode = 'EJECT';
           ap.throwBall = b;
@@ -1350,7 +1350,7 @@ export class BallInterceptor {
           const b = this.balls[i];
           if (!b || !b.mesh || b.teamId === armTeam) continue;
           const distBase = Math.hypot(b.mesh.position.x - ap.basePos.x, b.mesh.position.z - ap.basePos.z);
-          if (distBase <= 1.35) {
+          if (distBase <= 1.85) {
             hasForeignInZone = true;
             break;
           }
@@ -1468,7 +1468,7 @@ export class BallInterceptor {
           ap.lockTimer = 0;
         }
 
-        // 1. Scan for any foreign/alien intruder balls strictly INSIDE this arm's home circle (radius <= 1.35m)
+        // 1. Scan for any foreign/alien intruder balls in this arm's extended defense perimeter (radius <= 1.85m)
         let hasAlienBallsInBase = false;
         const basePos = ap.basePos;
         for (let i = 0; i < this.balls.length; i++) {
@@ -1476,7 +1476,7 @@ export class BallInterceptor {
           if (!b || !b.mesh || b.isHeld || b.teamId === armTeam) continue;
           const pos = b.mesh.position;
           const hDist = Math.hypot(pos.x - basePos.x, pos.z - basePos.z);
-          if (hDist <= 1.35 && pos.y >= 0.02 && pos.y <= 1.85) {
+          if (hDist <= 1.85 && pos.y >= 0.02 && pos.y <= 1.85) {
             hasAlienBallsInBase = true;
             break;
           }
@@ -1513,14 +1513,14 @@ export class BallInterceptor {
           const vRad = (b.velocity.x * dxBase + b.velocity.z * dzBase) / Math.max(0.001, hDist);
           if (vRad > 0.35 && pos.y > 0.08) continue;
 
-          const isAlienInBase = (!isOwnColor && hDist <= 1.35);
+          const isAlienInBase = (!isOwnColor && hDist <= 1.85);
 
           if (!isAlienInBase && (now < (b.lastPushTime || 0))) continue;
 
           // Full extended reach envelope covering defense station and boundary corridors (r <= 2.15m)
           if (hDist > 2.15 || pos.y < 0.02) continue;
 
-          // ABSOLUTE DEFENSE RULE: While ANY alien intruder ball is inside the circle (r <= 1.35), clear intruder first
+          // ABSOLUTE DEFENSE RULE: While ANY alien intruder ball is in defense range (r <= 1.85), clear intruder first
           if (hasAlienBallsInBase && isOwnColor) {
             continue;
           }
@@ -1538,13 +1538,13 @@ export class BallInterceptor {
             const dOpp = Math.hypot(dxOpp, dzOpp);
             targetDir = dOpp > 0.001 ? new THREE.Vector3(dxOpp / dOpp, 0, dzOpp / dOpp) : new THREE.Vector3(1, 0, 0);
 
-            if (hDist <= 1.35) {
-              // Inside home circle: Absolute top priority (clear out all intruders!)
+            if (hDist <= 1.85) {
+              // Inside defense zone: Absolute top priority (clear out all intruders!)
               const speedUrgency = ballSpeed > 0.20 ? 0.08 : 0.0;
-              priorityScore = -0.50 + (hDist / 1.35) * 0.05 - speedUrgency;
+              priorityScore = -0.60 + (hDist / 1.85) * 0.08 - speedUrgency;
             } else {
               // In boundary corridor / outer reach: Proactive arena-wide clearance
-              priorityScore = 0.15 + (hDist / 2.15) * 0.08;
+              priorityScore = -0.10 + (hDist / 2.15) * 0.05;
             }
           } else {
             // OWN COLOR BALL
