@@ -950,10 +950,10 @@ export class BallInterceptor {
           const graspThreshold = ap.throwBall.radius + 0.16; // Generous reach for open 26cm jaws
 
           if ((distToBall <= graspThreshold || (ap.throwTimer > 0.35 && distToBall <= graspThreshold + 0.10)) && now > (ap.throwBall.lastPushTime || 0)) {
-            // Initiate Smooth Clamping Phase (0.22s progressive jaw closure)
+            // Initiate Smooth Clamping Phase (0.28s progressive calm jaw closure)
             ap.throwState = 'CLAMPING';
-            ap.clampDuration = 0.22;
-            ap.throwTimer = 0.22;
+            ap.clampDuration = 0.28;
+            ap.throwTimer = 0.28;
             ap.graspStartPos = tcpPos.clone();
 
             ap.heldBall = ap.throwBall;
@@ -1013,7 +1013,7 @@ export class BallInterceptor {
         }
       } else if (ap.throwState === 'CLAMPING') {
         // Step 2: HOLD THE BALL (Smooth progressive clamp & zero-jerk hold)
-        const cDuration = ap.clampDuration || 0.22;
+        const cDuration = ap.clampDuration || 0.28;
         const clampT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / cDuration));
         // Quintic smoothstep for smooth ease-in/ease-out jaw closure
         const pClamp = clampT * clampT * clampT * (clampT * (clampT * 6.0 - 15.0) + 10.0);
@@ -1032,20 +1032,21 @@ export class BallInterceptor {
             ap.throwTimer = 0.55;
             ap.carryDuration = 0.55;
           } else {
-            // Step 3: Transition to smooth vertical LIFT
+            // Step 3: Transition to smooth vertical LIFT (0.38s pure vertical rise)
             ap.throwState = 'LIFT';
-            ap.liftDuration = 0.30;
-            ap.throwTimer = 0.30;
+            ap.liftDuration = 0.38;
+            ap.throwTimer = 0.38;
           }
         }
       } else if (ap.throwState === 'LIFT') {
-        // Step 3: LIFT THE BALL smoothly off the ground in Cartesian space with C^2 quintic ease-in & ease-out
-        const lDuration = ap.liftDuration || 0.30;
+        // Step 3: LIFT THE BALL smoothly straight up from the grasp spot (zero lateral jerk)
+        const lDuration = ap.liftDuration || 0.38;
         const liftT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / lDuration));
         const p = liftT * liftT * liftT * (liftT * (liftT * 6.0 - 15.0) + 10.0);
 
-        const liftPos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.22);
-        liftPos.y = 0.36;
+        // Pure vertical lift directly above the grasp point
+        const liftPos = ap.graspStartPos.clone();
+        liftPos.y = Math.min(0.40, ap.graspStartPos.y + 0.28);
         const pCart = ap.graspStartPos.clone().lerp(liftPos, p);
 
         kinematics.solveIK(pCart, 16, 0.002, true);
@@ -1063,7 +1064,7 @@ export class BallInterceptor {
           ap.throwState = 'WINDUP';
           ap.liftEndCartPos = liftPos.clone();
           const alpha = ap.throwPowerRatio || 0.5;
-          ap.windupDuration = 0.22 + 0.12 * alpha; // Proportional windup time
+          ap.windupDuration = 0.38 + 0.16 * alpha; // Graceful, athletic windup (0.38s to 0.54s)
           ap.throwTimer = ap.windupDuration;
         }
       } else if (ap.throwState === 'RETRIEVE_CARRY') {
@@ -1078,7 +1079,7 @@ export class BallInterceptor {
         const slotSpread = (((ap.retainsCount || 0) % 5) - 2) * 0.12;
         const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48).addScaledVector(perpDir, slotSpread);
 
-        const cDuration = ap.carryDuration || 0.55;
+        const cDuration = ap.carryDuration || 0.65;
         const carryT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / cDuration));
         // Quintic smoothstep for horizontal carry trajectory
         const pCarry = carryT * carryT * carryT * (carryT * (carryT * 6.0 - 15.0) + 10.0);
@@ -1093,8 +1094,8 @@ export class BallInterceptor {
         const hDistToSanctuary = Math.hypot(tcpPos.x - sanctuaryPos.x, tcpPos.z - sanctuaryPos.z);
         if (ap.throwTimer <= 0 || hDistToSanctuary < 0.10) {
           ap.throwState = 'RETRIEVE_PLACE';
-          ap.placeDuration = 0.32;
-          ap.throwTimer = 0.32;
+          ap.placeDuration = 0.38;
+          ap.throwTimer = 0.38;
         }
       } else if (ap.throwState === 'RETRIEVE_PLACE') {
         // Lower down smoothly and gently place into organized rear sanctuary
@@ -1108,7 +1109,7 @@ export class BallInterceptor {
         const floorInfo = this.getFloorInfo(sanctuaryPos.x, sanctuaryPos.z);
         ap.pursuitTarget.set(sanctuaryPos.x, floorInfo.y + (ap.heldBall ? ap.heldBall.radius : 0.065), sanctuaryPos.z);
 
-        const pDuration = ap.placeDuration || 0.32;
+        const pDuration = ap.placeDuration || 0.38;
         const placeT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / pDuration));
         const pPlace = placeT * placeT * placeT * (placeT * (placeT * 6.0 - 15.0) + 10.0);
         robot.setGripper(1.0 - pPlace); // Progressive release
@@ -1135,13 +1136,13 @@ export class BallInterceptor {
       } else if (ap.throwState === 'WINDUP') {
         // Step 4: COCK & TARGET (Cartesian backswing is strictly proportional to required power alpha)
         const alpha = ap.throwPowerRatio || 0.5;
-        const wDuration = ap.windupDuration || 0.26;
+        const wDuration = ap.windupDuration || 0.42;
         const windT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / wDuration));
         const p = windT * windT * windT * (windT * (windT * 6.0 - 15.0) + 10.0);
 
-        const liftPos = ap.liftEndCartPos || ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.22);
+        const liftPos = ap.liftEndCartPos || ap.graspStartPos.clone().add(new THREE.Vector3(0, 0.28, 0));
         // Cocked position: behind the shoulder pivot, raised ready for athletic forward whip
-        const cockedPos = ap.basePos.clone().sub(ap.targetThrowDir.clone().multiplyScalar(0.06 + 0.22 * alpha));
+        const cockedPos = ap.basePos.clone().sub(ap.targetThrowDir.clone().multiplyScalar(0.06 + 0.20 * alpha));
         cockedPos.y = 0.38 + 0.08 * alpha;
 
         const pCart = liftPos.clone().lerp(cockedPos, p);
@@ -1160,14 +1161,14 @@ export class BallInterceptor {
           ap.throwState = 'SWING_THROW';
           ap.cockedCartPos = cockedPos.clone();
           // Release position: extended forward and upward along launch elevation angle
-          ap.releaseCartPos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.38 + 0.40 * alpha);
-          ap.releaseCartPos.y = 0.42 + 0.22 * alpha;
+          ap.releaseCartPos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.38 + 0.36 * alpha);
+          ap.releaseCartPos.y = 0.42 + 0.20 * alpha;
 
           // Compute forward stroke length (meters) based on power alpha
           const strokeDist = ap.cockedCartPos.distanceTo(ap.releaseCartPos);
           // Since v_peak = 2.0 * strokeDist / T_accel => T_accel = (2.0 * strokeDist) / reqSpeed
           const reqSpeed = Math.max(1.5, ap.requiredLaunchSpeed || 3.0);
-          const tAccel = Math.max(0.12, Math.min(0.35, (2.0 * strokeDist) / reqSpeed));
+          const tAccel = Math.max(0.14, Math.min(0.38, (2.0 * strokeDist) / reqSpeed));
           const swingDuration = tAccel / 0.82; // Release at 82% of swing duration
 
           ap.throwTimer = swingDuration;
