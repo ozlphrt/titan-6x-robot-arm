@@ -1191,7 +1191,6 @@ export class BallInterceptor {
           // Seamless completion: Sync Cartesian IK anchors to final pose to prevent any snap/secondary swing
           robot.getTCPWorldPosition(tcpPos);
           ap.pursuitPos.copy(tcpPos);
-          ap.currentPos.copy(tcpPos);
           ap.pursuitTarget.copy(tcpPos);
           ap.pursuitVelocity.set(0, 0, 0);
           robot.setTargetAngles([j1, j2, j3, j4, j5, j6]);
