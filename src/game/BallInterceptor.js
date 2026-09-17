@@ -1170,7 +1170,7 @@ export class BallInterceptor {
           ap.swingDuration = swingDuration;
         }
       } else if (ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
-        // Step 5, 6, 7: FORWARD SWING (Stroke amplitude is STRICTLY proportional to required power alpha)
+        // Step 5, 6, 7: FORWARD SWING (Stroke amplitude & speed are strictly proportional to required distance alpha)
         const localDir = ap.targetThrowDir.clone();
         const invRot = robot.group.quaternion.clone().invert();
         localDir.applyQuaternion(invRot);
@@ -1178,9 +1178,22 @@ export class BallInterceptor {
 
         const sDuration = ap.swingDuration || 0.28;
         const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / sDuration));
-        // Quintic smoothstep for smooth acceleration from rest into peak speed, followed by cushioned follow-through
-        const p = swingT * swingT * swingT * (swingT * (swingT * 6.0 - 15.0) + 10.0);
         const alpha = ap.throwPowerRatio || 0.5;
+
+        // Kinematic Motion Profile:
+        // 1. Forward Acceleration Phase (0 <= swingT <= tRelease):
+        //    Starts smoothly from rest at cocked pose, accelerating continuously to peak velocity at tRelease (82% of swing).
+        // 2. Follow-Through & Deceleration Phase (swingT > tRelease):
+        //    Smooth ease-out deceleration from peak velocity to rest with zero jerk.
+        const tRelease = 0.82;
+        let p;
+        if (swingT <= tRelease) {
+          const u = swingT / tRelease; // u in [0, 1]
+          p = 2.0 * u * u * u - u * u * u * u; // Continuous monotonic acceleration (p'(0)=0, p'(1)=2.0)
+        } else {
+          const w = (swingT - tRelease) / (1.0 - tRelease); // w in [0, 1]
+          p = 1.0 + 0.08 * w * (2.0 - w); // Smooth cushioned overtravel and deceleration to rest
+        }
 
         let j2, j3, j4 = 0, j5, j6 = 0, tele;
 
@@ -1194,14 +1207,14 @@ export class BallInterceptor {
           j5 = cockJ[4] + (0.25 - cockJ[4]) * p;
           tele = cockTele + (0.75 - cockTele) * p;
         } else {
-          // Forward stroke travel is strictly proportional to alpha:
-          // alpha = 0.05 (short toss): Minimal forward push (Delta J2 = -0.06 rad (~3 deg), Delta J3 = +0.10 rad (~5 deg), tele = 0.04)
-          // alpha = 0.50 (medium pitch): Moderate stroke (Delta J2 = -0.28 rad (~16 deg), Delta J3 = +0.50 rad (~28 deg), tele = 0.40)
-          // alpha = 1.00 (power throw): Full power athletic whip (Delta J2 = -0.55 rad (~32 deg), Delta J3 = +1.00 rad (~57 deg), tele = 0.78)
-          const endJ2 = cockJ[1] - (0.05 + 0.50 * alpha);
-          const endJ3 = cockJ[2] + (0.08 + 0.95 * alpha);
-          const endJ5 = cockJ[4] - (0.04 + 0.42 * alpha);
-          const endTele = cockTele + 0.76 * alpha;
+          // Forward stroke travel is strictly proportional to required distance alpha:
+          // alpha = 0.06 (short toss): Minimal forward push (Delta J2 = -0.09 rad, Delta J3 = +0.16 rad, tele = +0.14m)
+          // alpha = 0.50 (medium pitch): Moderate stroke (Delta J2 = -0.32 rad, Delta J3 = +0.59 rad, tele = +0.46m)
+          // alpha = 1.00 (power throw): Full power athletic whip (Delta J2 = -0.58 rad, Delta J3 = +1.08 rad, tele = +0.82m)
+          const endJ2 = cockJ[1] - (0.06 + 0.52 * alpha);
+          const endJ3 = cockJ[2] + (0.10 + 0.98 * alpha);
+          const endJ5 = cockJ[4] - (0.05 + 0.44 * alpha);
+          const endTele = Math.min(0.85, cockTele + 0.10 + 0.72 * alpha);
 
           j2 = cockJ[1] + (endJ2 - cockJ[1]) * p;
           j3 = cockJ[2] + (endJ3 - cockJ[2]) * p;
@@ -1209,58 +1222,52 @@ export class BallInterceptor {
           tele = cockTele + (endTele - cockTele) * p;
         }
 
+        // Track instantaneous physical gripper velocity in 3D world space
+        const prevTcpPos = tcpPos.clone();
+
         robot.setJointAngles([j1, j2, j3, j4, j5, j6]);
         robot.setTelescope(tele);
         robot.group.updateMatrixWorld(true);
         robot.getTCPWorldPosition(tcpPos);
 
-        // Step 6: APEX RELEASE TOWARDS THE END OF SWING (at 88% forward extension)
-        if (swingT < 0.88) {
+        const vGripper = new THREE.Vector3().subVectors(tcpPos, prevTcpPos).divideScalar(Math.max(0.001, deltaTime));
+        ap.gripperVelocity = vGripper.clone();
+
+        // Step 6: APEX RELEASE AT PEAK EXTENSION (at tRelease = 82% of swing)
+        if (swingT < tRelease) {
+          // Jaws clamped firmly around ball during acceleration
           robot.setGripper(1.0);
           if (ap.heldBall && ap.heldBall.mesh) {
-            ap.heldBall.velocity.set(0, 0, 0);
+            ap.heldBall.velocity.copy(vGripper);
             ap.heldBall.mesh.position.copy(tcpPos);
           }
         } else if (ap.heldBall && ap.heldBall.mesh) {
-          // RELEASE BALL CLEANLY WITH BALLISTIC SPEED VECTOR RIGHT AT PEAK EXTENSION
+          // RELEASE BALL: Departing ball velocity and 3D trajectory are 100% mandated by the physical swing velocity of the gripper!
           robot.setGripper(0.0);
           this.audio.playPneumatic(false);
 
-          // Position ball cleanly ahead of gripper along throw vector
-          ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(ap.targetThrowDir, ap.heldBall.radius + 0.12);
-          ap.heldBall.mesh.position.y += 0.02;
+          // Position ball cleanly ahead of gripper along the exact physical velocity vector of the swing
+          const launchDir = vGripper.lengthSq() > 0.01 ? vGripper.clone().normalize() : ap.targetThrowDir;
+          ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(launchDir, ap.heldBall.radius + 0.04);
+          ap.heldBall.mesh.position.y += 0.01;
 
-          if (ap.throwMode === 'CENTER_STRIKE') {
-            const strikeSpeed = 7.2;
-            ap.heldBall.velocity.set(ap.targetThrowDir.x * strikeSpeed, 0.08, ap.targetThrowDir.z * strikeSpeed);
-            if (ap.centerTargetBall) ap.centerTargetBall.centerStuckTime = 0;
-          } else {
-            // Ballistic physics trajectory calculation: lands directly in the targeted arm's collection circle!
-            const targetPos = ap.targetThrowPos || ap.basePos;
-            const dH = Math.max(0.6, Math.hypot(targetPos.x - tcpPos.x, targetPos.z - tcpPos.z));
-            const tFlight = Math.max(0.55, 0.45 + 0.18 * dH);
-            const vHoriz = dH / tFlight;
-            const deltaY = targetPos.y - tcpPos.y;
-            const gMag = Math.abs(this.gravity || 3.8);
-            const vY = (deltaY + 0.5 * gMag * tFlight * tFlight) / tFlight;
-
-            ap.heldBall.velocity.set(ap.targetThrowDir.x * vHoriz, vY, ap.targetThrowDir.z * vHoriz);
-          }
+          // Ball inherits the exact physical velocity vector of the gripper swing
+          ap.heldBall.velocity.copy(vGripper);
 
           ap.heldBall.bounces = 0;
           ap.heldBall.stuckTime = 0;
           ap.heldBall.isHeld = false;
-          ap.heldBall.lastPushTime = now + 1400; // Launch immunity for 1.4s: ball cannot be targeted or re-grasped while in flight
+          ap.heldBall.lastPushTime = now + 1200; // Launch immunity for 1.2s while in ballistic flight
 
           if (this.audio && typeof this.audio.playArmSwat === 'function') {
-            this.audio.playArmSwat(0.9 + 0.7 * alpha);
+            this.audio.playArmSwat(Math.min(1.6, 0.5 + vGripper.length() * 0.22));
           }
           ap.ejectionsCount++;
           this.pushCount++;
           this.score += 100;
           ap.heldBall = null;
         } else {
-          // Step 7: FOLLOW-THROUGH (Gripper stays wide open as arm decelerates momentum to stroke end)
+          // Step 7: FOLLOW-THROUGH (Gripper stays wide open as arm decelerates smoothly to rest)
           robot.setGripper(0.0);
         }
 
