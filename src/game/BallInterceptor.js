@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 export class BallInterceptor {
   constructor(scene, robots, kinematicsList, audio) {
     this.scene = scene;
