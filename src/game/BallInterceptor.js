@@ -1084,13 +1084,13 @@ export class BallInterceptor {
 
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
-          ap.throwState = 'RELEASE';
-          const swingDuration = 0.24 + 0.12 * alpha; // Proportional swing duration
+          ap.throwState = 'SWING_THROW';
+          const swingDuration = 0.26 + 0.10 * alpha; // Proportional single forward swing duration
           ap.throwTimer = swingDuration;
           ap.swingDuration = swingDuration;
         }
-      } else if (ap.throwState === 'RELEASE') {
-        // Forward power pitch swing strictly along targetThrowDir plane
+      } else if (ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
+        // ONE SINGLE FLUID ATHLETIC FORWARD SWING strictly along targetThrowDir plane
         const localDir = ap.targetThrowDir.clone();
         const invRot = robot.group.quaternion.clone().invert();
         localDir.applyQuaternion(invRot);
@@ -1098,7 +1098,7 @@ export class BallInterceptor {
 
         const sDuration = ap.swingDuration || 0.30;
         const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / sDuration));
-        // Power whip acceleration curve peaking towards full forward extension
+        // Single monotonic forward power whip curve (0 -> 1 smoothly)
         const p = Math.sin(swingT * Math.PI * 0.5);
         const alpha = ap.throwPowerRatio || 0.5;
 
@@ -1111,7 +1111,7 @@ export class BallInterceptor {
           j5 = 0.75 + (0.25 - 0.75) * p;
           tele = 0.10 + 0.75 * p;
         } else {
-          // Swing forward extension and elevation proportional to distance
+          // Forward extension and elevation smoothly reaching peak at target azimuth
           const startJ2 = -0.20 + 0.15 * (1.0 - alpha);
           const startJ3 = -0.90 - 0.40 * alpha;
           const startJ5 = 0.68 + 0.20 * alpha;
@@ -1133,19 +1133,18 @@ export class BallInterceptor {
         robot.group.updateMatrixWorld(true);
         robot.getTCPWorldPosition(tcpPos);
 
-        // Keep ball firmly gripped until towards the end of the forward extension swing (swingT >= 0.95)
-        if (swingT < 0.95) {
+        // Ball is held through acceleration phase; released right at peak forward power (swingT >= 0.75)
+        if (swingT < 0.75) {
           robot.setGripper(1.0);
           if (ap.heldBall && ap.heldBall.mesh) {
             ap.heldBall.velocity.set(0, 0, 0);
             ap.heldBall.mesh.position.copy(tcpPos);
           }
         } else if (ap.heldBall && ap.heldBall.mesh) {
-          // RELEASE BALL AT MAXIMUM FORWARD EXTENSION PROPORTIONAL TO TARGET DISTANCE
-          robot.setGripper(0.0); // Snap open wide!
+          // SINGLE APEX RELEASE: Snap gripper wide open and apply ballistic trajectory
+          robot.setGripper(0.0);
           this.audio.playPneumatic(false);
 
-          // Position ball cleanly in front of TCP along throw direction
           ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(ap.targetThrowDir, ap.heldBall.radius + 0.14);
           ap.heldBall.mesh.position.y += 0.03;
 
@@ -1178,41 +1177,22 @@ export class BallInterceptor {
           this.pushCount++;
           this.score += 100;
           ap.heldBall = null;
+        } else {
+          // Post-release: Gripper stays open as arm glides naturally to finish the single forward stroke
+          robot.setGripper(0.0);
         }
 
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
-          ap.throwState = 'FOLLOWTHROUGH';
-          ap.throwTimer = 0.18;
-          ap.followDuration = 0.18;
-        }
-      } else if (ap.throwState === 'FOLLOWTHROUGH') {
-        // Smoothly decelerate and settle back toward ready posture
-        robot.setGripper(0.0);
-        const fDuration = ap.followDuration || 0.18;
-        const followT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / fDuration));
-        const alpha = ap.throwPowerRatio || 0.5;
+          // Seamless completion: Sync Cartesian IK anchors to final pose to prevent any snap/secondary swing
+          robot.getTCPWorldPosition(tcpPos);
+          ap.pursuitPos.copy(tcpPos);
+          ap.currentPos.copy(tcpPos);
+          ap.pursuitTarget.copy(tcpPos);
+          ap.pursuitVelocity.set(0, 0, 0);
+          robot.setTargetAngles([j1, j2, j3, j4, j5, j6]);
+          robot.setTargetTelescope(tele);
 
-        const localDir = ap.targetThrowDir.clone();
-        const invRot = robot.group.quaternion.clone().invert();
-        localDir.applyQuaternion(invRot);
-        const j1 = Math.atan2(localDir.x, localDir.z);
-
-        const endJ2 = -0.45 - 0.18 * alpha;
-        const endJ3 = 0.02 + 0.12 * alpha;
-        const endJ5 = 0.28 - 0.10 * alpha;
-        const endTele = 0.48 + 0.37 * alpha;
-
-        const j2 = endJ2 + (-0.45 - endJ2) * followT;
-        const j3 = endJ3 + (-0.55 - endJ3) * followT;
-        const j5 = endJ5 + (0.60 - endJ5) * followT;
-        const tele = endTele + (0.40 - endTele) * followT;
-
-        robot.setJointAngles([j1, j2, j3, 0, j5, 0]);
-        robot.setTelescope(tele);
-
-        ap.throwTimer -= deltaTime;
-        if (ap.throwTimer <= 0) {
           ap.heldBall = null;
           ap.throwBall = null;
           ap.centerTargetBall = null;
@@ -1278,8 +1258,8 @@ export class BallInterceptor {
           ap.wasDancing = false;
         }
 
-        // If arm is in WINDUP or RELEASE, the direct joint trajectory has already positioned the arm and held ball
-        if (ap.throwState === 'WINDUP' || ap.throwState === 'RELEASE') {
+        // If arm is in WINDUP or SWING_THROW, direct joint trajectory controls the arm
+        if (ap.throwState === 'WINDUP' || ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
           continue;
         }
 
