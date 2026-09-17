@@ -1002,52 +1002,81 @@ export class BallInterceptor {
           ap.throwState = 'IDLE';
         }
       } else if (ap.throwState === 'WINDUP') {
-        // Athletic continuous backward cocking arc
-        if (ap.heldBall && ap.heldBall.mesh) {
-          ap.heldBall.velocity.set(0, 0, 0);
-        }
-        robot.setGripper(1.0);
+        // 1. Compute Base Yaw (J1) locked directly onto targetThrowDir in robot local space
+        const localDir = ap.targetThrowDir.clone();
+        const invRot = robot.group.quaternion.clone().invert();
+        localDir.applyQuaternion(invRot);
+        const j1 = Math.atan2(localDir.x, localDir.z);
 
         const windT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / 0.35));
-        const smoothWindT = windT * windT * (3.0 - 2.0 * windT);
+        const p = windT * windT * (3.0 - 2.0 * windT);
+
+        let j2, j3, j4 = 0, j5, j6 = 0, tele;
 
         if (ap.throwMode === 'CENTER_STRIKE') {
-          const tgtPos = (ap.centerTargetBall && ap.centerTargetBall.mesh) ? ap.centerTargetBall.mesh.position : new THREE.Vector3(0, 0.065, 0);
-          const aimDir = new THREE.Vector3(tgtPos.x - ap.basePos.x, 0, tgtPos.z - ap.basePos.z).normalize();
-          ap.targetThrowDir.copy(aimDir);
-
-          const startPos = ap.graspStartPos || ap.basePos;
-          const endPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.28, 0)).addScaledVector(aimDir, -0.25);
-          ap.pursuitTarget.lerpVectors(startPos, endPos, smoothWindT);
+          // Precision low bowling windup along line of sight
+          j2 = -0.45 + (-0.30 - (-0.45)) * p;
+          j3 = -0.55 + (-0.85 - (-0.55)) * p;
+          j5 = 0.60 + (0.65 - 0.60) * p;
+          tele = 0.40 - 0.25 * p;
         } else {
-          // High athletic catapult windup arc
-          const startPos = ap.graspStartPos || ap.basePos;
-          const endPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.68, 0)).addScaledVector(ap.targetThrowDir, -0.28);
-          ap.pursuitTarget.lerpVectors(startPos, endPos, smoothWindT);
+          // High athletic catapult cocking arc directly along throw plane
+          j2 = -0.45 + (-0.10 - (-0.45)) * p;
+          j3 = -0.55 + (-1.25 - (-0.55)) * p;
+          j5 = 0.60 + (0.85 - 0.60) * p;
+          tele = 0.40 - 0.30 * p;
         }
+
+        robot.setJointAngles([j1, j2, j3, j4, j5, j6]);
+        robot.setTelescope(tele);
+        robot.group.updateMatrixWorld(true);
+        robot.getTCPWorldPosition(tcpPos);
+
+        if (ap.heldBall && ap.heldBall.mesh) {
+          ap.heldBall.velocity.set(0, 0, 0);
+          ap.heldBall.mesh.position.copy(tcpPos);
+        }
+        robot.setGripper(1.0);
 
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
           ap.throwState = 'RELEASE';
-          ap.throwTimer = 0.22;
+          ap.throwTimer = 0.24;
         }
       } else if (ap.throwState === 'RELEASE') {
-        // Forward power pitch swing along acceleration arc
-        if (ap.heldBall && ap.heldBall.mesh) {
-          ap.heldBall.velocity.set(0, 0, 0);
-        }
+        // Forward power pitch swing strictly along targetThrowDir plane
+        const localDir = ap.targetThrowDir.clone();
+        const invRot = robot.group.quaternion.clone().invert();
+        localDir.applyQuaternion(invRot);
+        const j1 = Math.atan2(localDir.x, localDir.z);
 
-        const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / 0.22));
-        const smoothSwingT = swingT * swingT; // Accelerating stroke
+        const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / 0.24));
+        const p = swingT * swingT; // Forward accelerating power whip
+
+        let j2, j3, j4 = 0, j5, j6 = 0, tele;
 
         if (ap.throwMode === 'CENTER_STRIKE') {
-          const windPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.28, 0)).addScaledVector(ap.targetThrowDir, -0.25);
-          const swingPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.065, 0)).addScaledVector(ap.targetThrowDir, 0.95);
-          ap.pursuitTarget.lerpVectors(windPos, swingPos, smoothSwingT);
+          // Low forward bowling stroke directly along target line
+          j2 = -0.30 + (-0.88 - (-0.30)) * p;
+          j3 = -0.85 + (-0.15 - (-0.85)) * p;
+          j5 = 0.65 + (0.35 - 0.65) * p;
+          tele = 0.15 + 0.65 * p;
         } else {
-          const windPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.68, 0)).addScaledVector(ap.targetThrowDir, -0.28);
-          const swingPos = ap.basePos.clone().add(new THREE.Vector3(0, 0.44, 0)).addScaledVector(ap.targetThrowDir, 1.05);
-          ap.pursuitTarget.lerpVectors(windPos, swingPos, smoothSwingT);
+          // High-power catapult launch whip forward directly along throw vector
+          j2 = -0.10 + (-0.90 - (-0.10)) * p;
+          j3 = -1.25 + (0.25 - (-1.25)) * p;
+          j5 = 0.85 + (-0.55 - 0.85) * p;
+          tele = 0.10 + 0.75 * p;
+        }
+
+        robot.setJointAngles([j1, j2, j3, j4, j5, j6]);
+        robot.setTelescope(tele);
+        robot.group.updateMatrixWorld(true);
+        robot.getTCPWorldPosition(tcpPos);
+
+        if (ap.heldBall && ap.heldBall.mesh) {
+          ap.heldBall.velocity.set(0, 0, 0);
+          ap.heldBall.mesh.position.copy(tcpPos);
         }
 
         // Release ball at peak forward acceleration point (throwTimer <= 0.05)
@@ -1056,26 +1085,13 @@ export class BallInterceptor {
           this.audio.playPneumatic(false);
 
           if (ap.throwMode === 'CENTER_STRIKE') {
-            const tgtPos = (ap.centerTargetBall && ap.centerTargetBall.mesh) ? ap.centerTargetBall.mesh.position : new THREE.Vector3(0, 0.065, 0);
-            const strikeVector = new THREE.Vector3(tgtPos.x - tcpPos.x, 0, tgtPos.z - tcpPos.z);
-            const strikeDist = strikeVector.length();
-            if (strikeDist > 0.001) strikeVector.normalize();
-            else strikeVector.copy(ap.targetThrowDir);
-
-            const strikeSpeed = 3.2;
-            ap.heldBall.mesh.position.set(tcpPos.x, 0.065, tcpPos.z);
-            ap.heldBall.velocity.set(strikeVector.x * strikeSpeed, 0.02, strikeVector.z * strikeSpeed);
-
+            const strikeSpeed = 3.4;
+            ap.heldBall.velocity.set(ap.targetThrowDir.x * strikeSpeed, 0.02, ap.targetThrowDir.z * strikeSpeed);
             if (ap.centerTargetBall) ap.centerTargetBall.centerStuckTime = 0;
           } else {
-            // Ballistic loft throw toward opponent base
-            const oppBase = this.armPursuits[ap.heldBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
-            const oppVector = new THREE.Vector3(oppBase.x - tcpPos.x, 0, oppBase.z - tcpPos.z);
-            if (oppVector.lengthSq() > 0.001) oppVector.normalize();
-            else oppVector.copy(ap.targetThrowDir);
-
-            const throwPower = 2.7;
-            ap.heldBall.velocity.set(oppVector.x * throwPower, 0.58, oppVector.z * throwPower);
+            // Ballistic loft throw DIRECTLY along targetThrowDir vector
+            const throwPower = 3.2;
+            ap.heldBall.velocity.set(ap.targetThrowDir.x * throwPower, 0.62, ap.targetThrowDir.z * throwPower);
           }
 
           ap.heldBall.bounces = 0;
@@ -1084,7 +1100,7 @@ export class BallInterceptor {
           ap.heldBall.lastPushTime = now + 400;
 
           if (this.audio && typeof this.audio.playArmSwat === 'function') {
-            this.audio.playArmSwat(1.1);
+            this.audio.playArmSwat(1.2);
           }
           ap.ejectionsCount++;
           this.pushCount++;
@@ -1172,11 +1188,16 @@ export class BallInterceptor {
           ap.wasDancing = false;
         }
 
-        // If arm is currently performing Grab & Throw, skip regular targeting pursuit
+        // If arm is in WINDUP or RELEASE, the direct joint trajectory has already positioned the arm and held ball
+        if (ap.throwState === 'WINDUP' || ap.throwState === 'RELEASE') {
+          continue;
+        }
+
+        // If arm is currently performing Grab / Carry waypoints, smooth tracking applies
         if (ap.throwState !== 'IDLE') {
           // Smooth tracking towards throw waypoints
-          const smoothTime = ap.throwState === 'RELEASE' ? 0.030 : 0.048;
-          const maxSpeed = ap.throwState === 'RELEASE' ? 9.5 : 7.2;
+          const smoothTime = 0.048;
+          const maxSpeed = 7.2;
 
           const omega = 2.0 / smoothTime;
           const x = omega * deltaTime;
