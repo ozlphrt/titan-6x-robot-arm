@@ -69,14 +69,14 @@ export class BallInterceptor {
       }
     ];
 
-    // High-Gloss Automotive Solid Finish Materials matching arm paints
+    // Premium Dense Rubbery Solid Finish Materials matching arm paints
     this.teamMaterials = this.teamThemes.map(theme => new THREE.MeshPhysicalMaterial({
       color: theme.hex,
-      metalness: 0.35,
-      roughness: 0.22,
-      clearcoat: 0.75,
-      clearcoatRoughness: 0.12,
-      envMapIntensity: 1.3
+      metalness: 0.12,
+      roughness: 0.36,
+      clearcoat: 0.40,
+      clearcoatRoughness: 0.22,
+      envMapIntensity: 1.1
     }));
 
     // Multi-Arm Pursuit & Defense States for all 4 Robot Arms
@@ -185,7 +185,8 @@ export class BallInterceptor {
 
     // Uniform spherical ball size (0.064m - 0.074m)
     const ballRadius = 0.064 + Math.random() * 0.010;
-    const baseRestitution = 0.74 + Math.random() * 0.04;
+    // Damped dense rubber elasticity (less hyper-bouncy, natural tactile settle)
+    const baseRestitution = 0.42 + Math.random() * 0.05;
     const mass = Math.pow(ballRadius / 0.070, 3) * 0.08;
 
     // Gentle vertical initial drop
@@ -304,51 +305,51 @@ export class BallInterceptor {
         // Integrate Position
         pos.addScaledVector(b.velocity, dt);
 
-        // Floor Contact & Elastic Bouncing (pos.y <= b.radius)
+        // Floor Contact & Damped Rubbery Bouncing (pos.y <= b.radius)
         if (pos.y <= b.radius) {
           pos.y = b.radius;
-          if (b.velocity.y < -0.10) {
-            b.velocity.y = -b.velocity.y * b.restitution;
-            b.velocity.x *= 0.97;
-            b.velocity.z *= 0.97;
+          if (b.velocity.y < -0.15) {
+            b.velocity.y = -b.velocity.y * (b.restitution * 0.80);
+            b.velocity.x *= 0.93;
+            b.velocity.z *= 0.93;
             b.bounces++;
 
-            if (Math.abs(b.velocity.y) > 0.8) {
+            if (Math.abs(b.velocity.y) > 0.6) {
               this.audio.playClick();
             }
           } else {
             b.velocity.y = 0;
-            b.velocity.x *= (1.0 - dt * 1.8);
-            b.velocity.z *= (1.0 - dt * 1.8);
+            b.velocity.x *= (1.0 - dt * 2.6);
+            b.velocity.z *= (1.0 - dt * 2.6);
           }
         }
 
-        // Arena Perimeter Wall Bounces
+        // Arena Perimeter Wall Bounces (Firm rubbery damping)
         if (pos.x < this.bounds.minX + b.radius) {
           pos.x = this.bounds.minX + b.radius;
-          b.velocity.x = Math.abs(b.velocity.x) * 0.85;
+          b.velocity.x = Math.abs(b.velocity.x) * 0.45;
         } else if (pos.x > this.bounds.maxX - b.radius) {
           pos.x = this.bounds.maxX - b.radius;
-          b.velocity.x = -Math.abs(b.velocity.x) * 0.85;
+          b.velocity.x = -Math.abs(b.velocity.x) * 0.45;
         }
 
         if (pos.z < this.bounds.minZ + b.radius) {
           pos.z = this.bounds.minZ + b.radius;
-          b.velocity.z = Math.abs(b.velocity.z) * 0.85;
+          b.velocity.z = Math.abs(b.velocity.z) * 0.45;
         } else if (pos.z > this.bounds.maxZ - b.radius) {
           pos.z = this.bounds.maxZ - b.radius;
-          b.velocity.z = -Math.abs(b.velocity.z) * 0.85;
+          b.velocity.z = -Math.abs(b.velocity.z) * 0.45;
         }
 
         // Ceiling bounce
         if (pos.y > this.bounds.maxY - b.radius) {
           pos.y = this.bounds.maxY - b.radius;
-          b.velocity.y = -Math.abs(b.velocity.y) * 0.70;
+          b.velocity.y = -Math.abs(b.velocity.y) * 0.40;
         }
 
         // Air drag
-        b.velocity.x *= (1.0 - dt * 0.10);
-        b.velocity.z *= (1.0 - dt * 0.10);
+        b.velocity.x *= (1.0 - dt * 0.20);
+        b.velocity.z *= (1.0 - dt * 0.20);
 
         // Overall speed clamp
         const currentSpeed = b.velocity.length();
@@ -408,10 +409,10 @@ export class BallInterceptor {
             // Normal relative speed
             const vNormal = vRelX * nx + vRelY * ny + vRelZ * nz;
 
-            // Only apply impulse if balls are moving toward each other
+            // Damped rubbery impulse between balls
             if (vNormal < 0) {
-              const restitution = Math.min(b1.restitution, b2.restitution) * 0.75;
-              const impulse = -(1.0 + restitution) * vNormal / (1.0 / b1.mass + 1.0 / b2.mass) * 0.80;
+              const restitution = Math.min(b1.restitution, b2.restitution) * 0.45;
+              const impulse = -(1.0 + restitution) * vNormal / (1.0 / b1.mass + 1.0 / b2.mass) * 0.65;
 
               b1.velocity.x += (impulse / b1.mass) * nx;
               b1.velocity.y += (impulse / b1.mass) * ny;
