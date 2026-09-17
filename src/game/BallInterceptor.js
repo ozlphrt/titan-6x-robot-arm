@@ -386,6 +386,67 @@ export class BallInterceptor {
           }
         }
 
+        // 1b. Robot Arm Solid Black Base Pedestal Collisions & Bounces (Impenetrable Physical Barrier)
+        const numArms = this.armPursuits.length;
+        for (let a = 0; a < numArms; a++) {
+          const basePos = this.armPursuits[a].basePos;
+          const dx = pos.x - basePos.x;
+          const dz = pos.z - basePos.z;
+          const hDist = Math.hypot(dx, dz);
+
+          // Check vertical zone of the robot arm base pedestal (0 to 0.58m)
+          if (pos.y <= 0.58) {
+            // Sculpted radial profile of the black base pedestal
+            let baseRadius = 0.355; // Ground mounting flange & bolt ring
+            if (pos.y > 0.07 && pos.y <= 0.22) {
+              baseRadius = 0.295; // Cast pedestal column
+            } else if (pos.y > 0.22 && pos.y <= 0.38) {
+              baseRadius = 0.260; // Turntable ring & housing
+            } else if (pos.y > 0.38) {
+              baseRadius = 0.235; // Shoulder yoke pivot
+            }
+
+            const minSolidDist = baseRadius + b.radius;
+
+            if (hDist < minSolidDist) {
+              // Exact outward normal vector
+              const nx = hDist > 0.0001 ? (dx / hDist) : 1.0;
+              const nz = hDist > 0.0001 ? (dz / hDist) : 0.0;
+
+              // Immediate positional separation: push ball completely outside the base
+              pos.x = basePos.x + nx * minSolidDist;
+              pos.z = basePos.z + nz * minSolidDist;
+
+              // Elastic velocity bounce off base cylinder
+              const vDotN = b.velocity.x * nx + b.velocity.z * nz;
+              if (vDotN < 0) {
+                const restitution = Math.max(0.60, b.restitution * 0.85);
+                const impulse = -(1.0 + restitution) * vDotN;
+                b.velocity.x += impulse * nx;
+                b.velocity.z += impulse * nz;
+
+                // Deflect outward slightly vertically if rolling against flange
+                if (pos.y < 0.10) {
+                  b.velocity.y = Math.max(b.velocity.y, Math.abs(vDotN) * 0.20);
+                }
+
+                b.bounces++;
+                if (Math.abs(vDotN) > 0.35) {
+                  this.audio.playClick();
+                }
+              }
+            }
+          } else if (pos.y <= 0.65 + b.radius && hDist < 0.24 + b.radius) {
+            // Landing on top of shoulder/turntable horizontal shelf
+            pos.y = 0.65 + b.radius;
+            if (b.velocity.y < -0.1) {
+              b.velocity.y = Math.abs(b.velocity.y) * 0.50;
+              b.bounces++;
+              this.audio.playClick();
+            }
+          }
+        }
+
         // Arena Perimeter Wall Bounces (Firm rubbery damping)
         if (pos.x < this.bounds.minX + b.radius) {
           pos.x = this.bounds.minX + b.radius;

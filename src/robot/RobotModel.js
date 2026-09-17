@@ -1025,12 +1025,14 @@ export class RobotModel {
   getArmColliders() {
     const colliders = [];
 
-    // 1. Base Pedestal (Ground to turntable)
+    // 1. Base Pedestal (Ground to turntable) - World Space
+    const baseWorld = new THREE.Vector3();
+    this.group.getWorldPosition(baseWorld);
     colliders.push({
       type: 'capsule',
-      p1: new THREE.Vector3(0, 0.02, 0),
-      p2: new THREE.Vector3(0, 0.22, 0),
-      radius: 0.32
+      p1: new THREE.Vector3(baseWorld.x, 0.02, baseWorld.z),
+      p2: new THREE.Vector3(baseWorld.x, 0.28, baseWorld.z),
+      radius: 0.355
     });
 
     // 2. Shoulder J2 Assembly
