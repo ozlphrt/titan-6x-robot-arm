@@ -1140,6 +1140,11 @@ class RobotApp {
             }
           }
         }
+
+        // Update Dynamic Floor Pie Chart HUDs under all 4 Robot Arms
+        if (stats.distributions) {
+          this.workcell.updateArmPieHUDs(stats.distributions);
+        }
       }
 
       // 0.5. Smooth Robotic Servo Motors (Joint-by-Joint Continuous Movement across all 4 arms)

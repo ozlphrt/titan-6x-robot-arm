@@ -1358,12 +1358,15 @@ export class BallInterceptor {
   }
 
   /**
-   * Returns comprehensive multi-arm territory statistics
+   * Returns exact real-time ball color/team distribution counts for each robot arm's defense circle
    */
-  getStats() {
-    // Count how many balls of each team are currently inside each arm's 1.35m perimeter circle
-    const territoryCounts = [0, 0, 0, 0];
-    const foreignCounts = [0, 0, 0, 0];
+  getArmBallDistribution() {
+    const distributions = [
+      { total: 0, counts: [0, 0, 0, 0] },
+      { total: 0, counts: [0, 0, 0, 0] },
+      { total: 0, counts: [0, 0, 0, 0] },
+      { total: 0, counts: [0, 0, 0, 0] }
+    ];
 
     for (let i = 0; i < this.balls.length; i++) {
       const b = this.balls[i];
@@ -1374,14 +1377,33 @@ export class BallInterceptor {
         const ap = this.armPursuits[k];
         const dist = Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z);
         if (dist <= 1.35) {
-          if (b.teamId === k) {
-            territoryCounts[k]++;
-          } else {
-            foreignCounts[k]++;
-          }
+          const tId = Math.max(0, Math.min(3, b.teamId ?? 0));
+          distributions[k].counts[tId]++;
+          distributions[k].total++;
         }
       }
     }
+
+    return distributions;
+  }
+
+  /**
+   * Returns comprehensive multi-arm territory statistics
+   */
+  getStats() {
+    const distributions = this.getArmBallDistribution();
+    const territoryCounts = [
+      distributions[0].counts[0],
+      distributions[1].counts[1],
+      distributions[2].counts[2],
+      distributions[3].counts[3]
+    ];
+    const foreignCounts = [
+      distributions[0].total - distributions[0].counts[0],
+      distributions[1].total - distributions[1].counts[1],
+      distributions[2].total - distributions[2].counts[2],
+      distributions[3].total - distributions[3].counts[3]
+    ];
 
     return {
       score: this.score,
@@ -1391,6 +1413,7 @@ export class BallInterceptor {
       activeBalls: this.balls.length,
       territoryCounts,
       foreignCounts,
+      distributions,
       armPursuits: this.armPursuits
     };
   }
