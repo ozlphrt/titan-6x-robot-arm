@@ -112,7 +112,10 @@ export class BallInterceptor {
         currentAngleOffset: 0,
         currentWristRoll: 0,
         currentWristPitch: 0,
-        currentYOffset: 0
+        currentYOffset: 0,
+        isDancing: false,
+        danceTimer: 0,
+        wasDancing: false
       };
     });
 
@@ -1083,6 +1086,8 @@ export class BallInterceptor {
     let primaryTargetBall = null;
 
     if (this.enabled) {
+      const distributions = this.getArmBallDistribution();
+
       for (let k = 0; k < this.armPursuits.length; k++) {
         const ap = this.armPursuits[k];
         const armTeam = ap.teamId;
@@ -1091,6 +1096,42 @@ export class BallInterceptor {
         const tcpPos = new THREE.Vector3();
         robot.getTCPWorldPosition(tcpPos);
         robot.group.getWorldPosition(ap.basePos);
+
+        // --- VICTORY CONDITION CHECK ---
+        // All own balls are gathered inside this circle AND zero foreign balls
+        const totalOwnBalls = this.balls.filter(b => b.teamId === armTeam).length;
+        const ownInCircle = distributions[k]?.counts[armTeam] || 0;
+        const foreignInCircle = (distributions[k]?.total || 0) - ownInCircle;
+        const isComplete = (totalOwnBalls > 0 && ownInCircle === totalOwnBalls && foreignInCircle === 0);
+
+        ap.isDancing = isComplete;
+
+        if (isComplete) {
+          ap.danceTimer = (ap.danceTimer || 0) + deltaTime;
+          if (!ap.wasDancing) {
+            ap.wasDancing = true;
+            if (this.audio && typeof this.audio.playVictoryFanfare === 'function') {
+              this.audio.playVictoryFanfare();
+            }
+          }
+
+          // --- VICTORY CELEBRATION DANCE ANIMATION ---
+          const t = ap.danceTimer;
+          const baseDirYaw = Math.atan2(-ap.basePos.x, -ap.basePos.z);
+          const j1 = baseDirYaw + Math.sin(t * 4.5) * 0.45; // Upbeat base sway
+          const j2 = -0.38 + Math.sin(t * 9.0) * 0.32;   // Shoulder bounce
+          const j3 = 0.68 + Math.cos(t * 9.0) * 0.35;    // Elbow groove
+          const j4 = Math.sin(t * 6.0) * 1.6;            // Forearm wave
+          const j5 = -0.65 + Math.cos(t * 9.0) * 0.48;   // Wrist pitch flex
+          const j6 = Math.sin(t * 14.0) * 4.2;           // Flange celebration spin
+
+          robot.setTargetAngles([j1, j2, j3, j4, j5, j6]);
+          robot.setGripper(0.5 + 0.5 * Math.sin(t * 16.0)); // Gripper celebration claps!
+          continue;
+        } else {
+          ap.danceTimer = 0;
+          ap.wasDancing = false;
+        }
 
         // If arm is currently performing Grab & Throw, skip regular targeting pursuit
         if (ap.throwState !== 'IDLE') {
@@ -1405,6 +1446,13 @@ export class BallInterceptor {
       distributions[3].total - distributions[3].counts[3]
     ];
 
+    const victoryStates = [
+      this.armPursuits[0]?.isDancing || false,
+      this.armPursuits[1]?.isDancing || false,
+      this.armPursuits[2]?.isDancing || false,
+      this.armPursuits[3]?.isDancing || false
+    ];
+
     return {
       score: this.score,
       pushCount: this.pushCount,
@@ -1413,6 +1461,7 @@ export class BallInterceptor {
       activeBalls: this.balls.length,
       territoryCounts,
       foreignCounts,
+      victoryStates,
       distributions,
       armPursuits: this.armPursuits
     };

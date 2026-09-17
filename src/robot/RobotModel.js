@@ -1150,12 +1150,13 @@ export class RobotModel {
   /**
    * Updates the rear Dot Matrix display with the number of balls held inside this arm's circle
    */
-  updateDisplay(ownCount = 0, foreignCount = 0) {
-    if (this.lastDisplayedOwn === ownCount && this.lastDisplayedForeign === foreignCount) {
+  updateDisplay(ownCount = 0, foreignCount = 0, isVictory = false) {
+    if (this.lastDisplayedOwn === ownCount && this.lastDisplayedForeign === foreignCount && this.lastDisplayedVictory === isVictory) {
       return;
     }
     this.lastDisplayedOwn = ownCount;
     this.lastDisplayedForeign = foreignCount;
+    this.lastDisplayedVictory = isVictory;
 
     const ctx = this.displayCtx;
     if (!ctx) return;
@@ -1165,7 +1166,7 @@ export class RobotModel {
     const colors = this.getDisplayThemeColors();
 
     // 1. Dark Smoked Industrial Glass Screen Background
-    ctx.fillStyle = colors.bg;
+    ctx.fillStyle = isVictory ? '#0f1710' : colors.bg;
     ctx.fillRect(0, 0, w, h);
 
     // Subtle CRT / scanline phosphor grid
@@ -1175,11 +1176,11 @@ export class RobotModel {
     }
 
     // Top Header
-    ctx.fillStyle = colors.text;
+    ctx.fillStyle = isVictory ? '#ffea00' : colors.text;
     ctx.font = 'bold 12px "Chakra Petch", "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText('BALLS IN CIRCLE', w / 2, 8);
+    ctx.fillText(isVictory ? '★ VICTORY! ★' : 'BALLS IN CIRCLE', w / 2, 8);
 
     // Format 2-digit number (00 - 99)
     const countClamped = Math.max(0, Math.min(99, ownCount));
@@ -1208,6 +1209,13 @@ export class RobotModel {
 
         let isLit = false;
 
+        if (isVictory) {
+          // Full celebratory victory matrix border & digits
+          if (r === 0 || r === 16 || c === 0 || c === 27) {
+            isLit = true;
+          }
+        }
+
         // Render big 5x7 digits scaled across center (rows 1..13)
         if (r >= 1 && r <= 13) {
           const fontRow = Math.floor((r - 1) / 1.86); // 0..6
@@ -1229,19 +1237,19 @@ export class RobotModel {
         // Bottom status LED meter bar (row 15)
         if (r === 15 && c >= 2 && c <= 25) {
           const barIdx = c - 2; // 0..23
-          const fillCount = Math.min(24, Math.ceil((countClamped / 20) * 24));
+          const fillCount = isVictory ? 24 : Math.min(24, Math.ceil((countClamped / 20) * 24));
           if (barIdx < fillCount) isLit = true;
         }
 
         if (isLit) {
           // Glow Halo
-          ctx.fillStyle = colors.glow;
+          ctx.fillStyle = isVictory ? 'rgba(255, 234, 0, 0.55)' : colors.glow;
           ctx.beginPath();
           ctx.arc(cx, cy, dotR * 2.2, 0, Math.PI * 2);
           ctx.fill();
 
           // Bright Core LED Diode
-          ctx.fillStyle = colors.ledOn;
+          ctx.fillStyle = isVictory ? '#ffea00' : colors.ledOn;
           ctx.beginPath();
           ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
           ctx.fill();
@@ -1261,8 +1269,13 @@ export class RobotModel {
       }
     }
 
-    // Bottom warning label if any opponent ball is intruding
-    if (foreignCount > 0) {
+    // Bottom label: victory text or intruder alert
+    if (isVictory) {
+      ctx.fillStyle = '#ffea00';
+      ctx.font = 'bold 10px "Chakra Petch", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('★ 100% SECURED ★', w / 2, h - 3);
+    } else if (foreignCount > 0) {
       ctx.fillStyle = '#ff1744';
       ctx.font = 'bold 10px "Chakra Petch", monospace';
       ctx.textAlign = 'center';

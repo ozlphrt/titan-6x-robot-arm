@@ -1136,14 +1136,15 @@ class RobotApp {
             if (this.robots[t] && typeof this.robots[t].updateDisplay === 'function') {
               const ownCount = stats.territoryCounts[t] || 0;
               const foreignCount = stats.foreignCounts ? (stats.foreignCounts[t] || 0) : 0;
-              this.robots[t].updateDisplay(ownCount, foreignCount);
+              const isVictory = stats.victoryStates ? stats.victoryStates[t] : false;
+              this.robots[t].updateDisplay(ownCount, foreignCount, isVictory);
             }
           }
         }
 
-        // Update Dynamic Floor Pie Chart HUDs under all 4 Robot Arms
+        // Update Dynamic Floor Progress Bar HUDs under all 4 Robot Arms
         if (stats.distributions) {
-          this.workcell.updateArmPieHUDs(stats.distributions);
+          this.workcell.updateArmPieHUDs(stats.distributions, null, stats.victoryStates);
         }
       }
 

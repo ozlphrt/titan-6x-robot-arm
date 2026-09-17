@@ -579,4 +579,30 @@ export class AudioEngine {
       osc.stop(this.ctx.currentTime + idx * 0.07 + 0.25);
     });
   }
+
+  // Celebratory Victory Fanfare Arpeggio
+  playVictoryFanfare() {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+
+    const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51]; // C5, E5, G5, C6, E6
+    notes.forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.08);
+
+      gain.gain.setValueAtTime(0, this.ctx.currentTime + idx * 0.08);
+      gain.gain.linearRampToValueAtTime(0.040, this.ctx.currentTime + idx * 0.08 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0008, this.ctx.currentTime + idx * 0.08 + 0.35);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain || this.ctx.destination);
+
+      osc.start(this.ctx.currentTime + idx * 0.08);
+      osc.stop(this.ctx.currentTime + idx * 0.08 + 0.38);
+    });
+  }
 }
