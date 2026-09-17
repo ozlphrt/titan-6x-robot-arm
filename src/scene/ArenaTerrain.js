@@ -12,7 +12,7 @@ import * as THREE from 'three';
 export function evaluateArenaTerrain(x, z) {
   const r = Math.hypot(x, z);
   const domeRadius = 1.15;
-  const domeHeight = 0.062;
+  const domeHeight = 0.096; // 9.6cm high-convexity center dome (was 6.2cm)
 
   let yDome = 0;
   let gradDomeX = 0;
@@ -29,9 +29,9 @@ export function evaluateArenaTerrain(x, z) {
   }
 
   // 4 Cardinal Corridor Ridges (+X, -X, +Z, -Z) between adjacent arm base circles
-  const ridgeWidth = 0.88;  // Half-width of corridor ridge (covers neutral gap between circles)
-  const ridgeHeight = 0.052; // Height of the ridge crest
-  const ridgeReach = 2.45;  // Reaches past the outer arm perimeter
+  const ridgeWidth = 0.92;   // Half-width of corridor ridge (covers neutral gap between circles)
+  const ridgeHeight = 0.088; // 8.8cm height of the ridge crest (was 5.2cm)
+  const ridgeReach = 2.75;   // Reaches all the way to the outer perimeter wall (was 2.45m)
 
   const absZ = Math.abs(z);
   const absX = Math.abs(x);
@@ -90,7 +90,7 @@ export function evaluateArenaTerrain(x, z) {
     gradRidgeZZ = ridgeHeight * crossProfile * longSlope;
   }
 
-  // Smooth composite union
+  // Smooth composite union of dome and corridor ridges
   let y = yDome;
   let gx = gradDomeX;
   let gz = gradDomeZ;
@@ -106,7 +106,7 @@ export function evaluateArenaTerrain(x, z) {
     gz = gradRidgeZZ;
   }
 
-  // Level Arm Base Sanctuaries: smoothly fade elevation inside each arm's station circle
+  // Level Arm Base Sanctuaries: smoothly fade central elevation inside each arm's station circle
   const dArmAlpha = Math.hypot(x - 1.4, z - (-1.4));
   const dArmBeta  = Math.hypot(x - (-1.4), z - (-1.4));
   const dArmGamma = Math.hypot(x - (-1.4), z - 1.4);
@@ -119,6 +119,52 @@ export function evaluateArenaTerrain(x, z) {
     y *= smoothFade;
     gx *= smoothFade;
     gz *= smoothFade;
+  }
+
+  // 3. 4 Outer Corner Convex Banking Ramps (Redirects trapped corner balls radially inward to arm base)
+  const cornerStations = [
+    { bx: 1.4, bz: -1.4, cx: 2.75, cz: -2.75 },  // Alpha (NE)
+    { bx: -1.4, bz: -1.4, cx: -2.75, cz: -2.75 }, // Beta (NW)
+    { bx: -1.4, bz: 1.4, cx: -2.75, cz: 2.75 },  // Gamma (SW)
+    { bx: 1.4, bz: 1.4, cx: 2.75, cz: 2.75 }     // Delta (SE)
+  ];
+
+  const cornerMaxHeight = 0.048; // Stays flush / below the 0.05m perimeter base curb rails
+  const rCornerStart = 1.38;     // Strictly outside the 1.35m circle track rails (does not block circle rails)
+  const rCornerEnd = 1.95;       // Apex elevation at corner vertex
+
+  let yCorner = 0;
+  let gradCornerX = 0;
+  let gradCornerZ = 0;
+
+  for (let k = 0; k < 4; k++) {
+    const cs = cornerStations[k];
+    const dx = x - cs.bx;
+    const dz = z - cs.bz;
+
+    // Must be in the outer quadrant facing the corner (behind the arm base)
+    if (dx * Math.sign(cs.cx) > 0 && dz * Math.sign(cs.cz) > 0) {
+      const d = Math.hypot(dx, dz);
+      if (d > rCornerStart) {
+        const t = Math.min(1.0, (d - rCornerStart) / (rCornerEnd - rCornerStart));
+        // Smooth progressive rise towards the corner vertex
+        const profile = Math.pow((1 - Math.cos(Math.PI * t)) / 2, 1.15);
+        const slopeMag = (Math.PI / (2 * (rCornerEnd - rCornerStart))) * Math.sin(Math.PI * t) * 1.15;
+
+        const curY = cornerMaxHeight * profile;
+        if (curY > yCorner) {
+          yCorner = curY;
+          gradCornerX = cornerMaxHeight * slopeMag * (dx / d);
+          gradCornerZ = cornerMaxHeight * slopeMag * (dz / d);
+        }
+      }
+    }
+  }
+
+  if (yCorner > y) {
+    y = yCorner;
+    gx = gradCornerX;
+    gz = gradCornerZ;
   }
 
   const nLen = Math.hypot(gx, 1.0, gz);

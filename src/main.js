@@ -36,14 +36,14 @@ class RobotApp {
     this.scene.background = new THREE.Color(0xf1f5f9);
     this.scene.fog = new THREE.FogExp2(0xf1f5f9, 0.05);
 
-    // 2. Camera (Slightly zoomed out to frame the entire 4-station arena)
+    // 2. Camera (Framed nicely to view the full 4-station arena & containment walls)
     this.camera = new THREE.PerspectiveCamera(
       45,
       window.innerWidth / window.innerHeight,
       0.1,
       60
     );
-    this.camera.position.set(2.8, 2.3, 2.8);
+    this.camera.position.set(4.2, 3.2, 4.2);
 
     // 3. Renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -60,9 +60,9 @@ class RobotApp {
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
     this.controls.maxPolarAngle = Math.PI / 2 + 0.02; // Prevent camera going below floor
-    this.controls.minDistance = 0.4;
-    this.controls.maxDistance = 8.0;
-    this.controls.target.set(0, 0.40, 0);
+    this.controls.minDistance = 0.5;
+    this.controls.maxDistance = 15.0;
+    this.controls.target.set(0, 0.35, 0);
     this.controls.autoRotate = true;
     this.controls.autoRotateSpeed = 1.0;
 
@@ -316,6 +316,23 @@ class RobotApp {
     if (quickTele) {
       quickTele.addEventListener('click', () => {
         document.getElementById('btn-step-telescope')?.click();
+      });
+    }
+
+    // Audio Autoplay Unlock Banner Click
+    const audioBanner = document.getElementById('audio-unlock-banner');
+    if (audioBanner) {
+      audioBanner.addEventListener('click', () => {
+        this.audio.init();
+        if (this.audio.ctx && this.audio.ctx.state === 'suspended') {
+          this.audio.ctx.resume().then(() => {
+            this.audio.updateUnlockUI();
+            this.audio.playClick();
+          }).catch(() => {});
+        } else {
+          this.audio.updateUnlockUI();
+          this.audio.playClick();
+        }
       });
     }
   }
@@ -786,11 +803,11 @@ class RobotApp {
   bindCameraButtons() {
     const camButtons = document.querySelectorAll('.dock-btn[data-cam]');
     const cameraTargets = {
-      iso: { pos: new THREE.Vector3(1.5, 1.2, 1.5), look: new THREE.Vector3(0, 0.45, 0) },
-      orbit: { pos: new THREE.Vector3(1.6, 1.1, 1.6), look: new THREE.Vector3(0, 0.45, 0) },
-      top: { pos: new THREE.Vector3(0.01, 2.2, 0.01), look: new THREE.Vector3(0, 0, 0) },
-      front: { pos: new THREE.Vector3(0, 0.75, 1.6), look: new THREE.Vector3(0, 0.45, 0) },
-      side: { pos: new THREE.Vector3(1.6, 0.75, 0), look: new THREE.Vector3(0, 0.45, 0) },
+      iso: { pos: new THREE.Vector3(4.2, 3.2, 4.2), look: new THREE.Vector3(0, 0.35, 0) },
+      orbit: { pos: new THREE.Vector3(4.2, 3.2, 4.2), look: new THREE.Vector3(0, 0.35, 0) },
+      top: { pos: new THREE.Vector3(0.01, 5.8, 0.01), look: new THREE.Vector3(0, 0, 0) },
+      front: { pos: new THREE.Vector3(0, 2.5, 4.8), look: new THREE.Vector3(0, 0.35, 0) },
+      side: { pos: new THREE.Vector3(4.8, 2.5, 0), look: new THREE.Vector3(0, 0.35, 0) },
       tcp: { pos: null, look: null }
     };
 
@@ -804,9 +821,9 @@ class RobotApp {
 
         if (preset === 'orbit') {
           this.controls.autoRotate = true;
-          this.controls.autoRotateSpeed = 2.0;
-          this.controls.target.set(0, 0.45, 0);
-          this.camera.position.set(1.6, 1.1, 1.6);
+          this.controls.autoRotateSpeed = 1.2;
+          this.controls.target.set(0, 0.35, 0);
+          this.camera.position.set(4.2, 3.2, 4.2);
         } else {
           this.controls.autoRotate = false;
           if (preset !== 'tcp') {
@@ -846,6 +863,15 @@ class RobotApp {
       shadowBtn.classList.toggle('active', active);
       this.workcell.toggleShadows(active);
       this.robot.setShadows(active);
+      this.audio.playClick();
+    });
+
+    // Safety Walls
+    const wallsBtn = document.getElementById('btn-toggle-walls');
+    wallsBtn?.addEventListener('click', () => {
+      const active = !wallsBtn.classList.contains('active');
+      wallsBtn.classList.toggle('active', active);
+      this.workcell.toggleWalls(active);
       this.audio.playClick();
     });
 

@@ -22,15 +22,15 @@ export class BallInterceptor {
     // Gravity constant (m/s^2) - gentle, floaty, pleasant industrial simulation
     this.gravity = -3.8;
 
-    // Arena boundary limits (3D bounding envelope covering all 4 quad stations)
+    // Arena boundary limits (Tangent to outer edge of all 4 arm circles: base ±1.40 + radius 1.35 = ±2.75m)
     this.bounds = {
-      minX: -2.35, maxX: 2.35,
+      minX: -2.75, maxX: 2.75,
       minY: 0.0, maxY: 2.4,
-      minZ: -2.35, maxZ: 2.35
+      minZ: -2.75, maxZ: 2.75
     };
 
-    // The reach zone the robot arms actively defend (extended reach envelope)
-    this.maxDefenseRadius = 1.65;
+    // The reach zone the robot arms actively defend (extended reach envelope with longer telescoping forearm)
+    this.maxDefenseRadius = 1.85;
     this.minWorkspaceRadius = 0.18;
 
     this.score = 0;
@@ -291,6 +291,64 @@ export class BallInterceptor {
   }
 
   /**
+   * Creates an energetic holographic impact ripple and spark burst on the perimeter safety wall
+   */
+  createWallImpactEffect(pos, normal, color) {
+    if (!this.particlesGroup) return;
+
+    // Glowing impact ring on the glass wall surface
+    const ringGeo = new THREE.RingGeometry(0.04, 0.16, 24);
+    if (Math.abs(normal.x) > 0.5) {
+      ringGeo.rotateY(Math.PI / 2);
+    }
+
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: color || 0x00f0ff,
+      transparent: true,
+      opacity: 0.90,
+      side: THREE.DoubleSide
+    });
+
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.position.copy(pos);
+    ringMesh.position.addScaledVector(normal, 0.012); // Slightly offset in front of glass to prevent z-fighting
+
+    this.particlesGroup.add(ringMesh);
+    this.particles.push({
+      mesh: ringMesh,
+      vel: new THREE.Vector3(0, 0, 0),
+      isRing: true,
+      life: 0.45,
+      decay: 3.2
+    });
+
+    // 4 directional surface spark particles radiating outward along the wall plane
+    const sparkGeo = new THREE.SphereGeometry(0.01, 6, 6);
+    const sparkMat = new THREE.MeshBasicMaterial({ color: color || 0x00f0ff, transparent: true, opacity: 0.9 });
+    const count = 4;
+    for (let i = 0; i < count; i++) {
+      const pMesh = new THREE.Mesh(sparkGeo, sparkMat.clone());
+      pMesh.position.copy(pos).addScaledVector(normal, 0.015);
+
+      const angle = (i / count) * Math.PI * 2 + Math.random() * 0.4;
+      let vx = 0, vy = Math.sin(angle) * (0.6 + Math.random() * 0.6), vz = 0;
+      if (Math.abs(normal.x) > 0.5) {
+        vz = Math.cos(angle) * (0.6 + Math.random() * 0.6);
+      } else {
+        vx = Math.cos(angle) * (0.6 + Math.random() * 0.6);
+      }
+
+      this.particlesGroup.add(pMesh);
+      this.particles.push({
+        mesh: pMesh,
+        vel: new THREE.Vector3(vx, vy, vz),
+        life: 0.4,
+        decay: 3.0
+      });
+    }
+  }
+
+  /**
    * Returns precise floor elevation, surface normal, and slope gradients across the arena,
    * including the high-convexity center dome and inter-station corridor ridges.
    */
@@ -328,12 +386,12 @@ export class BallInterceptor {
         const floor = this.getFloorInfo(pos.x, pos.z);
         const contactY = floor.y + b.radius;
 
-        // Active Gravitational Downhill Roll Acceleration on Central Dome & Corridor Ridges:
-        // Automatically prevents any balls from getting stuck in center or inter-arm dead-zones!
+        // Active Gravitational Downhill Roll Acceleration on Central Dome, Corridor Ridges, & Corner Ramps:
+        // Automatically rolls any balls from center, neutral corridors, and outer corner banks straight into circles!
         if (floor.isElevated) {
           const gMag = Math.abs(this.gravity);
-          const aX = -gMag * floor.gradX * 1.85;
-          const aZ = -gMag * floor.gradZ * 1.85;
+          const aX = -gMag * floor.gradX * 2.65;
+          const aZ = -gMag * floor.gradZ * 2.65;
           b.velocity.x += aX * dt;
           b.velocity.z += aZ * dt;
         }
@@ -412,21 +470,41 @@ export class BallInterceptor {
           }
         }
 
-        // Arena Perimeter Wall Bounces (Firm dead-cushion rubber damping)
+        // Arena Perimeter Wall Bounces (Firm dead-cushion rubber damping & dynamic holographic wall flash)
         if (pos.x < this.bounds.minX + b.radius) {
           pos.x = this.bounds.minX + b.radius;
-          b.velocity.x = Math.abs(b.velocity.x) * 0.16;
+          const hitSpeed = Math.abs(b.velocity.x);
+          b.velocity.x = hitSpeed * 0.16;
+          if (hitSpeed > 0.3) {
+            this.createWallImpactEffect(pos, new THREE.Vector3(1, 0, 0), b.color);
+            if (hitSpeed > 1.2) this.audio.playBallBounce(Math.min(1.0, hitSpeed / 3.0));
+          }
         } else if (pos.x > this.bounds.maxX - b.radius) {
           pos.x = this.bounds.maxX - b.radius;
-          b.velocity.x = -Math.abs(b.velocity.x) * 0.16;
+          const hitSpeed = Math.abs(b.velocity.x);
+          b.velocity.x = -hitSpeed * 0.16;
+          if (hitSpeed > 0.3) {
+            this.createWallImpactEffect(pos, new THREE.Vector3(-1, 0, 0), b.color);
+            if (hitSpeed > 1.2) this.audio.playBallBounce(Math.min(1.0, hitSpeed / 3.0));
+          }
         }
 
         if (pos.z < this.bounds.minZ + b.radius) {
           pos.z = this.bounds.minZ + b.radius;
-          b.velocity.z = Math.abs(b.velocity.z) * 0.16;
+          const hitSpeed = Math.abs(b.velocity.z);
+          b.velocity.z = hitSpeed * 0.16;
+          if (hitSpeed > 0.3) {
+            this.createWallImpactEffect(pos, new THREE.Vector3(0, 0, 1), b.color);
+            if (hitSpeed > 1.2) this.audio.playBallBounce(Math.min(1.0, hitSpeed / 3.0));
+          }
         } else if (pos.z > this.bounds.maxZ - b.radius) {
           pos.z = this.bounds.maxZ - b.radius;
-          b.velocity.z = -Math.abs(b.velocity.z) * 0.16;
+          const hitSpeed = Math.abs(b.velocity.z);
+          b.velocity.z = -hitSpeed * 0.16;
+          if (hitSpeed > 0.3) {
+            this.createWallImpactEffect(pos, new THREE.Vector3(0, 0, -1), b.color);
+            if (hitSpeed > 1.2) this.audio.playBallBounce(Math.min(1.0, hitSpeed / 3.0));
+          }
         }
 
         // Ceiling bounce
@@ -593,13 +671,13 @@ export class BallInterceptor {
         // Strike target: drive TCP directly into and through the ball along attack vector
         const strikePos = simPos.clone().addScaledVector(rotatedAttackDir, ball.radius * 0.15);
         
-        // Clamp strikePos to robot's physical reach envelope (<= 1.35m)
+        // Clamp strikePos to robot's physical reach envelope (<= 1.85m with extended telescoping forearm)
         const sDx = strikePos.x - basePos.x;
         const sDz = strikePos.z - basePos.z;
         const sH = Math.hypot(sDx, sDz);
-        if (sH > 1.35) {
-          strikePos.x = basePos.x + (sDx / sH) * 1.35;
-          strikePos.z = basePos.z + (sDz / sH) * 1.35;
+        if (sH > 1.85) {
+          strikePos.x = basePos.x + (sDx / sH) * 1.85;
+          strikePos.z = basePos.z + (sDz / sH) * 1.85;
         }
         
         strikePos.y = Math.max(floorAtPos.y + ball.radius + yOffset, Math.min(simPos.y + yOffset, 0.40));
@@ -620,7 +698,7 @@ export class BallInterceptor {
     const fallbackPos = ball.mesh.position.clone().addScaledVector(ball.velocity, 0.10);
     const offset = new THREE.Vector3().subVectors(fallbackPos, basePos);
     const fbH = Math.hypot(offset.x, offset.z);
-    const safeH = Math.max(0.20, Math.min(1.35, fbH));
+    const safeH = Math.max(0.20, Math.min(1.85, fbH));
     if (fbH > 0.001) {
       fallbackPos.x = basePos.x + (offset.x / fbH) * safeH;
       fallbackPos.z = basePos.z + (offset.z / fbH) * safeH;
@@ -632,9 +710,9 @@ export class BallInterceptor {
     const sfDx = strikeFallback.x - basePos.x;
     const sfDz = strikeFallback.z - basePos.z;
     const sfH = Math.hypot(sfDx, sfDz);
-    if (sfH > 1.35) {
-      strikeFallback.x = basePos.x + (sfDx / sfH) * 1.35;
-      strikeFallback.z = basePos.z + (sfDz / sfH) * 1.35;
+    if (sfH > 1.85) {
+      strikeFallback.x = basePos.x + (sfDx / sfH) * 1.85;
+      strikeFallback.z = basePos.z + (sfDz / sfH) * 1.85;
     }
     strikeFallback.y = Math.max(fbFloor.y + ball.radius + yOffset, strikeFallback.y);
 
@@ -967,12 +1045,10 @@ export class BallInterceptor {
               ap.targetThrowPos = targetPos.clone();
               ap.targetThrowDir.set(targetPos.x - ap.basePos.x, 0, targetPos.z - ap.basePos.z).normalize();
             } else {
-              // Precise Target: Land directly inside the target arm's defense collection circle near its pedestal!
+              // Target: land directly at the opponent arm's base pedestal
               const targetArm = this.armPursuits[ap.heldBall.teamId];
               const targetBase = targetArm ? targetArm.basePos : new THREE.Vector3(0, 0, 0);
-              const dirFromCenter = targetBase.clone().normalize();
-              // Sweet spot: 0.35m in front of target arm base inside its home circle
-              const landingSpot = targetBase.clone().sub(dirFromCenter.clone().multiplyScalar(0.35));
+              const landingSpot = targetBase.clone();
               landingSpot.y = 0.065;
               ap.targetThrowPos = landingSpot;
               ap.targetThrowDir.set(landingSpot.x - ap.basePos.x, 0, landingSpot.z - ap.basePos.z).normalize();
@@ -993,6 +1069,44 @@ export class BallInterceptor {
             // Power ratio alpha strictly based on required ballistic launch speed
             const alpha = Math.max(0.05, Math.min(1.0, (launchSolution.speed - 1.2) / 3.4));
             ap.throwPowerRatio = alpha;
+
+            // PRE-COMPUTE THROW KEYFRAME JOINT ANGLES via IK (done once here at grasp time)
+            // This guarantees natural-looking poses without any guesswork.
+            // 1. COCKED / WINDUP world position: behind and above the shoulder, ready to throw
+            const perpDir = new THREE.Vector3(-ap.targetThrowDir.z, 0, ap.targetThrowDir.x);
+            const cockedWorldPos = ap.basePos.clone()
+              .sub(ap.targetThrowDir.clone().multiplyScalar(0.12 + 0.22 * alpha))
+              .addScaledVector(perpDir, (rIdx % 2 === 0 ? -1 : 1) * 0.06 * alpha);
+            cockedWorldPos.y = 0.52 + 0.24 * alpha;
+
+            // 2. RELEASE world position: forward and elevated along throw direction
+            const releaseWorldPos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.38 + 0.32 * alpha);
+            releaseWorldPos.y = 0.46 + 0.18 * alpha;
+
+            // 3. FOLLOW-THROUGH world position: continuing the arc past release
+            const followWorldPos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.48 + 0.30 * alpha);
+            followWorldPos.y = 0.22 + 0.06 * alpha;
+
+            // Solve IK for each keyframe and store the resulting joint angles
+            const savedAngles = [...robot.angles];
+            const savedTele = robot.getTelescope();
+
+            kinematics.solveIK(cockedWorldPos, 20, 0.001, true);
+            ap.throwCockedAngles = [...robot.angles];
+            ap.throwCockedTele = robot.getTelescope();
+
+            kinematics.solveIK(releaseWorldPos, 20, 0.001, true);
+            ap.throwReleaseAngles = [...robot.angles];
+            ap.throwReleaseTele = robot.getTelescope();
+
+            kinematics.solveIK(followWorldPos, 20, 0.001, true);
+            ap.throwFollowAngles = [...robot.angles];
+            ap.throwFollowTele = robot.getTelescope();
+
+            // Restore robot to the actual grasp pose
+            robot.setJointAngles(savedAngles);
+            robot.setTargetTelescope(savedTele);
+            robot.setTelescope(savedTele);
           } else if (ap.throwTimer > 0.85) {
             // CLUSTER JAM BREAKER: If obstructed or unable to clamp inside dense ball pile, execute dynamic kinetic swat/sweep
             const oppBase = this.armPursuits[ap.throwBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
@@ -1032,10 +1146,13 @@ export class BallInterceptor {
             ap.throwTimer = 0.55;
             ap.carryDuration = 0.55;
           } else {
-            // Step 3: Transition to smooth vertical LIFT (0.38s pure vertical rise)
-            ap.throwState = 'LIFT';
-            ap.liftDuration = 0.38;
-            ap.throwTimer = 0.38;
+            // Step 3: Capture current joint angles and go directly to WINDUP
+            ap.throwState = 'WINDUP';
+            ap.windupStartAngles = [...robot.angles];
+            ap.windupStartTele = robot.getTelescope();
+            const alpha = ap.throwPowerRatio || 0.5;
+            ap.windupDuration = 0.30 + 0.20 * alpha;
+            ap.throwTimer = ap.windupDuration;
           }
         }
       } else if (ap.throwState === 'LIFT') {
@@ -1060,11 +1177,12 @@ export class BallInterceptor {
 
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
-          // Step 4: Transition to COCK & WINDUP
+          // Step 4: Capture current angles and go to WINDUP in joint space
           ap.throwState = 'WINDUP';
-          ap.liftEndCartPos = liftPos.clone();
+          ap.windupStartAngles = [...robot.angles];
+          ap.windupStartTele = robot.getTelescope();
           const alpha = ap.throwPowerRatio || 0.5;
-          ap.windupDuration = 0.38 + 0.16 * alpha; // Graceful, athletic windup (0.38s to 0.54s)
+          ap.windupDuration = 0.30 + 0.20 * alpha;
           ap.throwTimer = ap.windupDuration;
         }
       } else if (ap.throwState === 'RETRIEVE_CARRY') {
@@ -1134,19 +1252,23 @@ export class BallInterceptor {
           ap.throwState = 'IDLE';
         }
       } else if (ap.throwState === 'WINDUP') {
-        // Step 4: COCK & TARGET (Cartesian backswing is strictly proportional to required power alpha)
+        // Step 4: Smooth joint-space interpolation from grasp pose → cocked/windup pose
         const alpha = ap.throwPowerRatio || 0.5;
-        const wDuration = ap.windupDuration || 0.42;
+        const wDuration = ap.windupDuration || 0.40;
         const windT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / wDuration));
+        // Quintic ease-in/out for smooth, zero-jerk pullback
         const p = windT * windT * windT * (windT * (windT * 6.0 - 15.0) + 10.0);
 
-        const liftPos = ap.liftEndCartPos || ap.graspStartPos.clone().add(new THREE.Vector3(0, 0.28, 0));
-        // Cocked position: behind the shoulder pivot, raised ready for athletic forward whip
-        const cockedPos = ap.basePos.clone().sub(ap.targetThrowDir.clone().multiplyScalar(0.06 + 0.20 * alpha));
-        cockedPos.y = 0.38 + 0.08 * alpha;
-
-        const pCart = liftPos.clone().lerp(cockedPos, p);
-        kinematics.solveIK(pCart, 16, 0.002, true);
+        const startAngles = ap.windupStartAngles || [...robot.angles];
+        const targetAngles = ap.throwCockedAngles;
+        if (targetAngles) {
+          const interpAngles = targetAngles.map((t, i) => startAngles[i] + (t - startAngles[i]) * p);
+          robot.setJointAngles(interpAngles);
+          // Interpolate telescope too
+          const startTele = ap.windupStartTele !== undefined ? ap.windupStartTele : robot.getTelescope();
+          const targetTele = ap.throwCockedTele !== undefined ? ap.throwCockedTele : robot.getTelescope();
+          robot.setTelescope(startTele + (targetTele - startTele) * p);
+        }
         robot.getTCPWorldPosition(tcpPos);
 
         if (ap.heldBall && ap.heldBall.mesh) {
@@ -1157,83 +1279,111 @@ export class BallInterceptor {
 
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
-          // Step 5: Transition to FORWARD SWING & APEX RELEASE
-          ap.throwState = 'SWING_THROW';
-          ap.cockedCartPos = cockedPos.clone();
-          // Release position: extended forward and upward along launch elevation angle
-          ap.releaseCartPos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.38 + 0.36 * alpha);
-          ap.releaseCartPos.y = 0.42 + 0.20 * alpha;
+          ap.cockedAngles = ap.throwCockedAngles ? [...ap.throwCockedAngles] : [...robot.angles];
+          ap.cockedTele = ap.throwCockedTele !== undefined ? ap.throwCockedTele : robot.getTelescope();
 
-          // Compute forward stroke length (meters) based on power alpha
-          const strokeDist = ap.cockedCartPos.distanceTo(ap.releaseCartPos);
-          // Since v_peak = 2.0 * strokeDist / T_accel => T_accel = (2.0 * strokeDist) / reqSpeed
-          const reqSpeed = Math.max(1.5, ap.requiredLaunchSpeed || 3.0);
-          const tAccel = Math.max(0.14, Math.min(0.38, (2.0 * strokeDist) / reqSpeed));
-          const swingDuration = tAccel / 0.82; // Release at 82% of swing duration
+          // Pre-compute swing timing based on required speed and angular distance
+          const releaseA = ap.throwReleaseAngles || ap.cockedAngles;
+          const angStroke = ap.cockedAngles.reduce((s, c, i) => s + Math.abs((releaseA[i] || c) - c), 0);
+          const reqSpeed = Math.max(2.0, ap.requiredLaunchSpeed || 3.5);
+          ap.swingDuration = Math.max(0.16, Math.min(0.42, angStroke / (reqSpeed * 1.2)));
 
-          ap.throwTimer = swingDuration;
-          ap.swingDuration = swingDuration;
+          // Brief pause at full windup before explosive snap
+          ap.throwState = 'COCK_PAUSE';
+          ap.throwTimer = 0.08 + 0.06 * alpha;
+          ap.prevSwingTcpPos = null;
         }
-      } else if (ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
-        // Step 5, 6, 7: FORWARD & UPWARD SWING in Cartesian world space
-        const sDuration = ap.swingDuration || 0.28;
-        const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / sDuration));
-        const tRelease = 0.82;
-
-        const strokeVec = new THREE.Vector3().subVectors(ap.releaseCartPos, ap.cockedCartPos);
-        const pCart = new THREE.Vector3();
-
-        // 1. Forward Acceleration Phase (0 <= swingT <= tRelease):
-        //    Starts smoothly from rest at cocked pose, accelerating continuously UP AND FORWARD to peak velocity at tRelease.
-        // 2. Follow-Through & Deceleration Phase (swingT > tRelease):
-        //    Smooth ease-out deceleration from peak velocity to rest with zero jerk.
-        if (swingT <= tRelease) {
-          const u = swingT / tRelease; // u in [0, 1]
-          const p = 2.0 * u * u * u - u * u * u * u; // Continuous monotonic acceleration (p'(0)=0, p'(1)=2.0)
-          pCart.copy(ap.cockedCartPos).addScaledVector(strokeVec, p);
-        } else {
-          const w = (swingT - tRelease) / (1.0 - tRelease); // w in [0, 1]
-          const pFollow = 1.0 + 0.08 * w * (2.0 - w); // Smooth cushioned overtravel and deceleration to rest
-          pCart.copy(ap.cockedCartPos).addScaledVector(strokeVec, pFollow);
-        }
-
-        // Track instantaneous physical gripper velocity in 3D world space
-        const prevTcpPos = tcpPos.clone();
-        kinematics.solveIK(pCart, 16, 0.002, true);
+      } else if (ap.throwState === 'COCK_PAUSE') {
+        // Step 4b: Hold at full windup — builds anticipation
+        if (ap.cockedAngles) robot.setJointAngles(ap.cockedAngles);
+        if (ap.cockedTele !== undefined) robot.setTelescope(ap.cockedTele);
         robot.getTCPWorldPosition(tcpPos);
 
+        if (ap.heldBall && ap.heldBall.mesh) {
+          ap.heldBall.velocity.set(0, 0, 0);
+          ap.heldBall.mesh.position.copy(tcpPos);
+        }
+        robot.setGripper(1.0);
+
+        ap.throwTimer -= deltaTime;
+        if (ap.throwTimer <= 0) {
+          ap.throwState = 'SWING_THROW';
+          ap.throwTimer = ap.swingDuration || 0.24;
+          ap.prevSwingTcpPos = null;
+        }
+      } else if (ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
+        // Step 5-7: JOINT-SPACE THROW — whip curve from cocked → release → follow-through
+        const sDuration = ap.swingDuration || 0.24;
+        const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / sDuration));
+        const tRelease = 0.80; // Release at 80% (peak velocity moment)
+
+        const cockedA = ap.cockedAngles;
+        const releaseA = ap.throwReleaseAngles || cockedA;
+        const followA = ap.throwFollowAngles || releaseA;
+        const cockedTele = ap.cockedTele || 0;
+        const releaseTele = ap.throwReleaseTele !== undefined ? ap.throwReleaseTele : cockedTele;
+        const followTele = ap.throwFollowTele !== undefined ? ap.throwFollowTele : releaseTele;
+
+        let swingAngles, swingTele;
+        if (swingT <= tRelease) {
+          // ACCELERATION: whip polynomial u^2.8 — stays slow then snaps explosively near release
+          const u = swingT / tRelease;
+          const wh = Math.pow(u, 2.8);
+          swingAngles = cockedA.map((c, i) => c + ((releaseA[i] ?? c) - c) * wh);
+          swingTele = cockedTele + (releaseTele - cockedTele) * wh;
+        } else {
+          // FOLLOW-THROUGH: ease-out deceleration past release
+          const w = (swingT - tRelease) / (1.0 - tRelease);
+          const ft = w * (2.0 - w); // ease-out
+          swingAngles = releaseA.map((r, i) => r + ((followA[i] ?? r) - r) * ft);
+          swingTele = releaseTele + (followTele - releaseTele) * ft;
+        }
+
+        // Apply directly (bypass servo damper — we own the trajectory)
+        robot.setJointAngles(swingAngles);
+        robot.setTelescope(swingTele);
+
+        // Track instantaneous TCP velocity for ball launch direction
+        const prevTcpPos = ap.prevSwingTcpPos ? ap.prevSwingTcpPos.clone() : tcpPos.clone();
+        robot.getTCPWorldPosition(tcpPos);
+        ap.prevSwingTcpPos = tcpPos.clone();
         const vGripper = new THREE.Vector3().subVectors(tcpPos, prevTcpPos).divideScalar(Math.max(0.001, deltaTime));
         ap.gripperVelocity = vGripper.clone();
 
-        // Step 6: APEX RELEASE AT PEAK EXTENSION (at tRelease = 82% of swing)
         if (swingT < tRelease) {
-          // Jaws clamped firmly around ball during acceleration
+          // Carry ball at gripper TCP during acceleration
           robot.setGripper(1.0);
           if (ap.heldBall && ap.heldBall.mesh) {
             ap.heldBall.velocity.copy(vGripper);
             ap.heldBall.mesh.position.copy(tcpPos);
           }
         } else if (ap.heldBall && ap.heldBall.mesh) {
-          // RELEASE BALL: Both gripper and departing ball move FORWARD and UP in 100% unison!
+          // RELEASE: gripper snaps open, ball departs with blended launch velocity
           robot.setGripper(0.0);
           this.audio.playPneumatic(false);
 
-          // Ball velocity matches the forward-and-upward ballistic solution
-          const finalLaunchVel = (ap.requiredLaunchVel && ap.requiredLaunchVel.lengthSq() > 0.5)
-            ? ap.requiredLaunchVel
-            : (vGripper.lengthSq() > 0.5 ? vGripper : ap.targetThrowDir.clone().multiplyScalar(3.0));
+          const ballisticVel = (ap.requiredLaunchVel && ap.requiredLaunchVel.lengthSq() > 0.5) ? ap.requiredLaunchVel : null;
+          let finalLaunchVel;
+          if (ballisticVel && vGripper.lengthSq() > 0.2) {
+            const gDir = vGripper.clone().normalize();
+            const bDir = ballisticVel.clone().normalize();
+            const blendDir = new THREE.Vector3().addVectors(gDir.multiplyScalar(0.35), bDir.multiplyScalar(0.65)).normalize();
+            finalLaunchVel = blendDir.multiplyScalar(ballisticVel.length());
+          } else if (ballisticVel) {
+            finalLaunchVel = ballisticVel;
+          } else if (vGripper.lengthSq() > 0.5) {
+            finalLaunchVel = vGripper;
+          } else {
+            finalLaunchVel = ap.targetThrowDir.clone().multiplyScalar(3.5);
+          }
 
           const launchDir = finalLaunchVel.clone().normalize();
           ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(launchDir, ap.heldBall.radius + 0.04);
-          ap.heldBall.mesh.position.y += 0.01;
-
-          // Ball departs with the exact calculated ballistic trajectory
           ap.heldBall.velocity.copy(finalLaunchVel);
-
           ap.heldBall.bounces = 0;
           ap.heldBall.stuckTime = 0;
           ap.heldBall.isHeld = false;
-          ap.heldBall.lastPushTime = now + 1200; // Launch immunity for 1.2s while in ballistic flight
+          ap.heldBall.lastPushTime = now + 1200;
 
           if (this.audio && typeof this.audio.playArmSwat === 'function') {
             this.audio.playArmSwat(Math.min(1.6, 0.5 + finalLaunchVel.length() * 0.20));
@@ -1243,8 +1393,7 @@ export class BallInterceptor {
           this.score += 100;
           ap.heldBall = null;
         } else {
-          // Step 7: FOLLOW-THROUGH (Gripper stays wide open as arm decelerates smoothly to rest)
-          robot.setGripper(0.0);
+          robot.setGripper(0.0); // Open palm follow-through
         }
 
         ap.throwTimer -= deltaTime;
@@ -1348,8 +1497,8 @@ export class BallInterceptor {
           ap.wasDancing = false;
         }
 
-        // If arm is in LIFT, WINDUP or SWING_THROW, direct joint trajectory controls the arm
-        if (ap.throwState === 'LIFT' || ap.throwState === 'WINDUP' || ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
+        // If arm is in LIFT, WINDUP, COCK_PAUSE or SWING_THROW, direct joint trajectory controls the arm
+        if (ap.throwState === 'LIFT' || ap.throwState === 'WINDUP' || ap.throwState === 'COCK_PAUSE' || ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
           continue;
         }
 

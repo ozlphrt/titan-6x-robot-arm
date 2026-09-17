@@ -131,7 +131,268 @@ export class WorkcellScene {
     // 5. Central Shared Interaction Arena - Smooth Convex Dome & Corridor Ridges
     this.createCenterConvexDome();
 
+    // 6. 4 Outer Corner Convex Banking Ramps (Rolls trapped corner balls back into circles)
+    this.createCornerConvexSlopes();
+
+    // 7. Quad-Station Safety Enclosure Perimeter Walls (Containment boundary near arms)
+    this.wallsVisible = true;
+    this.createPerimeterEnclosure();
+
     this.scene.add(this.ringsGroup);
+  }
+
+  /**
+   * Creates high-fidelity transparent industrial safety glass walls,
+   * corner stanchions, top handrails, and team-colored corner LED beacons
+   * matching the exact tangent outer boundary of the arm defense circles (x = ±2.75, z = ±2.75).
+   */
+  createPerimeterEnclosure() {
+    this.enclosureGroup = new THREE.Group();
+    this.enclosureGroup.name = 'PerimeterSafetyEnclosureGroup';
+
+    // Outer tangent to arm circles: base at ±1.40 + radius 1.35 = ±2.75m
+    const boundHalf = 2.75;
+    const wallHeight = 1.05;
+    const wallThickness = 0.02;
+    const length = boundHalf * 2; // 5.50m
+
+    // --- 1. Procedural High-Tech Safety Glass Texture ---
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    // Subtle blue-tinted glass gradient with top highlight & frosted base
+    const grad = ctx.createLinearGradient(0, 0, 0, 512);
+    grad.addColorStop(0, 'rgba(14, 165, 233, 0.28)');
+    grad.addColorStop(0.12, 'rgba(56, 189, 248, 0.12)');
+    grad.addColorStop(0.75, 'rgba(15, 23, 42, 0.08)');
+    grad.addColorStop(0.92, 'rgba(14, 165, 233, 0.22)');
+    grad.addColorStop(1.0, 'rgba(14, 165, 233, 0.45)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 1024, 512);
+
+    // Fine holographic grid lines
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
+    ctx.lineWidth = 1.5;
+    const gridStepX = 64;
+    for (let x = 0; x <= 1024; x += gridStepX) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 512);
+      ctx.stroke();
+    }
+    const gridStepY = 64;
+    for (let y = 0; y <= 512; y += gridStepY) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(1024, y);
+      ctx.stroke();
+    }
+
+    // Top and bottom border accent lines
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(4, 4, 1016, 504);
+
+    // Hazard caution diagonal stripes along lower strip (y: 430 to 480)
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(8, 430, 1008, 50);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(234, 179, 8, 0.35)'; // safety amber
+    for (let i = -500; i < 1500; i += 40) {
+      ctx.beginPath();
+      ctx.moveTo(i, 480);
+      ctx.lineTo(i + 24, 430);
+      ctx.lineTo(i + 44, 430);
+      ctx.lineTo(i + 20, 480);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Laser-etched safety warning labels
+    ctx.fillStyle = 'rgba(241, 245, 249, 0.70)';
+    ctx.font = 'bold 15px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚠ TITAN-6X PERIMETER CONTAINMENT // ROBOTIC WORKCELL BOUNDARY ⚠', 512, 420);
+    ctx.fillText('EN-ISO 10218 SAFETY ENCLOSURE • OPTICAL BARRIER ACTIVE', 512, 45);
+
+    const glassTex = new THREE.CanvasTexture(canvas);
+    glassTex.wrapS = THREE.ClampToEdgeWrapping;
+    glassTex.wrapT = THREE.ClampToEdgeWrapping;
+
+    this.glassMaterial = new THREE.MeshStandardMaterial({
+      map: glassTex,
+      transparent: true,
+      opacity: 0.88,
+      roughness: 0.15,
+      metalness: 0.20,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+
+    // Dark Carbon Stanchion & Frame Material
+    this.stanchionMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.35,
+      metalness: 0.80
+    });
+
+    // Brushed Aluminum Cap Handrail Material
+    this.handrailMat = new THREE.MeshStandardMaterial({
+      color: 0x94a3b8,
+      roughness: 0.25,
+      metalness: 0.90
+    });
+
+    // --- 2. Build 4 Wall Glass Panels ---
+    const wallGeo = new THREE.PlaneGeometry(length, wallHeight);
+
+    const wallConfigs = [
+      { name: 'NorthWall', pos: [0, wallHeight / 2, -boundHalf], rotY: 0 },
+      { name: 'SouthWall', pos: [0, wallHeight / 2, boundHalf], rotY: Math.PI },
+      { name: 'EastWall', pos: [boundHalf, wallHeight / 2, 0], rotY: -Math.PI / 2 },
+      { name: 'WestWall', pos: [-boundHalf, wallHeight / 2, 0], rotY: Math.PI / 2 }
+    ];
+
+    wallConfigs.forEach(cfg => {
+      const mesh = new THREE.Mesh(wallGeo, this.glassMaterial);
+      mesh.name = cfg.name;
+      mesh.position.set(cfg.pos[0], cfg.pos[1], cfg.pos[2]);
+      mesh.rotation.y = cfg.rotY;
+      mesh.receiveShadow = true;
+      this.enclosureGroup.add(mesh);
+    });
+
+    // --- 3. Base Curb / Kick-Plate Rails (y: 0 to 0.05m) ---
+    const curbGeoLong = new THREE.BoxGeometry(length + 0.08, 0.05, 0.06);
+    const curbGeoCross = new THREE.BoxGeometry(0.06, 0.05, length + 0.08);
+
+    const curbNorth = new THREE.Mesh(curbGeoLong, this.stanchionMat);
+    curbNorth.position.set(0, 0.025, -boundHalf);
+    curbNorth.receiveShadow = true;
+    this.enclosureGroup.add(curbNorth);
+
+    const curbSouth = new THREE.Mesh(curbGeoLong, this.stanchionMat);
+    curbSouth.position.set(0, 0.025, boundHalf);
+    curbSouth.receiveShadow = true;
+    this.enclosureGroup.add(curbSouth);
+
+    const curbEast = new THREE.Mesh(curbGeoCross, this.stanchionMat);
+    curbEast.position.set(boundHalf, 0.025, 0);
+    curbEast.receiveShadow = true;
+    this.enclosureGroup.add(curbEast);
+
+    const curbWest = new THREE.Mesh(curbGeoCross, this.stanchionMat);
+    curbWest.position.set(-boundHalf, 0.025, 0);
+    curbWest.receiveShadow = true;
+    this.enclosureGroup.add(curbWest);
+
+    // --- 4. Top Cap Safety Handrails (y = wallHeight) ---
+    const railRadius = 0.016;
+    const railGeoLong = new THREE.CylinderGeometry(railRadius, railRadius, length + 0.08, 16);
+    railGeoLong.rotateZ(Math.PI / 2);
+
+    const railGeoCross = new THREE.CylinderGeometry(railRadius, railRadius, length + 0.08, 16);
+    railGeoCross.rotateX(Math.PI / 2);
+
+    const railNorth = new THREE.Mesh(railGeoLong, this.handrailMat);
+    railNorth.position.set(0, wallHeight, -boundHalf);
+    this.enclosureGroup.add(railNorth);
+
+    const railSouth = new THREE.Mesh(railGeoLong, this.handrailMat);
+    railSouth.position.set(0, wallHeight, boundHalf);
+    this.enclosureGroup.add(railSouth);
+
+    const railEast = new THREE.Mesh(railGeoCross, this.handrailMat);
+    railEast.position.set(boundHalf, wallHeight, 0);
+    this.enclosureGroup.add(railEast);
+
+    const railWest = new THREE.Mesh(railGeoCross, this.handrailMat);
+    railWest.position.set(-boundHalf, wallHeight, 0);
+    this.enclosureGroup.add(railWest);
+
+    // --- 5. Sturdy Corner Stanchions with Quadrant Team LED Beacons ---
+    const cornerPostGeo = new THREE.BoxGeometry(0.08, wallHeight + 0.06, 0.08);
+    const midPostGeo = new THREE.BoxGeometry(0.06, wallHeight + 0.04, 0.06);
+
+    // Quadrant Team Colors:
+    // ARM 1 (+X, -Z): Fanuc Yellow 0xffcb05
+    // ARM 2 (-X, -Z): Kuka Orange 0xe65100
+    // ARM 3 (-X, +Z): Emerald Green 0x10b981
+    // ARM 4 (+X, +Z): Cobalt Blue 0x2563eb
+    const cornerPosts = [
+      { pos: [boundHalf, (wallHeight + 0.06) / 2, -boundHalf], color: 0xffcb05, name: 'CornerAlpha' },
+      { pos: [-boundHalf, (wallHeight + 0.06) / 2, -boundHalf], color: 0xe65100, name: 'CornerBeta' },
+      { pos: [-boundHalf, (wallHeight + 0.06) / 2, boundHalf], color: 0x10b981, name: 'CornerGamma' },
+      { pos: [boundHalf, (wallHeight + 0.06) / 2, boundHalf], color: 0x2563eb, name: 'CornerDelta' }
+    ];
+
+    this.cornerLedMeshes = [];
+
+    cornerPosts.forEach(cp => {
+      // Main Pillar
+      const post = new THREE.Mesh(cornerPostGeo, this.stanchionMat);
+      post.position.set(cp.pos[0], cp.pos[1], cp.pos[2]);
+      post.castShadow = true;
+      post.receiveShadow = true;
+      this.enclosureGroup.add(post);
+
+      // Floor Flange Base
+      const flangeGeo = new THREE.BoxGeometry(0.14, 0.02, 0.14);
+      const flange = new THREE.Mesh(flangeGeo, this.stanchionMat);
+      flange.position.set(cp.pos[0], 0.01, cp.pos[2]);
+      this.enclosureGroup.add(flange);
+
+      // Team-Colored Glowing Beacon Dome on Corner Cap
+      const beaconGeo = new THREE.CylinderGeometry(0.032, 0.032, 0.05, 16);
+      const beaconMat = new THREE.MeshBasicMaterial({
+        color: cp.color,
+        transparent: true,
+        opacity: 0.95
+      });
+      const beacon = new THREE.Mesh(beaconGeo, beaconMat);
+      beacon.position.set(cp.pos[0], wallHeight + 0.05, cp.pos[2]);
+      this.enclosureGroup.add(beacon);
+      this.cornerLedMeshes.push(beacon);
+
+      // Vertical LED Accent Strip along Corner Pillar
+      const stripGeo = new THREE.BoxGeometry(0.015, wallHeight * 0.85, 0.015);
+      const stripMat = new THREE.MeshBasicMaterial({
+        color: cp.color,
+        transparent: true,
+        opacity: 0.85
+      });
+      const strip = new THREE.Mesh(stripGeo, stripMat);
+      strip.position.set(cp.pos[0] * 0.985, wallHeight * 0.48, cp.pos[2] * 0.985);
+      this.enclosureGroup.add(strip);
+      this.cornerLedMeshes.push(strip);
+    });
+
+    // --- 6. Intermediate Midpoint Support Stanchions ---
+    const midPosts = [
+      [boundHalf, (wallHeight + 0.04) / 2, 0],
+      [-boundHalf, (wallHeight + 0.04) / 2, 0],
+      [0, (wallHeight + 0.04) / 2, boundHalf],
+      [0, (wallHeight + 0.04) / 2, -boundHalf]
+    ];
+
+    midPosts.forEach(mp => {
+      const post = new THREE.Mesh(midPostGeo, this.stanchionMat);
+      post.position.set(mp[0], mp[1], mp[2]);
+      post.castShadow = true;
+      post.receiveShadow = true;
+      this.enclosureGroup.add(post);
+
+      const flangeGeo = new THREE.BoxGeometry(0.11, 0.018, 0.11);
+      const flange = new THREE.Mesh(flangeGeo, this.stanchionMat);
+      flange.position.set(mp[0], 0.009, mp[2]);
+      this.enclosureGroup.add(flange);
+    });
+
+    this.scene.add(this.enclosureGroup);
   }
 
   createCenterConvexDome() {
@@ -159,6 +420,96 @@ export class WorkcellScene {
       this.ringsGroup.add(ringMesh);
       this.contourRings.push(ringMesh);
     });
+  }
+
+  /**
+   * Creates 3D banking ramps and elevation contour lines in all 4 outer corner dead-zones
+   * to visually and physically guide balls back into each robot arm's defense circle.
+   */
+  createCornerConvexSlopes() {
+    this.cornerRampsGroup = new THREE.Group();
+    this.cornerRampsGroup.name = 'CornerConvexRampsGroup';
+
+    const cornerConfigs = [
+      { bx: 1.4, bz: -1.4, cx: 2.75, cz: -2.75, color: 0xffcb05, name: 'AlphaRamp' },
+      { bx: -1.4, bz: -1.4, cx: -2.75, cz: -2.75, color: 0xe65100, name: 'BetaRamp' },
+      { bx: -1.4, bz: 1.4, cx: -2.75, cz: 2.75, color: 0x10b981, name: 'GammaRamp' },
+      { bx: 1.4, bz: 1.4, cx: 2.75, cz: 2.75, color: 0x2563eb, name: 'DeltaRamp' }
+    ];
+
+    this.cornerRampMat = new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0,
+      roughness: 0.35,
+      metalness: 0.25,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
+    });
+
+    cornerConfigs.forEach(cfg => {
+      const segments = 24;
+      const minX = Math.min(cfg.bx, cfg.cx);
+      const maxX = Math.max(cfg.bx, cfg.cx);
+      const minZ = Math.min(cfg.bz, cfg.cz);
+      const maxZ = Math.max(cfg.bz, cfg.cz);
+      const sizeX = Math.abs(cfg.cx - cfg.bx);
+      const sizeZ = Math.abs(cfg.cz - cfg.bz);
+
+      const geo = new THREE.PlaneGeometry(sizeX, sizeZ, segments, segments);
+      geo.rotateX(-Math.PI / 2);
+
+      const posAttr = geo.attributes.position;
+      const centerX = (minX + maxX) / 2;
+      const centerZ = (minZ + maxZ) / 2;
+
+      for (let i = 0; i < posAttr.count; i++) {
+        const worldX = posAttr.getX(i) + centerX;
+        const worldZ = posAttr.getZ(i) + centerZ;
+        const info = evaluateArenaTerrain(worldX, worldZ);
+        posAttr.setY(i, info.y);
+      }
+      geo.computeVertexNormals();
+
+      const mesh = new THREE.Mesh(geo, this.cornerRampMat);
+      mesh.position.set(centerX, 0, centerZ);
+      mesh.receiveShadow = true;
+      this.cornerRampsGroup.add(mesh);
+
+      // Add 3 concentric contour elevation lines in the corner (outside the circle track rails)
+      const arcRadii = [1.48, 1.65, 1.82];
+      arcRadii.forEach(r => {
+        const points = [];
+        let startAng = 0;
+        if (cfg.cx > 0 && cfg.cz < 0) startAng = -Math.PI / 2;
+        else if (cfg.cx < 0 && cfg.cz < 0) startAng = -Math.PI;
+        else if (cfg.cx < 0 && cfg.cz > 0) startAng = Math.PI / 2;
+        else if (cfg.cx > 0 && cfg.cz > 0) startAng = 0;
+
+        const endAng = startAng + Math.PI / 2;
+        const steps = 24;
+        for (let s = 0; s <= steps; s++) {
+          const theta = startAng + (s / steps) * (endAng - startAng);
+          const px = cfg.bx + Math.cos(theta) * r;
+          const pz = cfg.bz + Math.sin(theta) * r;
+          if (px >= minX - 0.05 && px <= maxX + 0.05 && pz >= minZ - 0.05 && pz <= maxZ + 0.05) {
+            const info = evaluateArenaTerrain(px, pz);
+            points.push(new THREE.Vector3(px, info.y + 0.002, pz));
+          }
+        }
+        if (points.length > 1) {
+          const curveGeo = new THREE.BufferGeometry().setFromPoints(points);
+          const lineMat = new THREE.LineBasicMaterial({
+            color: cfg.color,
+            transparent: true,
+            opacity: 0.40
+          });
+          const line = new THREE.Line(curveGeo, lineMat);
+          this.cornerRampsGroup.add(line);
+        }
+      });
+    });
+
+    this.scene.add(this.cornerRampsGroup);
   }
 
   /**
@@ -574,10 +925,15 @@ export class WorkcellScene {
       this.scene.fog.density = cfg.fogDensity;
     }
 
-    // Platform Floor Material
+    // Platform Floor Material & Corner Convex Ramps Material
     this.platformMat.color.setHex(cfg.platform);
     this.platformMat.roughness = cfg.platformRoughness;
     this.platformMat.metalness = cfg.platformMetalness;
+    if (this.cornerRampMat) {
+      this.cornerRampMat.color.setHex(cfg.platform);
+      this.cornerRampMat.roughness = cfg.platformRoughness;
+      this.cornerRampMat.metalness = cfg.platformMetalness;
+    }
 
     // Lights
     if (this.ambientLight) this.ambientLight.intensity = cfg.ambient;
@@ -689,11 +1045,27 @@ export class WorkcellScene {
         this.renderArmPieHUD(i, this.armAnimatedCounts[i], this.armAnimatedTotal[i], darkTheme);
       }
     }
+    // Subtle pulse on corner LED beacons
+    if (this.cornerLedMeshes && this.cornerLedMeshes.length > 0) {
+      const now = performance.now() * 0.003;
+      const pulseOpacity = 0.75 + 0.20 * Math.sin(now);
+      this.cornerLedMeshes.forEach(mesh => {
+        if (mesh.material) mesh.material.opacity = pulseOpacity;
+      });
+    }
+
     this.forceHudUpdate = false;
   }
 
+  toggleWalls(visible) {
+    this.wallsVisible = visible;
+    if (this.enclosureGroup) {
+      this.enclosureGroup.visible = visible;
+    }
+  }
+
   toggleSafetyCurtain(visible) {
-    // No-op
+    this.toggleWalls(visible);
   }
 
   toggleGrid(visible) {

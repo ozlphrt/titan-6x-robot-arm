@@ -15,6 +15,12 @@
     <!-- 3D Canvas Container -->
     <div id="canvas-container"></div>
 
+    <!-- Audio Autoplay Unlock Indicator (Disappears once user clicks or interacts) -->
+    <div id="audio-unlock-banner" class="audio-unlock-banner">
+      <span class="audio-unlock-icon">🔊</span>
+      <span class="audio-unlock-text">Click anywhere to activate Sound</span>
+    </div>
+
     <!-- Floating Round Settings Cog (Lower Right Corner) -->
     <button id="btn-open-settings" class="floating-settings-cog" title="Open Settings & Controls [S]" aria-label="Open Settings">
       <svg class="cog-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -444,6 +450,9 @@
             </button>
             <button class="dock-toggle-btn active" id="btn-toggle-shadows">
               <span>💡</span> PBR Shadows
+            </button>
+            <button class="dock-toggle-btn active" id="btn-toggle-walls">
+              <span>🛡️</span> Safety Walls
             </button>
             <button class="dock-toggle-btn" id="btn-toggle-wireframe">
               <span>🕸️</span> Wireframe

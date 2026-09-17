@@ -97,10 +97,9 @@ export class AudioEngine {
     if (typeof window === 'undefined') return;
 
     const unlockEvents = [
-      'pointerdown', 'pointerup', 'pointermove',
-      'mousedown', 'mouseup', 'click',
-      'touchstart', 'touchend', 'touchmove',
-      'keydown', 'keyup', 'wheel', 'scroll', 'focus'
+      'pointerdown', 'mousedown', 'click',
+      'touchstart', 'touchend',
+      'keydown', 'wheel'
     ];
 
     const tryUnlock = () => {
@@ -109,6 +108,7 @@ export class AudioEngine {
         if (this.ctx.state === 'suspended') {
           this.ctx.resume().then(() => {
             if (this.ctx.state === 'running') {
+              this.updateUnlockUI();
               unlockEvents.forEach(evt => {
                 window.removeEventListener(evt, tryUnlock, true);
                 document.removeEventListener(evt, tryUnlock, true);
@@ -116,6 +116,7 @@ export class AudioEngine {
             }
           }).catch(() => {});
         } else if (this.ctx.state === 'running') {
+          this.updateUnlockUI();
           unlockEvents.forEach(evt => {
             window.removeEventListener(evt, tryUnlock, true);
             document.removeEventListener(evt, tryUnlock, true);
@@ -128,6 +129,24 @@ export class AudioEngine {
       window.addEventListener(evt, tryUnlock, { capture: true, passive: true });
       document.addEventListener(evt, tryUnlock, { capture: true, passive: true });
     });
+
+    // Check on load
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => this.updateUnlockUI());
+    } else {
+      setTimeout(() => this.updateUnlockUI(), 100);
+    }
+  }
+
+  updateUnlockUI() {
+    if (typeof document === 'undefined') return;
+    const banner = document.getElementById('audio-unlock-banner');
+    if (!banner) return;
+    if (this.ctx && this.ctx.state === 'running') {
+      banner.classList.add('hidden');
+    } else {
+      banner.classList.remove('hidden');
+    }
   }
 
   setSchema(schemaKey) {
@@ -173,7 +192,9 @@ export class AudioEngine {
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {});
+      this.ctx.resume().then(() => this.updateUnlockUI()).catch(() => {});
+    } else {
+      this.updateUnlockUI();
     }
   }
 

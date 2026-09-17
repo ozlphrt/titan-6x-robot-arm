@@ -96,11 +96,11 @@ export class Kinematics {
     const targetDist = Math.sqrt(hDist * hDist + dy * dy);
 
     // 3. Adaptive Telescoping Extension
-    const baseArmReach = 0.75;
-    const maxArmReach = 1.48;
+    const baseArmReach = 0.70;
+    const maxArmReach = 1.85;
     const desiredExt = Math.max(0, Math.min(1.0, (targetDist - baseArmReach) / (maxArmReach - baseArmReach)));
     const currentExt = this.robot.getTelescope();
-    const newExt = currentExt + (desiredExt - currentExt) * 0.50;
+    const newExt = currentExt + (desiredExt - currentExt) * 0.65;
     this.robot.setTelescope(newExt);
 
     // 4. Analytical 2-Link Geometric "Elbow-Up" Seed
