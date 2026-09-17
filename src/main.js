@@ -324,22 +324,6 @@ class RobotApp {
       });
     }
 
-    // Audio Autoplay Unlock Banner Click
-    const audioBanner = document.getElementById('audio-unlock-banner');
-    if (audioBanner) {
-      audioBanner.addEventListener('click', () => {
-        this.audio.init();
-        if (this.audio.ctx && this.audio.ctx.state === 'suspended') {
-          this.audio.ctx.resume().then(() => {
-            this.audio.updateUnlockUI();
-            this.audio.playClick();
-          }).catch(() => {});
-        } else {
-          this.audio.updateUnlockUI();
-          this.audio.playClick();
-        }
-      });
-    }
   }
 
   bindBallInterceptorUI() {

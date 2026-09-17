@@ -90,16 +90,18 @@ export class AudioEngine {
     this.lastTransientTime = 0;
     this.prevJointVelocities = [0, 0, 0, 0, 0, 0];
 
+    // Immediately create and start audio pipeline
+    this.init();
     this.setupGestureAutoUnlock();
   }
 
   setupGestureAutoUnlock() {
     if (typeof window === 'undefined') return;
 
+    // Listen to any user presence, hover, scroll, key, or touch
     const unlockEvents = [
-      'pointerdown', 'mousedown', 'click',
-      'touchstart', 'touchend',
-      'keydown', 'wheel'
+      'pointermove', 'mousemove', 'pointerdown', 'mousedown', 'click',
+      'touchstart', 'touchend', 'keydown', 'wheel', 'scroll', 'focus'
     ];
 
     const tryUnlock = () => {
@@ -108,7 +110,6 @@ export class AudioEngine {
         if (this.ctx.state === 'suspended') {
           this.ctx.resume().then(() => {
             if (this.ctx.state === 'running') {
-              this.updateUnlockUI();
               unlockEvents.forEach(evt => {
                 window.removeEventListener(evt, tryUnlock, true);
                 document.removeEventListener(evt, tryUnlock, true);
@@ -116,7 +117,6 @@ export class AudioEngine {
             }
           }).catch(() => {});
         } else if (this.ctx.state === 'running') {
-          this.updateUnlockUI();
           unlockEvents.forEach(evt => {
             window.removeEventListener(evt, tryUnlock, true);
             document.removeEventListener(evt, tryUnlock, true);
@@ -130,23 +130,18 @@ export class AudioEngine {
       document.addEventListener(evt, tryUnlock, { capture: true, passive: true });
     });
 
-    // Check on load
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => this.updateUnlockUI());
-    } else {
-      setTimeout(() => this.updateUnlockUI(), 100);
-    }
+    // Also attempt resume periodically until running
+    const checkInterval = setInterval(() => {
+      if (this.ctx && this.ctx.state === 'running') {
+        clearInterval(checkInterval);
+      } else {
+        this.init();
+      }
+    }, 1000);
   }
 
   updateUnlockUI() {
-    if (typeof document === 'undefined') return;
-    const banner = document.getElementById('audio-unlock-banner');
-    if (!banner) return;
-    if (this.ctx && this.ctx.state === 'running') {
-      banner.classList.add('hidden');
-    } else {
-      banner.classList.remove('hidden');
-    }
+    // No manual banner needed
   }
 
   setSchema(schemaKey) {
