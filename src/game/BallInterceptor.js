@@ -28,8 +28,8 @@ export class BallInterceptor {
       minZ: -2.35, maxZ: 2.35
     };
 
-    // The reach zone the robot arms actively defend (r <= 1.35m from station base)
-    this.maxDefenseRadius = 1.35;
+    // The reach zone the robot arms actively defend (extended reach envelope)
+    this.maxDefenseRadius = 1.65;
     this.minWorkspaceRadius = 0.18;
 
     this.score = 0;
@@ -499,16 +499,15 @@ export class BallInterceptor {
       }
     }
 
-    // Fallback: direct lead clamped within reach envelope of this arm
     const fallbackPos = ball.mesh.position.clone().addScaledVector(ball.velocity, 0.10);
     const offset = new THREE.Vector3().subVectors(fallbackPos, basePos);
     const fbH = Math.hypot(offset.x, offset.z);
-    const safeH = Math.max(0.20, Math.min(1.30, fbH));
+    const safeH = Math.max(0.20, Math.min(1.55, fbH));
     if (fbH > 0.001) {
       fallbackPos.x = basePos.x + (offset.x / fbH) * safeH;
       fallbackPos.z = basePos.z + (offset.z / fbH) * safeH;
     }
-    fallbackPos.y = Math.max(0.040, Math.min(1.30, fallbackPos.y));
+    fallbackPos.y = Math.max(0.040, Math.min(1.40, fallbackPos.y));
 
     const strikeFallback = fallbackPos.clone().addScaledVector(targetDir, -ball.radius * 0.45);
     strikeFallback.y = Math.max(0.040, strikeFallback.y);
@@ -522,29 +521,24 @@ export class BallInterceptor {
   }
 
   /**
-   * Returns true if there are active moving threats or intruder balls in the given arm's defense sector
+   * Returns true if there are fast incoming threats in the given arm's defense sector,
+   * optionally ignoring a ball being currently handled.
    */
-  hasActiveThreatsInZone(armIdx) {
+  hasActiveThreatsInZone(armIdx, ignoreBall = null) {
     const ap = this.armPursuits[armIdx];
     if (!ap) return false;
     const basePos = ap.basePos;
-    const armTeam = ap.teamId;
 
     for (let i = 0; i < this.balls.length; i++) {
       const b = this.balls[i];
-      if (!b || !b.mesh || b.isHeld) continue;
+      if (!b || !b.mesh || b.isHeld || b === ignoreBall) continue;
       const pos = b.mesh.position;
       const distBase = Math.hypot(pos.x - basePos.x, pos.z - basePos.z);
 
-      if (distBase <= 1.35 && pos.y >= 0.02) {
-        const isOwnColor = (b.teamId === armTeam);
+      if (distBase <= 1.45 && pos.y >= 0.02) {
         const speed = b.velocity.length();
-
-        // 1. Any opponent ball inside our circle is an active threat
-        if (!isOwnColor) return true;
-
-        // 2. Any moving own-color ball that is still rolling or bouncing
-        if (speed > 0.25) return true;
+        // Fast moving ball is a dynamic threat needing immediate reaction
+        if (speed > 0.40) return true;
       }
     }
     return false;
@@ -589,30 +583,28 @@ export class BallInterceptor {
       }
     }
 
-    // 2.5. Stationary Center Ball Billiard Snipe System (LAST RESORT ONLY):
-    // Only triggered when an arm has zero active moving threats in its station,
-    // and its own ball has been completely stationary (v < 0.10 m/s) in the center circle (r <= 0.45m) for > 2.2 seconds!
+    // 2.5. Stationary Center Ball Billiard Snipe System:
+    // When an arm's own ball has been stationary (v < 0.12 m/s) in the center circle (r <= 0.52m) for > 1.4s,
+    // the arm grabs an ammo ball from its zone and performs a kinetic bowling snipe!
     for (let i = 0; i < this.balls.length; i++) {
       const b = this.balls[i];
       if (!b || !b.mesh || b.isHeld) continue;
       const pos = b.mesh.position;
       const distCenter = Math.hypot(pos.x, pos.z);
 
-      if (distCenter <= 0.45) {
+      if (distCenter <= 0.52) {
         const speed = b.velocity.length();
-        if (speed < 0.10) {
+        if (speed < 0.12) {
           b.centerStuckTime = (b.centerStuckTime || 0) + deltaTime;
         } else {
           b.centerStuckTime = Math.max(0, (b.centerStuckTime || 0) - deltaTime * 1.5);
         }
 
-        // LAST RESORT: Only if resting stationary in center for > 2.2s
-        if (b.centerStuckTime > 2.2) {
+        if (b.centerStuckTime > 1.4) {
           const armIdx = b.teamId;
           const ap = this.armPursuits[armIdx];
 
-          // MUST NOT trigger if arm is busy OR has moving balls/threats to defend!
-          if (ap && ap.throwState === 'IDLE' && !this.hasActiveThreatsInZone(armIdx)) {
+          if (ap && ap.throwState === 'IDLE' && !this.hasActiveThreatsInZone(armIdx, b)) {
             // Find a resting own-color ball in this arm's zone to use as projectile ammo
             let ammoBall = null;
             let closestDist = Infinity;
@@ -621,10 +613,10 @@ export class BallInterceptor {
               if (!ab || !ab.mesh || ab.isHeld || ab === b) continue;
               if (ab.teamId === armIdx) {
                 const abSpeed = ab.velocity.length();
-                if (abSpeed > 0.25) continue; // Only pick a resting/slow ball as ammo
+                if (abSpeed > 0.35) continue; // Pick a slow/resting ball as ammo
 
                 const d = Math.hypot(ab.mesh.position.x - ap.basePos.x, ab.mesh.position.z - ap.basePos.z);
-                if (d >= 0.25 && d <= 1.25 && d < closestDist) {
+                if (d >= 0.22 && d <= 1.45 && d < closestDist) {
                   closestDist = d;
                   ammoBall = ab;
                 }
@@ -638,7 +630,7 @@ export class BallInterceptor {
               ap.centerTargetBall = b;
               ap.throwTimer = 0;
               ap.robot.setGripper(0.0);
-              b.centerStuckTime = 0; // Clear stuck time while in pursuit
+              b.centerStuckTime = 0;
             }
           }
         }
@@ -671,16 +663,16 @@ export class BallInterceptor {
         const distBase = Math.hypot(dxBase, dzBase);
 
         // Stuck detection: opponent ball lingering in circle without leaving
-        if (!isOwnColor && distBase <= 1.35) {
+        if (!isOwnColor && distBase <= 1.45) {
           const speed = b.velocity.length();
-          if (speed < 0.20) {
+          if (speed < 0.25) {
             b.stuckTime = (b.stuckTime || 0) + deltaTime;
           } else {
             b.stuckTime = Math.max(0, (b.stuckTime || 0) - deltaTime * 0.8);
           }
 
-          // If ball has been stuck for > 2.0s and no active moving threats, initiate Grab & Throw
-          if (b.stuckTime > 2.0 && ap.throwState === 'IDLE' && !this.hasActiveThreatsInZone(rIdx)) {
+          // If ball has been stuck for > 0.9s and no dynamic fast threats, initiate Grab & Throw
+          if (b.stuckTime > 0.9 && ap.throwState === 'IDLE' && !this.hasActiveThreatsInZone(rIdx, b)) {
             ap.throwState = 'APPROACH';
             ap.throwMode = 'EJECT';
             ap.throwBall = b;
@@ -693,8 +685,8 @@ export class BallInterceptor {
         // --- Active Gripper / TCP Push Contact Zone (Normal Fast Deflections & Swats) ---
         if (ap.throwState === 'IDLE') {
           const distToTcp = pos.distanceTo(tcpPos);
-          const pushThreshold = b.radius + 0.11;
-          const canBePushed = (now - b.lastPushTime) > 120;
+          const pushThreshold = b.radius + 0.13;
+          const canBePushed = (now - b.lastPushTime) > 100;
 
           if (distToTcp <= pushThreshold && pos.y >= 0.02 && canBePushed) {
             b.lastPushTime = now;
@@ -703,7 +695,7 @@ export class BallInterceptor {
             let pushForce;
 
             if (!isOwnColor) {
-              // EJECT OPPONENT BALL
+              // EJECT OPPONENT BALL: Strongly propel towards opponent station
               const oppBase = this.armPursuits[b.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
               const dxOpp = oppBase.x - pos.x;
               const dzOpp = oppBase.z - pos.z;
@@ -714,25 +706,25 @@ export class BallInterceptor {
               } else {
                 pushDir = distBase > 0.001 ? new THREE.Vector3(dxBase / distBase, 0, dzBase / distBase) : new THREE.Vector3(1, 0, 0);
               }
-              pushForce = 2.8 + Math.random() * 0.8;
+              pushForce = 3.4 + Math.random() * 0.8;
               ap.ejectionsCount++;
               this.score += 50;
             } else {
-              // RETAIN OWN BALL: Guide & shield it safely behind the robot arm
+              // RETAIN OWN BALL: Guide & shield it safely behind the robot arm sanctuary
               const behindDir = new THREE.Vector3(basePos.x, 0, basePos.z).normalize();
-              const sanctuaryPos = basePos.clone().addScaledVector(behindDir, 0.50);
+              const sanctuaryPos = basePos.clone().addScaledVector(behindDir, 0.48);
               const dxS = sanctuaryPos.x - pos.x;
               const dzS = sanctuaryPos.z - pos.z;
               const dS = Math.hypot(dxS, dzS);
               pushDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
-              pushForce = 1.4 + Math.random() * 0.35;
+              pushForce = 1.6 + Math.random() * 0.35;
               ap.retainsCount++;
               this.score += 20;
             }
 
             b.velocity.x = pushDir.x * pushForce;
             b.velocity.z = pushDir.z * pushForce;
-            b.velocity.y = 0.50 + Math.random() * 0.30;
+            b.velocity.y = 0.45 + Math.random() * 0.30;
             b.bounces++;
 
             this.pushCount++;
@@ -973,16 +965,29 @@ export class BallInterceptor {
           continue;
         }
 
-        // Validate locked target for this arm
+        // Validate locked target for this arm with anti-stall tracking
         if (ap.lockedTargetBall) {
           const b = ap.lockedTargetBall;
           const bIndex = this.balls.indexOf(b);
           const pos = b && b.mesh ? b.mesh.position : null;
           const hDist = pos ? Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z) : 999;
-          const isStillValid = bIndex !== -1 && !b.isHeld && hDist <= 1.55 && pos.y >= 0.02 && pos.y <= 1.85;
-          if (!isStillValid) {
+          const isStillValid = bIndex !== -1 && !b.isHeld && hDist <= 1.75 && pos.y >= 0.02 && pos.y <= 1.85;
+
+          ap.lockTimer = (ap.lockTimer || 0) + deltaTime;
+
+          // Anti-stall: If locked on same stationary ball for > 1.4s without clearing, pop it and re-evaluate
+          if (!isStillValid || ap.lockTimer > 1.4) {
+            if (ap.lockTimer > 1.4 && b && b.mesh) {
+              const outDir = new THREE.Vector3(pos.x - ap.basePos.x, 0, pos.z - ap.basePos.z).normalize();
+              b.velocity.addScaledVector(outDir, 2.5);
+              b.velocity.y = 0.40;
+              b.lastPushTime = now;
+            }
             ap.lockedTargetBall = null;
+            ap.lockTimer = 0;
           }
+        } else {
+          ap.lockTimer = 0;
         }
 
         let bestTarget = null;
@@ -994,59 +999,57 @@ export class BallInterceptor {
           const pos = b.mesh.position;
           const hDist = Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z);
 
-          // Only consider balls within reachable perimeter (r <= 1.55m)
-          if (hDist > 1.55 || pos.y < 0.02) continue;
+          // Full extended reach envelope covering defense station and boundary corridors (r <= 1.75m)
+          if (hDist > 1.75 || pos.y < 0.02) continue;
 
           const isOwnColor = (b.teamId === armTeam);
+          const ballSpeed = b.velocity.length();
 
-          // Determine Strategic Direction & Priority for this ball
           let targetDir;
           let priorityScore = 0;
 
-          const ballSpeed = b.velocity.length();
-          // Moving balls get an urgency boost (higher speed = higher priority / lower score)
-          const speedBonus = ballSpeed > 0.15 ? Math.min(1.2, ballSpeed * 0.6) : -0.25;
-
           if (!isOwnColor) {
-            if (hDist > 1.40) continue; // Outside this arm's defense circle
-
+            // FOREIGN INTRUDER BALL: Eject towards its owner station
             const oppBase = this.armPursuits[b.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
             const dxOpp = oppBase.x - pos.x;
             const dzOpp = oppBase.z - pos.z;
             const dOpp = Math.hypot(dxOpp, dzOpp);
             targetDir = dOpp > 0.001 ? new THREE.Vector3(dxOpp / dOpp, 0, dzOpp / dOpp) : new THREE.Vector3(1, 0, 0);
 
-            // Foreign balls inside the circle have absolute top priority (score ~0.0 to 0.4)
-            // Fast incoming foreign balls get highest intercept urgency
-            priorityScore = 0.02 + (hDist / 1.40) * 0.25 - speedBonus;
+            if (hDist <= 1.45) {
+              // Inside home circle: Absolute top priority (clear out all intruders!)
+              const speedUrgency = ballSpeed > 0.20 ? 0.08 : 0.0;
+              priorityScore = 0.01 + (hDist / 1.45) * 0.15 - speedUrgency;
+            } else {
+              // In boundary corridor / outer reach: Proactive arena-wide clearance
+              priorityScore = 0.22 + (hDist / 1.75) * 0.20;
+            }
           } else {
-            // OWN COLOR BALL: Proactively guide & shield behind the arm!
-            if (hDist > 1.40) continue; // Outside this arm's territory
-
-            // Sanctuary position: tucked in the rear corner behind the robot arm
+            // OWN COLOR BALL: Guide and retain in protected rear sanctuary behind arm
             const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
-            const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.50);
+            const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48);
             const distToSanctuary = Math.hypot(pos.x - sanctuaryPos.x, pos.z - sanctuaryPos.z);
 
-            // If already safely nestled in the rear sanctuary behind the arm, do not disturb
-            if (distToSanctuary <= 0.30) continue;
+            // If already safely protected in rear sanctuary, leave settled
+            if (distToSanctuary <= 0.35 && ballSpeed < 0.20) continue;
 
-            // Direct vector towards the safe sanctuary behind the arm
+            if (hDist > 1.65) continue; // Don't reach too far out for settled own balls
+
             const dxS = sanctuaryPos.x - pos.x;
             const dzS = sanctuaryPos.z - pos.z;
             const dS = Math.hypot(dxS, dzS);
             targetDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
 
-            // Priority: moving own balls take precedence over stationary ones, but lower priority than opponent threats
-            priorityScore = 0.45 + (distToSanctuary / 1.40) * 0.35 - speedBonus * 0.5;
+            // Priority: moving own balls take precedence, but foreign intruders always higher priority
+            priorityScore = 0.50 + (distToSanctuary / 1.65) * 0.25 - (ballSpeed > 0.20 ? 0.10 : 0.0);
           }
 
           const prediction = this.predictInterception(b, tcpPos, ap.basePos, targetDir);
           if (prediction) {
-            let score = prediction.time * 1.0 + prediction.dist * 0.6 + priorityScore;
+            let score = prediction.time * 0.8 + prediction.dist * 0.5 + priorityScore;
 
             if (b === ap.lockedTargetBall) {
-              score -= 0.35; // Hysteresis bonus
+              score -= 0.25; // Moderate hysteresis bonus
             }
 
             if (score < lowestScore) {
