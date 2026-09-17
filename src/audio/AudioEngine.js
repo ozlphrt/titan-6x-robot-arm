@@ -449,17 +449,17 @@ export class AudioEngine {
     osc.frequency.exponentialRampToValueAtTime(260 * normPower, t + 0.040);
     osc.frequency.exponentialRampToValueAtTime(80, t + 0.090);
 
-    const peakGain = 0.013 * normPower;
-    gain.gain.setValueAtTime(0.001, t);
+    const peakGain = 0.0065 * normPower;
+    gain.gain.setValueAtTime(0.0005, t);
     gain.gain.linearRampToValueAtTime(peakGain, t + 0.025);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.095);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.085);
 
     osc.connect(filter);
     filter.connect(gain);
     gain.connect(this.masterGain || this.ctx.destination);
 
     osc.start(t);
-    osc.stop(t + 0.100);
+    osc.stop(t + 0.090);
 
     // 2. Soft cushioned mechanical air whoosh
     if (this.noiseBuffer) {
@@ -467,19 +467,19 @@ export class AudioEngine {
       noise.buffer = this.noiseBuffer;
       const noiseFilter = this.ctx.createBiquadFilter();
       noiseFilter.type = 'bandpass';
-      noiseFilter.frequency.setValueAtTime(380, t);
+      noiseFilter.frequency.setValueAtTime(340, t);
       noiseFilter.Q.setValueAtTime(1.1, t);
 
       const noiseGain = this.ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.006 * normPower, t);
-      noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.065);
+      noiseGain.gain.setValueAtTime(0.0028 * normPower, t);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.055);
 
       noise.connect(noiseFilter);
       noiseFilter.connect(noiseGain);
       noiseGain.connect(this.masterGain || this.ctx.destination);
 
       noise.start(t);
-      noise.stop(t + 0.070);
+      noise.stop(t + 0.060);
     }
   }
 
@@ -490,15 +490,15 @@ export class AudioEngine {
     this.updateJointMotors([avg, avg, avg, avg, avg, avg], 0, 0.016);
   }
 
-  // Gentle, warm, velvety rubber ball bounce tap (subtle & non-intrusive)
+  // Gentle, warm, ultra-soft rubber ball bounce tap (very subtle & backgrounded)
   playBallBounce(intensity = 1.0) {
     if (!this.enabled) return;
     this.init();
     if (!this.ctx) return;
 
     const curTime = this.ctx.currentTime;
-    // Strict rate limiter: max 1 subtle tap every 45ms across the entire simulation
-    if (curTime - this.lastBallBounceTime < 0.045) return;
+    // Strict global rate limiter: max 1 subtle tap every 140ms
+    if (curTime - this.lastBallBounceTime < 0.140) return;
     this.lastBallBounceTime = curTime;
 
     const normIntensity = Math.max(0.15, Math.min(1.0, intensity));
@@ -508,28 +508,28 @@ export class AudioEngine {
     const gain = this.ctx.createGain();
     const filter = this.ctx.createBiquadFilter();
 
-    // Steep low-pass filter to eliminate any sharp clicking edges or transients
+    // Deep low-pass filter to eliminate any sharp clicking edges or transients
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(210, t);
-    filter.Q.setValueAtTime(0.60, t);
+    filter.frequency.setValueAtTime(160, t);
+    filter.Q.setValueAtTime(0.50, t);
 
-    // Warm, deep rubber body: 135Hz -> 50Hz
+    // Warm, deep rubber body: 105Hz -> 42Hz
     osc.type = 'sine';
-    const startFreq = 125 + Math.random() * 18;
+    const startFreq = 100 + Math.random() * 10;
     osc.frequency.setValueAtTime(startFreq, t);
-    osc.frequency.exponentialRampToValueAtTime(50, t + 0.032);
+    osc.frequency.exponentialRampToValueAtTime(42, t + 0.024);
 
-    // Ultra-soft whisper gain envelope (0.005 - 0.009 peak)
-    const peakGain = 0.0065 * normIntensity;
+    // Ultra-soft whisper gain envelope (barely audible tactile backdrop)
+    const peakGain = 0.0018 * normIntensity;
     gain.gain.setValueAtTime(peakGain, t);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.034);
+    gain.gain.exponentialRampToValueAtTime(0.00003, t + 0.026);
 
     osc.connect(filter);
     filter.connect(gain);
     gain.connect(this.masterGain || this.ctx.destination);
 
     osc.start(t);
-    osc.stop(t + 0.036);
+    osc.stop(t + 0.028);
   }
 
   // Soft subtle UI micro-tap on click
