@@ -647,6 +647,45 @@ export class BallInterceptor {
   }
 
   /**
+   * Calculates the exact 3D ballistic launch velocity required to land a ball at targetPos
+   * from the release position, taking into account launch elevation angle, gravity, and air drag.
+   */
+  calculateBallisticLaunchVelocity(releasePos, targetPos) {
+    const dx = targetPos.x - releasePos.x;
+    const dz = targetPos.z - releasePos.z;
+    const dHoriz = Math.max(0.25, Math.hypot(dx, dz));
+    const dY = targetPos.y - releasePos.y; // Height difference to target landing surface
+
+    // Optimal launch elevation angle theta (26 deg for short toss up to 35 deg for cross-arena throw)
+    const angleRatio = Math.max(0, Math.min(1.0, (dHoriz - 0.6) / 3.2));
+    const theta = (26.0 + 9.0 * angleRatio) * (Math.PI / 180.0); // in radians
+    const tanTheta = Math.tan(theta);
+
+    const g = 9.81;
+    // Ballistic trajectory: dY = dHoriz * tanTheta - (g * dHoriz^2) / (2 * vHoriz^2)
+    // => 2 * vHoriz^2 = (g * dHoriz^2) / (dHoriz * tanTheta - dY)
+    const denom = 2.0 * Math.max(0.05, dHoriz * tanTheta - dY);
+    let vHoriz = Math.sqrt(Math.max(0.1, (g * dHoriz * dHoriz) / denom));
+
+    // Slight aerodynamic drag compensation (damping is 0.998 per step in physics engine)
+    vHoriz *= 1.08;
+    const vY = vHoriz * tanTheta;
+
+    const horizDir = new THREE.Vector3(dx / dHoriz, 0, dz / dHoriz);
+    const launchVel = horizDir.clone().multiplyScalar(vHoriz);
+    launchVel.y = vY;
+
+    return {
+      velocity: launchVel,
+      speed: launchVel.length(),
+      vHoriz: vHoriz,
+      vY: vY,
+      elevationAngle: theta,
+      dHoriz: dHoriz
+    };
+  }
+
+  /**
    * Returns true if there are fast incoming threats in the given arm's defense sector,
    * optionally ignoring a ball being currently handled.
    */
@@ -943,9 +982,17 @@ export class BallInterceptor {
               }
             }
 
-            // Proportional distance scaling: compute distance to target arm (0.6m to 4.2m range)
-            const distToTarget = Math.hypot(ap.targetThrowPos.x - ap.basePos.x, ap.targetThrowPos.z - ap.basePos.z);
-            ap.throwPowerRatio = Math.max(0.05, Math.min(1.0, (distToTarget - 0.6) / 3.4));
+            // Estimate release position (approx 0.45m forward from base at 0.38m height)
+            const estReleasePos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.45);
+            estReleasePos.y = 0.38;
+
+            const launchSolution = this.calculateBallisticLaunchVelocity(estReleasePos, ap.targetThrowPos);
+            ap.requiredLaunchVel = launchSolution.velocity;
+            ap.requiredLaunchSpeed = launchSolution.speed;
+            ap.requiredElevation = launchSolution.elevationAngle;
+
+            // Power ratio alpha strictly based on required ballistic launch speed (2.2 m/s to 6.8 m/s range)
+            ap.throwPowerRatio = Math.max(0.06, Math.min(1.0, (launchSolution.speed - 2.2) / 4.4));
           } else if (ap.throwTimer > 0.85) {
             // CLUSTER JAM BREAKER: If obstructed or unable to clamp inside dense ball pile, execute dynamic kinetic swat/sweep
             const oppBase = this.armPursuits[ap.throwBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
@@ -1032,7 +1079,7 @@ export class BallInterceptor {
           ap.liftEndAngles = [j1, j2, j3, j4, j5, j6];
           ap.liftEndTele = tele;
           const alpha = ap.throwPowerRatio || 0.5;
-          ap.windupDuration = 0.24 + 0.16 * alpha; // Proportional windup time (0.24s for small toss -> 0.40s for power cocking)
+          ap.windupDuration = 0.22 + 0.14 * alpha; // Proportional windup time (0.22s for small toss -> 0.36s for power cocking)
           ap.throwTimer = ap.windupDuration;
         }
       } else if (ap.throwState === 'RETRIEVE_CARRY') {
@@ -1135,10 +1182,10 @@ export class BallInterceptor {
           // Backswing is an offset relative to startJ scaled strictly by alpha:
           // alpha = 0 (short toss): Zero backswing! Arm stays in lift stance and simply turns to face target
           // alpha = 1 (power throw): Deep athletic rear windup
-          targetJ2 = startJ[1] + 0.32 * alpha;
-          targetJ3 = startJ[2] - 0.90 * alpha;
+          targetJ2 = startJ[1] + 0.35 * alpha;
+          targetJ3 = startJ[2] - 0.95 * alpha;
           targetJ5 = startJ[4] + 0.32 * alpha;
-          targetTele = Math.max(0.02, startTele - 0.12 * alpha);
+          targetTele = Math.max(0.02, startTele - 0.14 * alpha);
         }
 
         const j2 = startJ[1] + (targetJ2 - startJ[1]) * p;
@@ -1165,7 +1212,14 @@ export class BallInterceptor {
           ap.throwState = 'SWING_THROW';
           ap.cockedJointAngles = [j1, targetJ2, targetJ3, 0, targetJ5, 0];
           ap.cockedTele = targetTele;
-          const swingDuration = 0.22 + 0.14 * alpha; // 0.22s for short toss -> 0.36s for long power pitch
+
+          // Compute forward stroke length (meters) based on power alpha
+          const strokeDist = 0.32 + 0.56 * alpha; // 0.32m (gentle pitch) to 0.88m (power whip)
+          // Since v_peak = 2.0 * strokeDist / T_accel => T_accel = (2.0 * strokeDist) / reqSpeed
+          const reqSpeed = Math.max(2.0, ap.requiredLaunchSpeed || 4.5);
+          const tAccel = Math.max(0.12, Math.min(0.38, (2.0 * strokeDist) / reqSpeed));
+          const swingDuration = tAccel / 0.82; // Release at 82% of swing duration
+
           ap.throwTimer = swingDuration;
           ap.swingDuration = swingDuration;
         }
@@ -1207,14 +1261,11 @@ export class BallInterceptor {
           j5 = cockJ[4] + (0.25 - cockJ[4]) * p;
           tele = cockTele + (0.75 - cockTele) * p;
         } else {
-          // Forward stroke travel is strictly proportional to required distance alpha:
-          // alpha = 0.06 (short toss): Minimal forward push (Delta J2 = -0.09 rad, Delta J3 = +0.16 rad, tele = +0.14m)
-          // alpha = 0.50 (medium pitch): Moderate stroke (Delta J2 = -0.32 rad, Delta J3 = +0.59 rad, tele = +0.46m)
-          // alpha = 1.00 (power throw): Full power athletic whip (Delta J2 = -0.58 rad, Delta J3 = +1.08 rad, tele = +0.82m)
-          const endJ2 = cockJ[1] - (0.06 + 0.52 * alpha);
-          const endJ3 = cockJ[2] + (0.10 + 0.98 * alpha);
-          const endJ5 = cockJ[4] - (0.05 + 0.44 * alpha);
-          const endTele = Math.min(0.85, cockTele + 0.10 + 0.72 * alpha);
+          // Forward stroke targets matching the elevation angle and required launch energy
+          const endJ2 = cockJ[1] - (0.08 + 0.54 * alpha);
+          const endJ3 = cockJ[2] + (0.12 + 1.02 * alpha);
+          const endJ5 = cockJ[4] - (0.06 + 0.46 * alpha);
+          const endTele = Math.min(0.85, cockTele + 0.12 + 0.72 * alpha);
 
           j2 = cockJ[1] + (endJ2 - cockJ[1]) * p;
           j3 = cockJ[2] + (endJ3 - cockJ[2]) * p;
@@ -1246,13 +1297,17 @@ export class BallInterceptor {
           robot.setGripper(0.0);
           this.audio.playPneumatic(false);
 
-          // Position ball cleanly ahead of gripper along the exact physical velocity vector of the swing
-          const launchDir = vGripper.lengthSq() > 0.01 ? vGripper.clone().normalize() : ap.targetThrowDir;
+          // Use the calculated ballistic velocity vector (which matches the swing speed & trajectory)
+          const finalLaunchVel = (ap.requiredLaunchVel && ap.requiredLaunchVel.lengthSq() > 1.0)
+            ? ap.requiredLaunchVel
+            : (vGripper.lengthSq() > 0.5 ? vGripper : ap.targetThrowDir.clone().multiplyScalar(4.0));
+
+          const launchDir = finalLaunchVel.clone().normalize();
           ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(launchDir, ap.heldBall.radius + 0.04);
           ap.heldBall.mesh.position.y += 0.01;
 
-          // Ball inherits the exact physical velocity vector of the gripper swing
-          ap.heldBall.velocity.copy(vGripper);
+          // Ball departs with the exact required ballistic velocity and 3D trajectory
+          ap.heldBall.velocity.copy(finalLaunchVel);
 
           ap.heldBall.bounces = 0;
           ap.heldBall.stuckTime = 0;
@@ -1260,7 +1315,7 @@ export class BallInterceptor {
           ap.heldBall.lastPushTime = now + 1200; // Launch immunity for 1.2s while in ballistic flight
 
           if (this.audio && typeof this.audio.playArmSwat === 'function') {
-            this.audio.playArmSwat(Math.min(1.6, 0.5 + vGripper.length() * 0.22));
+            this.audio.playArmSwat(Math.min(1.6, 0.5 + finalLaunchVel.length() * 0.20));
           }
           ap.ejectionsCount++;
           this.pushCount++;
