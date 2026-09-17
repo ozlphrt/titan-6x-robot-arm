@@ -93,21 +93,24 @@ export class BallInterceptor {
     this.audio = audio;
 
     this.enabled = true; // Auto-defense active by default
-    this.targetFlockSize = 4; // Cooperative multi-arm flock
+    this.targetFlockSize = 5; // Multi-ball bouncing arena
     this.spawnTimer = 0;
-    this.spawnInterval = 2.0;
+    this.spawnInterval = 1.6;
 
     this.balls = [];
     this.particles = [];
 
-    // Airspace flight bounds (3D bounding envelope covering all 4 quad stations)
+    // Gravity constant (m/s^2) - tuned for floaty, responsive, elastic physics
+    this.gravity = -7.2;
+
+    // Arena boundary limits (3D bounding envelope covering all 4 quad stations)
     this.bounds = {
-      minX: -2.4, maxX: 2.4,
-      minY: 0.28, maxY: 1.65,
-      minZ: -2.4, maxZ: 2.4
+      minX: -2.35, maxX: 2.35,
+      minY: 0.0, maxY: 2.4,
+      minZ: -2.35, maxZ: 2.35
     };
 
-    // The circle is the reach zone the robot arm actively defends (r <= 1.35m)
+    // The reach zone the robot arms actively defend (r <= 1.35m from base)
     this.maxDefenseRadius = 1.35;
     this.minWorkspaceRadius = 0.18;
 
@@ -115,9 +118,6 @@ export class BallInterceptor {
     this.burstCount = 0;
     this.combo = 0;
     this.lastBurstTime = 0;
-
-    // Swarm flow / wandering parametric attractor state
-    this.flowTime = 0;
 
     // Multi-Arm Pursuit States for all 4 Robot Arms
     this.armPursuits = this.robots.map((r) => {
@@ -176,8 +176,8 @@ export class BallInterceptor {
 
     this.scene.add(this.targetReticle);
 
-    // Initial flock formation
-    this.spawnFlock(this.targetFlockSize);
+    // Initial drop of balls above center circle
+    this.spawnInitialBalls(this.targetFlockSize);
   }
 
   toggle() {
@@ -188,28 +188,62 @@ export class BallInterceptor {
     return this.enabled;
   }
 
-  spawnFlock(count = 4) {
+  spawnInitialBalls(count = 5) {
     for (let i = 0; i < count; i++) {
-      this.spawnBall(false, (i / count) * Math.PI * 2);
+      setTimeout(() => {
+        this.spawnBall(true);
+      }, i * 320);
     }
   }
 
-  spawnBall(forceNear = false, angleOffset = null) {
-    const spawnAngle = angleOffset !== null ? angleOffset : Math.random() * Math.PI * 2;
-    const spawnDist = forceNear ? (0.65 + Math.random() * 0.55) : (1.35 + Math.random() * 0.40);
+  /**
+   * Spawns / drops a ball at the center circle with variable size and mass
+   */
+  spawnBall(dropAtCenter = true) {
+    // 1. Center Circle Spawn Coordinates (above center ground disc)
+    let x = (Math.random() - 0.5) * 0.28;
+    let z = (Math.random() - 0.5) * 0.28;
+    let y = 1.35 + Math.random() * 0.50; // Dropping from 1.35m - 1.85m height
+
+    if (!dropAtCenter) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 0.5 + Math.random() * 0.8;
+      x = Math.cos(angle) * dist;
+      z = Math.sin(angle) * dist;
+      y = 0.8 + Math.random() * 0.6;
+    }
+
+    // 2. Variable Size & Mass
+    // Size distribution: Small superballs (r ~ 0.04m), medium sports balls (r ~ 0.065m), heavy large balls (r ~ 0.095m)
+    const sizeRoll = Math.random();
+    let ballRadius;
+    let baseRestitution;
     
-    const x = Math.cos(spawnAngle) * spawnDist;
-    const z = Math.sin(spawnAngle) * spawnDist;
-    const y = 0.45 + Math.random() * 0.85;
+    if (sizeRoll < 0.35) {
+      // Small agile superball
+      ballRadius = 0.038 + Math.random() * 0.015; // 0.038m - 0.053m
+      baseRestitution = 0.90 + Math.random() * 0.05; // Highly elastic
+    } else if (sizeRoll < 0.75) {
+      // Medium rubber playground ball
+      ballRadius = 0.058 + Math.random() * 0.020; // 0.058m - 0.078m
+      baseRestitution = 0.84 + Math.random() * 0.06;
+    } else {
+      // Large heavy rubber ball
+      ballRadius = 0.082 + Math.random() * 0.024; // 0.082m - 0.106m
+      baseRestitution = 0.78 + Math.random() * 0.06;
+    }
 
-    // Aerodynamic tangential / swirling flight velocity
-    const tangentAngle = spawnAngle + Math.PI * 0.5 + (Math.random() - 0.5) * 0.5;
-    const cruiseSpeed = 1.0 + Math.random() * 0.45; // 1.0 - 1.45 m/s organic flight cruise
-    const vx = Math.cos(tangentAngle) * cruiseSpeed;
-    const vz = Math.sin(tangentAngle) * cruiseSpeed;
-    const vy = (Math.random() - 0.5) * 0.25;
+    // Mass scales with volume: m = density * (4/3 * pi * r^3)
+    // Normalized so standard 0.06m ball is ~0.35kg, small is ~0.10kg, large is ~1.2kg
+    const mass = Math.pow(ballRadius / 0.060, 3) * 0.35;
 
-    const ballRadius = 0.046 + Math.random() * 0.032; // 0.046m - 0.078m
+    // 3. Multi-directional outward scatter velocity + downward drop
+    const scatterAngle = Math.random() * Math.PI * 2;
+    const horizontalSpeed = 0.7 + Math.random() * 1.4; // 0.7 - 2.1 m/s outward velocity in all directions
+    const vx = Math.cos(scatterAngle) * horizontalSpeed;
+    const vz = Math.sin(scatterAngle) * horizontalSpeed;
+    const vy = -0.4 - Math.random() * 0.8; // Initial downward drop velocity
+
     const themeIndex = Math.floor(Math.random() * this.ballColorThemes.length);
     const theme = this.ballColorThemes[themeIndex];
     const styleIndex = Math.floor(Math.random() * 4);
@@ -220,7 +254,7 @@ export class BallInterceptor {
     const mat = new THREE.MeshPhysicalMaterial({
       map: ballTexture,
       roughness: 0.15,
-      metalness: 0.03,
+      metalness: 0.04,
       clearcoat: 1.0,
       clearcoatRoughness: 0.08,
       reflectivity: 0.95
@@ -235,14 +269,13 @@ export class BallInterceptor {
     const ball = {
       mesh,
       radius: ballRadius,
+      mass: mass,
       color: theme.hex,
       texture: ballTexture,
       velocity: new THREE.Vector3(vx, vy, vz),
-      acceleration: new THREE.Vector3(0, 0, 0),
-      maxSpeed: 1.55 + Math.random() * 0.4,
-      minSpeed: 0.75,
-      maxForce: 3.5,
-      restitution: 0.88,
+      rotationAxis: new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize(),
+      rotationSpeed: (Math.random() * 6 + 2) * (Math.random() < 0.5 ? 1 : -1),
+      restitution: baseRestitution,
       squash: 1.0,
       bounces: 0,
       age: 0,
@@ -302,13 +335,13 @@ export class BallInterceptor {
       decay: 2.8
     });
 
-    // Scatter nearby flock members with a sudden evasive agility impulse
+    // Scatter nearby balls with pressure blast
     for (const other of this.balls) {
       if (other.burst) continue;
       const d = other.mesh.position.distanceTo(pos);
       if (d < 1.15 && d > 0.01) {
         const scatterDir = new THREE.Vector3().subVectors(other.mesh.position, pos).normalize();
-        const impulse = (1.15 - d) * 3.6;
+        const impulse = (1.15 - d) * 2.8 / (other.mass || 0.35);
         other.velocity.addScaledVector(scatterDir, impulse);
         other.squash = 0.72;
       }
@@ -318,147 +351,182 @@ export class BallInterceptor {
   }
 
   /**
-   * 3D Boids Flocking Simulation Step (Craig Reynolds Flocking)
+   * Comprehensive Bouncing Physics with Gravity, Floor Bounces, and Ball-to-Ball Elastic Collisions
    */
-  updateFlockPhysics(deltaTime) {
-    this.flowTime += deltaTime * 0.45;
-
-    // Dynamic wandering swoop attractor that guides the flock in undulating 3D ribbons
-    const swoopX = Math.cos(this.flowTime * 1.1) * 0.90;
-    const swoopZ = Math.sin(this.flowTime * 0.85) * 0.90;
-    const swoopY = 0.65 + Math.sin(this.flowTime * 1.9) * 0.35;
-    const swoopTarget = new THREE.Vector3(swoopX, swoopY, swoopZ);
-
+  updateBallPhysics(deltaTime) {
     const numBalls = this.balls.length;
-    const sepDist = 0.30;
-    const alignDist = 0.75;
-    const cohDist = 1.15;
+    const subSteps = 2;
+    const dt = deltaTime / subSteps;
 
+    for (let step = 0; step < subSteps; step++) {
+      // 1. Single Ball Integration: Gravity, Velocity, Floor & Perimeter Wall Bounces
+      for (let i = 0; i < numBalls; i++) {
+        const b = this.balls[i];
+        if (b.burst) continue;
+
+        const pos = b.mesh.position;
+
+        // Apply Gravity
+        b.velocity.y += this.gravity * dt;
+
+        // Integrate Position
+        pos.addScaledVector(b.velocity, dt);
+
+        // Floor Contact & Elastic Bouncing (pos.y <= b.radius)
+        if (pos.y <= b.radius) {
+          pos.y = b.radius;
+          if (b.velocity.y < -0.15) {
+            // Elastic bounce
+            b.velocity.y = -b.velocity.y * b.restitution;
+            // Floor rolling friction
+            b.velocity.x *= 0.985;
+            b.velocity.z *= 0.985;
+
+            // Elastic squash deformation
+            b.squash = Math.max(0.55, 1.0 - Math.abs(b.velocity.y) * 0.06);
+            b.bounces++;
+
+            if (Math.abs(b.velocity.y) > 0.9) {
+              this.audio.playClick();
+            }
+          } else {
+            // Resting / rolling on floor
+            b.velocity.y = 0;
+            b.velocity.x *= (1.0 - dt * 1.2);
+            b.velocity.z *= (1.0 - dt * 1.2);
+
+            // Re-energize or nudge if nearly stationary in center
+            const hDist = Math.hypot(pos.x, pos.z);
+            if (hDist < 0.25 && b.velocity.lengthSq() < 0.08) {
+              const kickAngle = Math.random() * Math.PI * 2;
+              b.velocity.x = Math.cos(kickAngle) * (0.8 + Math.random() * 0.8);
+              b.velocity.z = Math.sin(kickAngle) * (0.8 + Math.random() * 0.8);
+              b.velocity.y = 1.6 + Math.random() * 1.2;
+            }
+          }
+        }
+
+        // Arena Perimeter Wall Bounces (Keep balls bouncing within active workcell arena)
+        if (pos.x < this.bounds.minX + b.radius) {
+          pos.x = this.bounds.minX + b.radius;
+          b.velocity.x = Math.abs(b.velocity.x) * b.restitution;
+          b.squash = 0.78;
+        } else if (pos.x > this.bounds.maxX - b.radius) {
+          pos.x = this.bounds.maxX - b.radius;
+          b.velocity.x = -Math.abs(b.velocity.x) * b.restitution;
+          b.squash = 0.78;
+        }
+
+        if (pos.z < this.bounds.minZ + b.radius) {
+          pos.z = this.bounds.minZ + b.radius;
+          b.velocity.z = Math.abs(b.velocity.z) * b.restitution;
+          b.squash = 0.78;
+        } else if (pos.z > this.bounds.maxZ - b.radius) {
+          pos.z = this.bounds.maxZ - b.radius;
+          b.velocity.z = -Math.abs(b.velocity.z) * b.restitution;
+          b.squash = 0.78;
+        }
+
+        // Ceiling bounce
+        if (pos.y > this.bounds.maxY - b.radius) {
+          pos.y = this.bounds.maxY - b.radius;
+          b.velocity.y = -Math.abs(b.velocity.y) * b.restitution;
+        }
+
+        // Air drag
+        b.velocity.x *= (1.0 - dt * 0.03);
+        b.velocity.z *= (1.0 - dt * 0.03);
+      }
+
+      // 2. Ball-to-Ball Elastic & Inelastic Collision Physics with Conservation of Momentum
+      for (let i = 0; i < numBalls; i++) {
+        const b1 = this.balls[i];
+        if (b1.burst) continue;
+
+        for (let j = i + 1; j < numBalls; j++) {
+          const b2 = this.balls[j];
+          if (b2.burst) continue;
+
+          const p1 = b1.mesh.position;
+          const p2 = b2.mesh.position;
+
+          const dx = p1.x - p2.x;
+          const dy = p1.y - p2.y;
+          const dz = p1.z - p2.z;
+          const distSq = dx * dx + dy * dy + dz * dz;
+          const minDist = b1.radius + b2.radius;
+
+          if (distSq < minDist * minDist && distSq > 0.000001) {
+            const dist = Math.sqrt(distSq);
+            const nx = dx / dist;
+            const ny = dy / dist;
+            const nz = dz / dist;
+
+            // Positional overlap resolution based on masses
+            const overlap = minDist - dist;
+            const totalMass = b1.mass + b2.mass;
+            const m1Ratio = b2.mass / totalMass;
+            const m2Ratio = b1.mass / totalMass;
+
+            p1.x += nx * overlap * m1Ratio;
+            p1.y += ny * overlap * m1Ratio;
+            p1.z += nz * overlap * m1Ratio;
+
+            p2.x -= nx * overlap * m2Ratio;
+            p2.y -= ny * overlap * m2Ratio;
+            p2.z -= nz * overlap * m2Ratio;
+
+            // Relative velocity
+            const vRelX = b1.velocity.x - b2.velocity.x;
+            const vRelY = b1.velocity.y - b2.velocity.y;
+            const vRelZ = b1.velocity.z - b2.velocity.z;
+
+            // Normal relative speed
+            const vNormal = vRelX * nx + vRelY * ny + vRelZ * nz;
+
+            // Only apply impulse if balls are moving toward each other
+            if (vNormal < 0) {
+              const restitution = Math.min(b1.restitution, b2.restitution);
+              const impulse = -(1.0 + restitution) * vNormal / (1.0 / b1.mass + 1.0 / b2.mass);
+
+              b1.velocity.x += (impulse / b1.mass) * nx;
+              b1.velocity.y += (impulse / b1.mass) * ny;
+              b1.velocity.z += (impulse / b1.mass) * nz;
+
+              b2.velocity.x -= (impulse / b2.mass) * nx;
+              b2.velocity.y -= (impulse / b2.mass) * ny;
+              b2.velocity.z -= (impulse / b2.mass) * nz;
+
+              // Elastic deformation / squash
+              const squashAmt = Math.max(0.65, 1.0 - Math.abs(vNormal) * 0.08);
+              b1.squash = Math.min(b1.squash, squashAmt);
+              b2.squash = Math.min(b2.squash, squashAmt);
+
+              if (Math.abs(vNormal) > 0.7) {
+                this.audio.playClick();
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Visual Rotation & Squash Recovery
     for (let i = 0; i < numBalls; i++) {
       const b = this.balls[i];
       if (b.burst) continue;
 
-      const pos = b.mesh.position;
-
-      // 1. Craig Reynolds Boids Steering Vectors
-      const sepForce = new THREE.Vector3();
-      const alignForce = new THREE.Vector3();
-      const cohForce = new THREE.Vector3();
-      let sepCount = 0;
-      let alignCount = 0;
-      let cohCount = 0;
-
-      for (let j = 0; j < numBalls; j++) {
-        if (i === j) continue;
-        const other = this.balls[j];
-        if (other.burst) continue;
-
-        const otherPos = other.mesh.position;
-        const dist = pos.distanceTo(otherPos);
-
-        // Separation (avoid crowding)
-        if (dist > 0.001 && dist < sepDist) {
-          const diff = new THREE.Vector3().subVectors(pos, otherPos).normalize().divideScalar(dist);
-          sepForce.add(diff);
-          sepCount++;
-        }
-
-        // Alignment (match velocity heading)
-        if (dist < alignDist) {
-          alignForce.add(other.velocity);
-          alignCount++;
-        }
-
-        // Cohesion (steer toward flock center)
-        if (dist < cohDist) {
-          cohForce.add(otherPos);
-          cohCount++;
-        }
+      // 3D Rolling spin based on velocity
+      const speed = b.velocity.length();
+      if (speed > 0.05) {
+        const rollAxis = new THREE.Vector3(-b.velocity.z, 0, b.velocity.x).normalize();
+        b.mesh.rotateOnAxis(rollAxis, (speed / b.radius) * deltaTime);
       }
 
-      const totalAcc = new THREE.Vector3();
-
-      if (sepCount > 0) {
-        sepForce.divideScalar(sepCount);
-        if (sepForce.lengthSq() > 0) {
-          sepForce.normalize().multiplyScalar(b.maxSpeed).sub(b.velocity).clampLength(0, b.maxForce);
-          totalAcc.addScaledVector(sepForce, 1.8);
-        }
-      }
-
-      if (alignCount > 0) {
-        alignForce.divideScalar(alignCount);
-        if (alignForce.lengthSq() > 0) {
-          alignForce.normalize().multiplyScalar(b.maxSpeed).sub(b.velocity).clampLength(0, b.maxForce);
-          totalAcc.addScaledVector(alignForce, 1.1);
-        }
-      }
-
-      if (cohCount > 0) {
-        cohForce.divideScalar(cohCount);
-        const desired = new THREE.Vector3().subVectors(cohForce, pos);
-        if (desired.lengthSq() > 0) {
-          desired.normalize().multiplyScalar(b.maxSpeed).sub(b.velocity).clampLength(0, b.maxForce);
-          totalAcc.addScaledVector(desired, 0.85);
-        }
-      }
-
-      // 2. Swarm Flow & Swoop Guidance Field
-      const toSwoop = new THREE.Vector3().subVectors(swoopTarget, pos);
-      if (toSwoop.lengthSq() > 0) {
-        toSwoop.normalize().multiplyScalar(b.maxSpeed).sub(b.velocity).clampLength(0, b.maxForce);
-        totalAcc.addScaledVector(toSwoop, 0.65);
-      }
-
-      // 3. Gentle Airspace Boundary Steering (Soft turn-back containment)
-      const boundForce = new THREE.Vector3();
-      const margin = 0.35;
-      if (pos.x < this.bounds.minX + margin) boundForce.x += Math.pow((this.bounds.minX + margin - pos.x) / margin, 2) * 3.5;
-      if (pos.x > this.bounds.maxX - margin) boundForce.x -= Math.pow((pos.x - (this.bounds.maxX - margin)) / margin, 2) * 3.5;
-      if (pos.z < this.bounds.minZ + margin) boundForce.z += Math.pow((this.bounds.minZ + margin - pos.z) / margin, 2) * 3.5;
-      if (pos.z > this.bounds.maxZ - margin) boundForce.z -= Math.pow((pos.z - (this.bounds.maxZ - margin)) / margin, 2) * 3.5;
-      if (pos.y < this.bounds.minY + margin) boundForce.y += Math.pow((this.bounds.minY + margin - pos.y) / margin, 2) * 4.0;
-      if (pos.y > this.bounds.maxY - margin) boundForce.y -= Math.pow((pos.y - (this.bounds.maxY - margin)) / margin, 2) * 4.0;
-      totalAcc.add(boundForce);
-
-      // 4. Base Obstacle Proximity Steering (prevents boids from penetrating inner pedestal)
-      const baseDist = Math.sqrt(pos.x * pos.x + pos.z * pos.z);
-      if (baseDist < 0.25) {
-        const pushOut = new THREE.Vector3(pos.x, 0, pos.z).normalize().multiplyScalar(3.0);
-        totalAcc.add(pushOut);
-      }
-
-      // Integrate Acceleration & Velocity
-      b.velocity.addScaledVector(totalAcc, deltaTime);
-
-      // Clamp to cruise speed envelope
-      const currentSpeed = b.velocity.length();
-      if (currentSpeed > b.maxSpeed) {
-        b.velocity.setLength(b.maxSpeed);
-      } else if (currentSpeed < b.minSpeed && currentSpeed > 0.001) {
-        b.velocity.setLength(b.minSpeed);
-      }
-
-      // Integrate Position
-      b.mesh.position.addScaledVector(b.velocity, deltaTime);
-
-      // Hard Boundary Clamp safeguard
-      pos.x = Math.max(this.bounds.minX, Math.min(this.bounds.maxX, pos.x));
-      pos.y = Math.max(this.bounds.minY, Math.min(this.bounds.maxY, pos.y));
-      pos.z = Math.max(this.bounds.minZ, Math.min(this.bounds.maxZ, pos.z));
-
-      // Aerodynamic Flight Visuals: Bank and face flight heading
-      if (b.velocity.lengthSq() > 0.01) {
-        const forward = b.velocity.clone().normalize();
-        b.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), forward);
-        // Spin along flight axis
-        b.mesh.rotateZ(deltaTime * 3.5);
-      }
-
-      // Elastic squash recovery
+      // Squash recovery
       if (b.squash < 1.0) {
-        b.squash += (1.0 - b.squash) * Math.min(1.0, deltaTime * 12.0);
-        const stretch = 1.0 + (1.0 - b.squash) * 0.3;
+        b.squash += (1.0 - b.squash) * Math.min(1.0, deltaTime * 14.0);
+        const stretch = 1.0 + (1.0 - b.squash) * 0.35;
         b.mesh.scale.set(stretch, b.squash, stretch);
       } else {
         b.mesh.scale.set(1.0, 1.0, 1.0);
@@ -467,7 +535,7 @@ export class BallInterceptor {
   }
 
   /**
-   * Spacetime Rendezvous Trajectory Predictor for Flying Boids for a specific Robot Arm
+   * Spacetime Rendezvous Trajectory Predictor for Bouncing Ball with Gravity
    */
   predictInterception(ball, currentTcp, basePos = new THREE.Vector3(0, 0, 0)) {
     const simPos = ball.mesh.position.clone();
@@ -478,11 +546,19 @@ export class BallInterceptor {
 
     for (let step = 1; step <= maxSteps; step++) {
       const t = step * dt;
+      // Ballistic step with gravity
+      simVel.y += this.gravity * dt;
       simPos.addScaledVector(simVel, dt);
+
+      // Floor bounce in simulation
+      if (simPos.y <= ball.radius) {
+        simPos.y = ball.radius;
+        simVel.y = Math.abs(simVel.y) * ball.restitution;
+      }
 
       // Check if candidate point is within physical reachable defense envelope of this arm
       const hDist = Math.hypot(simPos.x - basePos.x, simPos.z - basePos.z);
-      if (hDist <= 1.30 && hDist >= 0.15 && simPos.y >= 0.12 && simPos.y <= 1.45) {
+      if (hDist <= 1.30 && hDist >= 0.15 && simPos.y >= 0.10 && simPos.y <= 1.45) {
         const distFromTcp = currentTcp.distanceTo(simPos);
         const timeNeeded = distFromTcp / armSpeed;
         if (timeNeeded <= (t + 0.18)) {
@@ -503,7 +579,7 @@ export class BallInterceptor {
       fallbackPos.x = basePos.x + (offset.x / fbH) * 1.20;
       fallbackPos.z = basePos.z + (offset.z / fbH) * 1.20;
     }
-    fallbackPos.y = Math.max(0.15, Math.min(1.30, fallbackPos.y));
+    fallbackPos.y = Math.max(0.12, Math.min(1.30, fallbackPos.y));
     return {
       interceptPos: fallbackPos,
       time: 0.20,
@@ -535,15 +611,15 @@ export class BallInterceptor {
       }
     }
 
-    // 2. 3D Flocking Boids Aerodynamic Simulation
-    this.updateFlockPhysics(deltaTime);
+    // 2. Comprehensive 3D Bouncing, Elastic Collision & Gravity Physics
+    this.updateBallPhysics(deltaTime);
 
-    // Maintain steady active flock population
+    // Maintain steady active bouncing ball population (drop new balls at center circle)
     if (this.balls.length < this.targetFlockSize) {
       this.spawnTimer += deltaTime;
-      if (this.spawnTimer >= 0.6) {
+      if (this.spawnTimer >= 0.8) {
         this.spawnTimer = 0;
-        this.spawnBall();
+        this.spawnBall(true);
       }
     }
 
