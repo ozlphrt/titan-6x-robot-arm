@@ -688,6 +688,23 @@ export class RobotModel {
     this.tcpMarker.position.y = 0.125;
     this.gripperGroup.add(this.tcpMarker);
 
+    // Dual High-Visibility Optical Grip Status LED Indicators
+    this.gripperLedMat = new THREE.MeshStandardMaterial({
+      color: 0x06b6d4,
+      emissive: 0x06b6d4,
+      emissiveIntensity: 1.2,
+      roughness: 0.1,
+      metalness: 0.2
+    });
+    [-0.075, 0.075].forEach(x => {
+      const ledBezel = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.008, 16), this.materials.darkMetal);
+      ledBezel.position.set(x, 0.058, 0.022);
+      const ledLens = new THREE.Mesh(new THREE.SphereGeometry(0.007, 12, 12), this.gripperLedMat);
+      ledLens.position.y = 0.004;
+      ledBezel.add(ledLens);
+      this.gripperGroup.add(ledBezel);
+    });
+
     this.toolsGroup.add(this.gripperGroup);
 
     // --- B. LASER WELDING TORCH TOOL ---
@@ -776,11 +793,25 @@ export class RobotModel {
 
   setGripper(val) {
     this.gripperPosition = Math.max(0, Math.min(1, val));
-    // When val = 0 (open wide): stroke = 0.115m (finger separation = 0.230m, plenty of clearance to encircle ball smoothly)
-    // When val = 1 (clamped): stroke = 0.055m (finger separation = 0.110m, snug rubber-padded clamp onto ball)
-    const stroke = 0.115 - this.gripperPosition * 0.060;
+    // When val = 0 (open wide): stroke = 0.130m (outer 26.0cm, inner 22.0cm, clearly framing the ball)
+    // When val = 1 (clamped): stroke = 0.076m (snug, high-visibility mechanical grip around 14cm ball)
+    const stroke = 0.130 - this.gripperPosition * 0.054;
     this.fingerLeft.position.x = -stroke;
     this.fingerRight.position.x = stroke;
+
+    if (this.gripperLedMat) {
+      if (this.gripperPosition > 0.4) {
+        // Clamped & Active Grip: Radiant Neon Green
+        this.gripperLedMat.color.setHex(0x22c55e);
+        this.gripperLedMat.emissive.setHex(0x22c55e);
+        this.gripperLedMat.emissiveIntensity = 2.4;
+      } else {
+        // Open & Seeking: Electric Cyan
+        this.gripperLedMat.color.setHex(0x06b6d4);
+        this.gripperLedMat.emissive.setHex(0x06b6d4);
+        this.gripperLedMat.emissiveIntensity = 1.0;
+      }
+    }
   }
 
   setTelescope(val) {
