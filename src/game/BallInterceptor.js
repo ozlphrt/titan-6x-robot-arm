@@ -318,8 +318,8 @@ export class BallInterceptor {
         // Apply Gentle Gravity
         b.velocity.y += this.gravity * dt;
 
-        // Clamp maximum downward fall speed
-        if (b.velocity.y < -2.4) b.velocity.y = -2.4;
+        // Terminal downward fall speed limit (natural falling physics)
+        if (b.velocity.y < -6.5) b.velocity.y = -6.5;
 
         // Integrate Position
         pos.addScaledVector(b.velocity, dt);
@@ -360,7 +360,7 @@ export class BallInterceptor {
           }
         }
 
-        // 1b. Robot Arm Solid Black Base Pedestal Collisions & Bounces (Impenetrable Physical Barrier)
+        // 1b. Robot Arm Solid Base Pedestal Collisions & Deflections (Impenetrable Physical Barrier)
         const numArms = this.armPursuits.length;
         for (let a = 0; a < numArms; a++) {
           const basePos = this.armPursuits[a].basePos;
@@ -368,15 +368,15 @@ export class BallInterceptor {
           const dz = pos.z - basePos.z;
           const hDist = Math.hypot(dx, dz);
 
-          // Check vertical zone of the robot arm base pedestal (0 to 0.58m)
-          if (pos.y <= 0.58) {
-            // Sculpted radial profile of the black base pedestal
+          // Check vertical zone of the robot arm base pedestal (up to 0.72m)
+          if (pos.y <= 0.72) {
+            // Radial profile of the base pedestal
             let baseRadius = 0.355; // Ground mounting flange & bolt ring
             if (pos.y > 0.07 && pos.y <= 0.22) {
               baseRadius = 0.295; // Cast pedestal column
-            } else if (pos.y > 0.22 && pos.y <= 0.38) {
+            } else if (pos.y > 0.22 && pos.y <= 0.40) {
               baseRadius = 0.260; // Turntable ring & housing
-            } else if (pos.y > 0.38) {
+            } else if (pos.y > 0.40) {
               baseRadius = 0.235; // Shoulder yoke pivot
             }
 
@@ -387,11 +387,11 @@ export class BallInterceptor {
               const nx = hDist > 0.0001 ? (dx / hDist) : 1.0;
               const nz = hDist > 0.0001 ? (dz / hDist) : 0.0;
 
-              // Immediate positional separation: push ball completely outside the base
+              // Immediate positional separation: push ball completely outside the base radially
               pos.x = basePos.x + nx * minSolidDist;
               pos.z = basePos.z + nz * minSolidDist;
 
-              // Elastic velocity bounce off base cylinder (damped to prevent violent rebound)
+              // Elastic velocity bounce off base cylinder
               const vDotN = b.velocity.x * nx + b.velocity.z * nz;
               if (vDotN < 0) {
                 const restitution = Math.max(0.38, b.restitution * 0.55);
@@ -399,7 +399,6 @@ export class BallInterceptor {
                 b.velocity.x += impulse * nx;
                 b.velocity.z += impulse * nz;
 
-                // Deflect outward slightly vertically if rolling against flange
                 if (pos.y < 0.10) {
                   b.velocity.y = Math.max(b.velocity.y, Math.abs(vDotN) * 0.15);
                 }
@@ -409,14 +408,6 @@ export class BallInterceptor {
                   this.audio.playBallBounce(Math.min(1.0, Math.abs(vDotN) / 3.2));
                 }
               }
-            }
-          } else if (pos.y <= 0.65 + b.radius && hDist < 0.24 + b.radius) {
-            // Landing on top of shoulder/turntable horizontal shelf
-            pos.y = 0.65 + b.radius;
-            if (b.velocity.y < -0.6) {
-              b.velocity.y = Math.abs(b.velocity.y) * 0.40;
-              b.bounces++;
-              this.audio.playBallBounce(0.35);
             }
           }
         }
@@ -441,7 +432,7 @@ export class BallInterceptor {
         // Ceiling bounce
         if (pos.y > this.bounds.maxY - b.radius) {
           pos.y = this.bounds.maxY - b.radius;
-          b.velocity.y = -Math.abs(b.velocity.y) * 0.30;
+          b.velocity.y = -Math.max(0.6, Math.abs(b.velocity.y) * 0.40);
         }
 
         // Air drag
@@ -699,6 +690,19 @@ export class BallInterceptor {
         p.mesh.geometry.dispose();
         p.mesh.material.dispose();
         this.particles.splice(i, 1);
+      }
+    }
+
+    // 1.5. Global Held-Ball State Integrity:
+    // Guarantees no ball ever remains orphaned or stuck mid-air if an arm transitions or drops target
+    for (let i = 0; i < this.balls.length; i++) {
+      const b = this.balls[i];
+      if (!b || !b.mesh) continue;
+      if (b.isHeld) {
+        const isActuallyHeld = this.armPursuits.some(ap => ap.heldBall === b && ap.throwState !== 'IDLE');
+        if (!isActuallyHeld) {
+          b.isHeld = false;
+        }
       }
     }
 
@@ -1227,6 +1231,16 @@ export class BallInterceptor {
         ap.isDancing = isComplete;
 
         if (isComplete) {
+          if (ap.heldBall) {
+            ap.heldBall.isHeld = false;
+            ap.heldBall = null;
+          }
+          if (ap.throwBall) {
+            ap.throwBall.isHeld = false;
+            ap.throwBall = null;
+          }
+          ap.throwState = 'IDLE';
+
           ap.danceTimer = (ap.danceTimer || 0) + deltaTime;
           if (!ap.wasDancing) {
             ap.wasDancing = true;
