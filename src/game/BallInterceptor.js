@@ -885,14 +885,25 @@ export class BallInterceptor {
               ap.ejectionsCount++;
               this.score += 50;
             } else {
-              // RETAIN OWN BALL: Guide & shield it safely behind the robot arm sanctuary
-              const behindDir = new THREE.Vector3(basePos.x, 0, basePos.z).normalize();
-              const sanctuaryPos = basePos.clone().addScaledVector(behindDir, 0.48);
-              const dxS = sanctuaryPos.x - pos.x;
-              const dzS = sanctuaryPos.z - pos.z;
-              const dS = Math.hypot(dxS, dzS);
-              pushDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
-              pushForce = 1.25 + Math.random() * 0.30;
+              // RETAIN / RETRIEVE OWN BALL:
+              const hDistBase = Math.hypot(pos.x - basePos.x, pos.z - basePos.z);
+              if (hDistBase > 1.20) {
+                // Ball is outside circle: pull/push it directly towards station center
+                const dxB = basePos.x - pos.x;
+                const dzB = basePos.z - pos.z;
+                const dB = Math.hypot(dxB, dzB);
+                pushDir = dB > 0.001 ? new THREE.Vector3(dxB / dB, 0, dzB / dB) : new THREE.Vector3(1, 0, 0);
+                pushForce = 1.65 + Math.random() * 0.25;
+              } else {
+                // Ball is inside circle: guide & shield it safely behind the robot arm sanctuary
+                const behindDir = new THREE.Vector3(basePos.x, 0, basePos.z).normalize();
+                const sanctuaryPos = basePos.clone().addScaledVector(behindDir, 0.48);
+                const dxS = sanctuaryPos.x - pos.x;
+                const dzS = sanctuaryPos.z - pos.z;
+                const dS = Math.hypot(dxS, dzS);
+                pushDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
+                pushForce = 1.15 + Math.random() * 0.25;
+              }
               ap.retainsCount++;
               this.score += 20;
             }
@@ -1285,23 +1296,32 @@ export class BallInterceptor {
               priorityScore = 0.22 + (hDist / 1.75) * 0.20;
             }
           } else {
-            // OWN COLOR BALL: Guide and retain in protected rear sanctuary behind arm
-            const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
-            const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48);
-            const distToSanctuary = Math.hypot(pos.x - sanctuaryPos.x, pos.z - sanctuaryPos.z);
+            // OWN COLOR BALL: Guide and retain in home defense circle
+            // 1. If already safely inside home defense circle (hDist <= 1.25) and settled, LEAVE IT ALONE!
+            // Do not keep nudging/tidying settled balls inside the circle.
+            if (hDist <= 1.25 && ballSpeed < 0.25) continue;
 
-            // If already safely protected in rear sanctuary, leave settled
-            if (distToSanctuary <= 0.35 && ballSpeed < 0.20) continue;
+            if (hDist > 1.78) continue; // Out of reach for arm
 
-            if (hDist > 1.65) continue; // Don't reach too far out for settled own balls
-
-            const dxS = sanctuaryPos.x - pos.x;
-            const dzS = sanctuaryPos.z - pos.z;
-            const dS = Math.hypot(dxS, dzS);
-            targetDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
-
-            // Priority: moving own balls take precedence, but foreign intruders always higher priority
-            priorityScore = 0.50 + (distToSanctuary / 1.65) * 0.25 - (ballSpeed > 0.20 ? 0.10 : 0.0);
+            if (hDist > 1.25) {
+              // 2. OUTSIDE OWN BALL: This is a missing ball outside the station!
+              // High priority retrieval: pull/push it inward toward station base
+              const dxBase = ap.basePos.x - pos.x;
+              const dzBase = ap.basePos.z - pos.z;
+              const dBase = Math.hypot(dxBase, dzBase);
+              targetDir = dBase > 0.001 ? new THREE.Vector3(dxBase / dBase, 0, dzBase / dBase) : new THREE.Vector3(1, 0, 0);
+              // Give urgent priority so the arm goes to fetch it instead of idle fidgeting
+              priorityScore = 0.05 + (hDist / 1.78) * 0.12;
+            } else {
+              // 3. Inside circle but moving fast or escaping: guide toward rear sanctuary / base
+              const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
+              const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48);
+              const dxS = sanctuaryPos.x - pos.x;
+              const dzS = sanctuaryPos.z - pos.z;
+              const dS = Math.hypot(dxS, dzS);
+              targetDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
+              priorityScore = 0.35 + (hDist / 1.25) * 0.20;
+            }
           }
 
           const angleOffset = (b === ap.lastAttemptBall) ? ap.currentAngleOffset : 0;
@@ -1466,11 +1486,20 @@ export class BallInterceptor {
               let pushDir;
               let pushForce;
               if (isOwn) {
-                const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
-                const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48);
-                const inDir = new THREE.Vector3(sanctuaryPos.x - tbPos.x, 0, sanctuaryPos.z - tbPos.z).normalize();
-                pushDir = inDir;
-                pushForce = 1.35;
+                const hDistBase = Math.hypot(tbPos.x - ap.basePos.x, tbPos.z - ap.basePos.z);
+                if (hDistBase > 1.20) {
+                  const dxB = ap.basePos.x - tbPos.x;
+                  const dzB = ap.basePos.z - tbPos.z;
+                  const dB = Math.hypot(dxB, dzB);
+                  pushDir = dB > 0.001 ? new THREE.Vector3(dxB / dB, 0, dzB / dB) : new THREE.Vector3(1, 0, 0);
+                  pushForce = 1.65;
+                } else {
+                  const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
+                  const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48);
+                  const inDir = new THREE.Vector3(sanctuaryPos.x - tbPos.x, 0, sanctuaryPos.z - tbPos.z).normalize();
+                  pushDir = inDir;
+                  pushForce = 1.20;
+                }
                 ap.retainsCount++;
               } else {
                 const oppBase = this.armPursuits[tb.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
