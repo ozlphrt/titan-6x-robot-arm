@@ -1041,10 +1041,10 @@ export class BallInterceptor {
           const graspThreshold = ap.throwBall.radius + 0.24; // Immediate generous reach for open jaws
 
           if (distToBall <= graspThreshold && now > (ap.throwBall.lastPushTime || 0)) {
-            // Initiate Instant Clamping Phase (0.035s fast progressive jaw closure)
+            // Initiate Smooth Clamping Phase (0.06s progressive jaw closure)
             ap.throwState = 'CLAMPING';
-            ap.clampDuration = 0.035;
-            ap.throwTimer = 0.035;
+            ap.clampDuration = 0.06;
+            ap.throwTimer = 0.06;
             ap.graspStartPos = tcpPos.clone();
 
             ap.heldBall = ap.throwBall;
@@ -1169,8 +1169,8 @@ export class BallInterceptor {
           }
         }
       } else if (ap.throwState === 'CLAMPING') {
-        // Step 2: Instant zero-jerk progressive clamp
-        const cDuration = ap.clampDuration || 0.035;
+        // Step 2: Smooth zero-jerk progressive clamp
+        const cDuration = ap.clampDuration || 0.06;
         const clampT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / cDuration));
         const pClamp = clampT * clampT * (3.0 - 2.0 * clampT);
         robot.setGripper(pClamp);
@@ -1185,20 +1185,20 @@ export class BallInterceptor {
           robot.setGripper(1.0);
           if (ap.throwMode === 'RETRIEVE_CARRY') {
             ap.throwState = 'RETRIEVE_CARRY';
-            ap.throwTimer = 0.09;
-            ap.carryDuration = 0.09;
+            ap.throwTimer = 0.16;
+            ap.carryDuration = 0.16;
           } else {
-            // Step 3: Rapid explosive joint-space windup
+            // Step 3: Controlled joint-space windup
             ap.throwState = 'WINDUP';
             ap.windupStartAngles = [...robot.angles];
             ap.windupStartTele = robot.getTelescope();
             const alpha = ap.throwPowerRatio || 0.5;
-            ap.windupDuration = 0.05 + 0.03 * alpha;
+            ap.windupDuration = 0.10 + 0.03 * alpha;
             ap.throwTimer = ap.windupDuration;
           }
         }
       } else if (ap.throwState === 'RETRIEVE_CARRY') {
-        // Swiftly carry ball over into the home circle (r <= 0.85m < 1.35m)
+        // Smoothly carry ball over into the home circle (r <= 0.85m < 1.35m)
         robot.getTCPWorldPosition(tcpPos);
         if (ap.heldBall && ap.heldBall.mesh) {
           ap.heldBall.velocity.set(0, 0, 0);
@@ -1210,7 +1210,7 @@ export class BallInterceptor {
         const rIn = 0.55 + ((ap.retainsCount || 0) % 3) * 0.14;
         const sanctuaryPos = ap.basePos.clone().add(new THREE.Vector3(Math.cos(angle) * rIn, 0, Math.sin(angle) * rIn));
 
-        const cDuration = ap.carryDuration || 0.09;
+        const cDuration = ap.carryDuration || 0.16;
         const carryT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / cDuration));
         const pCarry = carryT * carryT * (3.0 - 2.0 * carryT);
         const arcY = 0.20 + Math.sin(carryT * Math.PI) * 0.24;
@@ -1224,8 +1224,8 @@ export class BallInterceptor {
         const hDistToSanctuary = Math.hypot(tcpPos.x - sanctuaryPos.x, tcpPos.z - sanctuaryPos.z);
         if (ap.throwTimer <= 0 || hDistToSanctuary < 0.10) {
           ap.throwState = 'RETRIEVE_PLACE';
-          ap.placeDuration = 0.045;
-          ap.throwTimer = 0.045;
+          ap.placeDuration = 0.08;
+          ap.throwTimer = 0.08;
         }
       } else if (ap.throwState === 'RETRIEVE_PLACE') {
         // Lower down smoothly and gently place inside home circle
@@ -1240,7 +1240,7 @@ export class BallInterceptor {
         const floorInfo = this.getFloorInfo(sanctuaryPos.x, sanctuaryPos.z);
         ap.pursuitTarget.set(sanctuaryPos.x, floorInfo.y + (ap.heldBall ? ap.heldBall.radius : 0.065) + 0.015, sanctuaryPos.z);
 
-        const pDuration = ap.placeDuration || 0.045;
+        const pDuration = ap.placeDuration || 0.08;
         const placeT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / pDuration));
         const pPlace = placeT * placeT * (3.0 - 2.0 * placeT);
         robot.setGripper(1.0 - pPlace); // Progressive release
@@ -1275,7 +1275,7 @@ export class BallInterceptor {
         }
       } else if (ap.throwState === 'WINDUP') {
         // Step 4: Rapid joint-space pullback
-        const wDuration = ap.windupDuration || 0.06;
+        const wDuration = ap.windupDuration || 0.11;
         const windT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / wDuration));
         const p = windT * windT * (3.0 - 2.0 * windT);
 
@@ -1304,13 +1304,13 @@ export class BallInterceptor {
 
           // Seamless transition directly into SWING_THROW (zero artificial pause!)
           ap.throwState = 'SWING_THROW';
-          ap.swingDuration = 0.065;
-          ap.throwTimer = 0.065;
+          ap.swingDuration = 0.10;
+          ap.throwTimer = 0.10;
           ap.prevSwingTcpPos = null;
         }
       } else if (ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
         // Step 5-7: JOINT-SPACE THROW — continuous whip curve from cocked → release → follow-through
-        const sDuration = ap.swingDuration || 0.065;
+        const sDuration = ap.swingDuration || 0.10;
         const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / sDuration));
         const tRelease = 0.75; // Release at 75% peak velocity
 
@@ -1497,9 +1497,9 @@ export class BallInterceptor {
 
         // If arm is currently performing Grab / Carry waypoints, smooth tracking applies
         if (ap.throwState !== 'IDLE') {
-          // Hyper-agile snappy tracking towards throw waypoints
-          const smoothTime = 0.016;
-          const maxSpeed = 18.0;
+          // Smooth tracking towards throw waypoints
+          const smoothTime = 0.048;
+          const maxSpeed = 3.8;
 
           const omega = 2.0 / smoothTime;
           const x = omega * deltaTime;
@@ -1706,8 +1706,8 @@ export class BallInterceptor {
         }
 
         // Fast, agile critically damped Cartesian pursuit (SmoothDamp)
-        const smoothTime = 0.016;
-        const maxSpeed = 18.0;
+        const smoothTime = 0.048;
+        const maxSpeed = 3.8;
 
         const omega = 2.0 / smoothTime;
         const x = omega * deltaTime;
