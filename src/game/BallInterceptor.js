@@ -626,6 +626,16 @@ export class BallInterceptor {
         const floorAtPos = this.getFloorInfo(simPos.x, simPos.z);
         // Strike target: position TCP slightly behind the ball relative to rotated attack direction
         const strikePos = simPos.clone().addScaledVector(rotatedAttackDir, -ball.radius * 0.45);
+        
+        // Clamp strikePos to robot's physical reach envelope (<= 1.35m)
+        const sDx = strikePos.x - basePos.x;
+        const sDz = strikePos.z - basePos.z;
+        const sH = Math.hypot(sDx, sDz);
+        if (sH > 1.35) {
+          strikePos.x = basePos.x + (sDx / sH) * 1.35;
+          strikePos.z = basePos.z + (sDz / sH) * 1.35;
+        }
+        
         strikePos.y = Math.max(floorAtPos.y + ball.radius * 0.75 + yOffset, simPos.y + yOffset);
 
         const distFromTcp = currentTcp.distanceTo(strikePos);
@@ -644,7 +654,7 @@ export class BallInterceptor {
     const fallbackPos = ball.mesh.position.clone().addScaledVector(ball.velocity, 0.10);
     const offset = new THREE.Vector3().subVectors(fallbackPos, basePos);
     const fbH = Math.hypot(offset.x, offset.z);
-    const safeH = Math.max(0.20, Math.min(1.55, fbH));
+    const safeH = Math.max(0.20, Math.min(1.35, fbH));
     if (fbH > 0.001) {
       fallbackPos.x = basePos.x + (offset.x / fbH) * safeH;
       fallbackPos.z = basePos.z + (offset.z / fbH) * safeH;
@@ -653,6 +663,13 @@ export class BallInterceptor {
     fallbackPos.y = Math.max(fbFloor.y + ball.radius * 0.75 + yOffset, Math.min(1.40, fallbackPos.y));
 
     const strikeFallback = fallbackPos.clone().addScaledVector(rotatedAttackDir, -ball.radius * 0.45);
+    const sfDx = strikeFallback.x - basePos.x;
+    const sfDz = strikeFallback.z - basePos.z;
+    const sfH = Math.hypot(sfDx, sfDz);
+    if (sfH > 1.35) {
+      strikeFallback.x = basePos.x + (sfDx / sfH) * 1.35;
+      strikeFallback.z = basePos.z + (sfDz / sfH) * 1.35;
+    }
     strikeFallback.y = Math.max(fbFloor.y + ball.radius * 0.75 + yOffset, strikeFallback.y);
 
     return {
@@ -828,10 +845,13 @@ export class BallInterceptor {
         // --- Active Gripper / TCP Push Contact Zone (Normal Fast Deflections & Swats) ---
         if (ap.throwState === 'IDLE') {
           const distToTcp = pos.distanceTo(tcpPos);
-          const pushThreshold = b.radius + 0.13;
-          const canBePushed = (now - b.lastPushTime) > 100;
+          const hDistTcp = Math.hypot(pos.x - tcpPos.x, pos.z - tcpPos.z);
+          const vDistTcp = Math.abs(pos.y - tcpPos.y);
+          const pushThreshold = b.radius + 0.18;
+          const isProximity = (distToTcp <= pushThreshold) || (hDistTcp <= b.radius + 0.16 && vDistTcp <= 0.24);
+          const canBePushed = (now - b.lastPushTime) > 80;
 
-          if (distToTcp <= pushThreshold && pos.y >= 0.02 && canBePushed) {
+          if (isProximity && pos.y >= 0.02 && canBePushed) {
             b.lastPushTime = now;
 
             let pushDir;
@@ -872,14 +892,14 @@ export class BallInterceptor {
               const dzS = sanctuaryPos.z - pos.z;
               const dS = Math.hypot(dxS, dzS);
               pushDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
-              pushForce = 1.0 + Math.random() * 0.25;
+              pushForce = 1.25 + Math.random() * 0.30;
               ap.retainsCount++;
               this.score += 20;
             }
 
             b.velocity.x = pushDir.x * pushForce;
             b.velocity.z = pushDir.z * pushForce;
-            b.velocity.y = 0.28 + Math.random() * 0.15;
+            b.velocity.y = 0.26 + Math.random() * 0.12;
             b.bounces++;
 
             // Successful contact: reset retry counter & orientation
@@ -1184,13 +1204,26 @@ export class BallInterceptor {
 
           ap.lockTimer = (ap.lockTimer || 0) + deltaTime;
 
-          // Anti-stall: If locked on same stationary ball for > 1.2s without clearing, pop it and re-evaluate
-          if (!isStillValid || ap.lockTimer > 1.2) {
-            if (ap.lockTimer > 1.2 && b && b.mesh) {
-              const outDir = new THREE.Vector3(pos.x - ap.basePos.x, 0, pos.z - ap.basePos.z).normalize();
-              b.velocity.addScaledVector(outDir, 2.8);
-              b.velocity.y = 0.40;
+          // Anti-stall: If locked on same stationary ball for > 0.8s without clearing, pop it and re-evaluate
+          if (!isStillValid || ap.lockTimer > 0.8) {
+            if (ap.lockTimer > 0.8 && b && b.mesh) {
+              const isOwn = (b.teamId === armTeam);
+              if (isOwn) {
+                const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
+                const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48);
+                const inDir = new THREE.Vector3(sanctuaryPos.x - pos.x, 0, sanctuaryPos.z - pos.z).normalize();
+                b.velocity.x = inDir.x * 1.8;
+                b.velocity.z = inDir.z * 1.8;
+                b.velocity.y = 0.28;
+              } else {
+                const oppBase = this.armPursuits[b.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
+                const outDir = new THREE.Vector3(oppBase.x - pos.x, 0, oppBase.z - pos.z).normalize();
+                b.velocity.x = outDir.x * 2.8;
+                b.velocity.z = outDir.z * 2.8;
+                b.velocity.y = 0.40;
+              }
               b.lastPushTime = now;
+              b.bounces++;
             }
             ap.lockedTargetBall = null;
             ap.lockTimer = 0;
@@ -1314,9 +1347,21 @@ export class BallInterceptor {
                 ap.currentYOffset = 0.035;
               } else {
                 // 5. Direct approach reset with energy pulse
-                const outDir = new THREE.Vector3(targetBall.mesh.position.x - ap.basePos.x, 0, targetBall.mesh.position.z - ap.basePos.z).normalize();
-                targetBall.velocity.addScaledVector(outDir, 2.4);
-                targetBall.velocity.y = 0.40;
+                const isOwn = (targetBall.teamId === armTeam);
+                if (isOwn) {
+                  const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
+                  const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48);
+                  const inDir = new THREE.Vector3(sanctuaryPos.x - targetBall.mesh.position.x, 0, sanctuaryPos.z - targetBall.mesh.position.z).normalize();
+                  targetBall.velocity.x = inDir.x * 1.8;
+                  targetBall.velocity.z = inDir.z * 1.8;
+                  targetBall.velocity.y = 0.28;
+                } else {
+                  const outDir = new THREE.Vector3(targetBall.mesh.position.x - ap.basePos.x, 0, targetBall.mesh.position.z - ap.basePos.z).normalize();
+                  targetBall.velocity.addScaledVector(outDir, 2.4);
+                  targetBall.velocity.y = 0.40;
+                }
+                targetBall.lastPushTime = now;
+                targetBall.bounces++;
                 ap.currentAngleOffset = 0;
                 ap.currentWristRoll = 0;
                 ap.currentWristPitch = 0;
@@ -1387,6 +1432,54 @@ export class BallInterceptor {
 
         if (ap.currentTargetBall) {
           robot.setGripper(0.0);
+        }
+
+        // Proactive Hover Stall-Breaker:
+        // If the arm's TCP has arrived near target ball (dist <= 0.24m) and ball is resting/slow (v < 0.25m/s)
+        // for more than 0.30s, directly trigger contact push without waiting.
+        if (ap.currentTargetBall && ap.currentTargetBall.mesh) {
+          const tb = ap.currentTargetBall;
+          const tbPos = tb.mesh.position;
+          const distTcpToTb = tcpPos.distanceTo(tbPos);
+          if (distTcpToTb <= 0.24 && tb.velocity.length() < 0.25) {
+            ap.hoverStallTimer = (ap.hoverStallTimer || 0) + deltaTime;
+            if (ap.hoverStallTimer > 0.30) {
+              ap.hoverStallTimer = 0;
+              const isOwn = (tb.teamId === armTeam);
+              let pushDir;
+              let pushForce;
+              if (isOwn) {
+                const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
+                const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48);
+                const inDir = new THREE.Vector3(sanctuaryPos.x - tbPos.x, 0, sanctuaryPos.z - tbPos.z).normalize();
+                pushDir = inDir;
+                pushForce = 1.35;
+                ap.retainsCount++;
+              } else {
+                const oppBase = this.armPursuits[tb.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
+                pushDir = new THREE.Vector3(oppBase.x - tbPos.x, 0, oppBase.z - tbPos.z).normalize();
+                pushForce = 2.4;
+                ap.ejectionsCount++;
+              }
+              tb.velocity.x = pushDir.x * pushForce;
+              tb.velocity.z = pushDir.z * pushForce;
+              tb.velocity.y = 0.26;
+              tb.lastPushTime = now;
+              tb.bounces++;
+              this.createPushRippleEffect(tbPos, tb.color, tb.radius, pushDir);
+              robot.setGripper(0.85);
+              if (this.audio && typeof this.audio.playArmSwat === 'function') {
+                this.audio.playArmSwat(Math.min(1.0, pushForce / 2.4));
+              }
+              setTimeout(() => robot.setGripper(0.0), 140);
+              ap.lockedTargetBall = null;
+              ap.currentTargetBall = null;
+            }
+          } else {
+            ap.hoverStallTimer = 0;
+          }
+        } else {
+          ap.hoverStallTimer = 0;
         }
       }
 
