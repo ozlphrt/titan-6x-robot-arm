@@ -789,7 +789,7 @@ export class BallInterceptor {
       // Check stuck status for all opponent balls in this arm's zone
       for (let i = 0; i < this.balls.length; i++) {
         const b = this.balls[i];
-        if (!b || !b.mesh || b.isHeld) continue;
+        if (!b || !b.mesh || b.isHeld || (now < (b.lastPushTime || 0))) continue;
         const pos = b.mesh.position;
 
         const isOwnColor = (b.teamId === armTeam);
@@ -895,8 +895,8 @@ export class BallInterceptor {
         robot.setGripper(0.0); // Open wide!
         ap.throwTimer += deltaTime;
 
-        // Failsafe timeout or target invalidation
-        if (!ap.throwBall || !ap.throwBall.mesh || (ap.throwBall.isHeld && ap.heldBall !== ap.throwBall)) {
+        // Failsafe timeout or target invalidation (including balls currently in ballistic flight)
+        if (!ap.throwBall || !ap.throwBall.mesh || (ap.throwBall.isHeld && ap.heldBall !== ap.throwBall) || (now < (ap.throwBall.lastPushTime || 0))) {
           ap.throwBall = null;
           ap.centerTargetBall = null;
           ap.throwMode = 'EJECT';
@@ -911,7 +911,7 @@ export class BallInterceptor {
           const distToBall = tcpPos.distanceTo(ballPos);
           const graspThreshold = ap.throwBall.radius + 0.16; // Generous reach for open 26cm jaws
 
-          if (distToBall <= graspThreshold || (ap.throwTimer > 0.35 && distToBall <= graspThreshold + 0.10)) {
+          if ((distToBall <= graspThreshold || (ap.throwTimer > 0.35 && distToBall <= graspThreshold + 0.10)) && now > (ap.throwBall.lastPushTime || 0)) {
             // Initiate Visible Clamping Phase (0.10s pause for visible jaw closure & LED flash)
             robot.setGripper(1.0);
             ap.heldBall = ap.throwBall;
@@ -1137,8 +1137,8 @@ export class BallInterceptor {
         robot.group.updateMatrixWorld(true);
         robot.getTCPWorldPosition(tcpPos);
 
-        // Ball is held through acceleration phase; released right at peak forward power (swingT >= 0.75)
-        if (swingT < 0.75) {
+        // Ball is held through acceleration phase; released right at peak forward power (swingT >= 0.68)
+        if (swingT < 0.68) {
           robot.setGripper(1.0);
           if (ap.heldBall && ap.heldBall.mesh) {
             ap.heldBall.velocity.set(0, 0, 0);
@@ -1149,8 +1149,9 @@ export class BallInterceptor {
           robot.setGripper(0.0);
           this.audio.playPneumatic(false);
 
-          ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(ap.targetThrowDir, ap.heldBall.radius + 0.14);
-          ap.heldBall.mesh.position.y += 0.03;
+          // Position ball cleanly ahead of gripper
+          ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(ap.targetThrowDir, ap.heldBall.radius + 0.16);
+          ap.heldBall.mesh.position.y += 0.04;
 
           if (ap.throwMode === 'CENTER_STRIKE') {
             const strikeSpeed = 7.2;
@@ -1160,7 +1161,7 @@ export class BallInterceptor {
             // Ballistic physics trajectory calculation: lands directly in the targeted arm's collection circle!
             const targetPos = ap.targetThrowPos || ap.basePos;
             const dH = Math.max(0.6, Math.hypot(targetPos.x - tcpPos.x, targetPos.z - tcpPos.z));
-            const tFlight = Math.max(0.55, 0.50 + 0.22 * dH);
+            const tFlight = Math.max(0.55, 0.45 + 0.18 * dH);
             const vHoriz = dH / tFlight;
             const deltaY = targetPos.y - tcpPos.y;
             const gMag = Math.abs(this.gravity || 3.8);
@@ -1172,7 +1173,7 @@ export class BallInterceptor {
           ap.heldBall.bounces = 0;
           ap.heldBall.stuckTime = 0;
           ap.heldBall.isHeld = false;
-          ap.heldBall.lastPushTime = now + 800; // Immune to arm collisions during launch
+          ap.heldBall.lastPushTime = now + 1400; // Launch immunity for 1.4s: ball cannot be targeted or re-grasped while in flight
 
           if (this.audio && typeof this.audio.playArmSwat === 'function') {
             this.audio.playArmSwat(0.9 + 0.7 * alpha);
@@ -1182,7 +1183,7 @@ export class BallInterceptor {
           this.score += 100;
           ap.heldBall = null;
         } else {
-          // Post-release: Gripper stays open as arm glides naturally to finish the single forward stroke
+          // Post-release: Gripper stays wide open as arm glides naturally to finish the single forward stroke
           robot.setGripper(0.0);
         }
 
@@ -1195,9 +1196,16 @@ export class BallInterceptor {
           ap.pursuitVelocity.set(0, 0, 0);
           robot.setTargetAngles([j1, j2, j3, j4, j5, j6]);
           robot.setTargetTelescope(tele);
+          robot.setGripper(0.0);
 
-          ap.heldBall = null;
-          ap.throwBall = null;
+          if (ap.heldBall) {
+            ap.heldBall.isHeld = false;
+            ap.heldBall = null;
+          }
+          if (ap.throwBall) {
+            ap.throwBall.isHeld = false;
+            ap.throwBall = null;
+          }
           ap.centerTargetBall = null;
           ap.throwMode = 'EJECT';
           ap.throwState = 'IDLE';
@@ -1334,7 +1342,7 @@ export class BallInterceptor {
 
         for (let i = 0; i < this.balls.length; i++) {
           const b = this.balls[i];
-          if (!b || !b.mesh || b.isHeld) continue;
+          if (!b || !b.mesh || b.isHeld || (now < (b.lastPushTime || 0))) continue;
           const pos = b.mesh.position;
           const hDist = Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z);
 
