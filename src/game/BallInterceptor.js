@@ -821,6 +821,7 @@ export class BallInterceptor {
     for (let rIdx = 0; rIdx < this.robots.length; rIdx++) {
       const robot = this.robots[rIdx];
       const ap = this.armPursuits[rIdx];
+      const kinematics = this.kinematicsList[rIdx] || this.kinematicsList[0];
       const armTeam = ap.teamId;
       const basePos = ap.basePos;
       robot.group.getWorldPosition(basePos);
@@ -954,8 +955,6 @@ export class BallInterceptor {
             ap.clampDuration = 0.22;
             ap.throwTimer = 0.22;
             ap.graspStartPos = tcpPos.clone();
-            ap.graspJointAngles = [...robot.angles];
-            ap.graspTele = robot.telescopeExtension;
 
             ap.heldBall = ap.throwBall;
             ap.heldBall.isHeld = true;
@@ -982,17 +981,18 @@ export class BallInterceptor {
               }
             }
 
-            // Estimate release position (approx 0.45m forward from base at 0.38m height)
+            // Estimate release position (approx 0.45m forward from base at 0.44m height)
             const estReleasePos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.45);
-            estReleasePos.y = 0.38;
+            estReleasePos.y = 0.44;
 
             const launchSolution = this.calculateBallisticLaunchVelocity(estReleasePos, ap.targetThrowPos);
             ap.requiredLaunchVel = launchSolution.velocity;
             ap.requiredLaunchSpeed = launchSolution.speed;
             ap.requiredElevation = launchSolution.elevationAngle;
 
-            // Power ratio alpha strictly based on required ballistic launch speed (2.2 m/s to 6.8 m/s range)
-            ap.throwPowerRatio = Math.max(0.06, Math.min(1.0, (launchSolution.speed - 2.2) / 4.4));
+            // Power ratio alpha strictly based on required ballistic launch speed
+            const alpha = Math.max(0.05, Math.min(1.0, (launchSolution.speed - 1.2) / 3.4));
+            ap.throwPowerRatio = alpha;
           } else if (ap.throwTimer > 0.85) {
             // CLUSTER JAM BREAKER: If obstructed or unable to clamp inside dense ball pile, execute dynamic kinetic swat/sweep
             const oppBase = this.armPursuits[ap.throwBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
@@ -1034,36 +1034,21 @@ export class BallInterceptor {
           } else {
             // Step 3: Transition to smooth vertical LIFT
             ap.throwState = 'LIFT';
-            ap.liftDuration = 0.36;
-            ap.throwTimer = 0.36;
+            ap.liftDuration = 0.30;
+            ap.throwTimer = 0.30;
           }
         }
       } else if (ap.throwState === 'LIFT') {
-        // Step 3: LIFT THE BALL smoothly off the ground with C^2 quintic ease-in & ease-out
-        const startJ = ap.graspJointAngles || [0, -0.45, -0.55, 0, 0.60, 0];
-        const startTele = (ap.graspTele !== undefined) ? ap.graspTele : 0.40;
-
-        const lDuration = ap.liftDuration || 0.36;
+        // Step 3: LIFT THE BALL smoothly off the ground in Cartesian space with C^2 quintic ease-in & ease-out
+        const lDuration = ap.liftDuration || 0.30;
         const liftT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / lDuration));
-        // Quintic smoothstep (C^2 zero velocity & zero jerk at start and end)
         const p = liftT * liftT * liftT * (liftT * (liftT * 6.0 - 15.0) + 10.0);
 
-        const liftJ2 = startJ[1] + 0.20;
-        const liftJ3 = startJ[2] - 0.18;
-        const liftJ5 = startJ[4] - 0.05;
-        const liftTele = Math.max(0.04, startTele - 0.16);
+        const liftPos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.22);
+        liftPos.y = 0.36;
+        const pCart = ap.graspStartPos.clone().lerp(liftPos, p);
 
-        const j1 = startJ[0];
-        const j2 = startJ[1] + (liftJ2 - startJ[1]) * p;
-        const j3 = startJ[2] + (liftJ3 - startJ[2]) * p;
-        const j4 = startJ[3] * (1.0 - p);
-        const j5 = startJ[4] + (liftJ5 - startJ[4]) * p;
-        const j6 = startJ[5] * (1.0 - p);
-        const tele = startTele + (liftTele - startTele) * p;
-
-        robot.setJointAngles([j1, j2, j3, j4, j5, j6]);
-        robot.setTelescope(tele);
-        robot.group.updateMatrixWorld(true);
+        kinematics.solveIK(pCart, 16, 0.002, true);
         robot.getTCPWorldPosition(tcpPos);
 
         if (ap.heldBall && ap.heldBall.mesh) {
@@ -1076,10 +1061,9 @@ export class BallInterceptor {
         if (ap.throwTimer <= 0) {
           // Step 4: Transition to COCK & WINDUP
           ap.throwState = 'WINDUP';
-          ap.liftEndAngles = [j1, j2, j3, j4, j5, j6];
-          ap.liftEndTele = tele;
+          ap.liftEndCartPos = liftPos.clone();
           const alpha = ap.throwPowerRatio || 0.5;
-          ap.windupDuration = 0.22 + 0.14 * alpha; // Proportional windup time (0.22s for small toss -> 0.36s for power cocking)
+          ap.windupDuration = 0.22 + 0.12 * alpha; // Proportional windup time
           ap.throwTimer = ap.windupDuration;
         }
       } else if (ap.throwState === 'RETRIEVE_CARRY') {
@@ -1149,55 +1133,19 @@ export class BallInterceptor {
           ap.throwState = 'IDLE';
         }
       } else if (ap.throwState === 'WINDUP') {
-        // Step 4: COCK & TARGET (Backswing depth is STRICTLY proportional to required power alpha)
-        const startJ = ap.liftEndAngles || ap.graspJointAngles || [0, -0.45, -0.55, 0, 0.60, 0];
-        const startTele = (ap.liftEndTele !== undefined) ? ap.liftEndTele : ((ap.graspTele !== undefined) ? ap.graspTele : 0.40);
-
-        // Target Base Yaw (J1) aligned directly with targetThrowDir in robot local space
-        const localDir = ap.targetThrowDir.clone();
-        const invRot = robot.group.quaternion.clone().invert();
-        localDir.applyQuaternion(invRot);
-        const targetJ1 = Math.atan2(localDir.x, localDir.z);
-
-        // Shortest angular rotation path for J1
-        let diffJ1 = targetJ1 - startJ[0];
-        while (diffJ1 > Math.PI) diffJ1 -= Math.PI * 2;
-        while (diffJ1 < -Math.PI) diffJ1 += Math.PI * 2;
-
-        const wDuration = ap.windupDuration || 0.30;
-        const windT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / wDuration));
-        // Quintic smoothstep for seamless continuous acceleration from lift end into cocked apex
-        const p = windT * windT * windT * (windT * (windT * 6.0 - 15.0) + 10.0);
+        // Step 4: COCK & TARGET (Cartesian backswing is strictly proportional to required power alpha)
         const alpha = ap.throwPowerRatio || 0.5;
+        const wDuration = ap.windupDuration || 0.26;
+        const windT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / wDuration));
+        const p = windT * windT * windT * (windT * (windT * 6.0 - 15.0) + 10.0);
 
-        const j1 = startJ[0] + diffJ1 * p;
-        let targetJ2, targetJ3, targetJ5, targetTele;
+        const liftPos = ap.liftEndCartPos || ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.22);
+        // Cocked position: behind the shoulder pivot, raised ready for athletic forward whip
+        const cockedPos = ap.basePos.clone().sub(ap.targetThrowDir.clone().multiplyScalar(0.06 + 0.22 * alpha));
+        cockedPos.y = 0.38 + 0.08 * alpha;
 
-        if (ap.throwMode === 'CENTER_STRIKE') {
-          targetJ2 = -0.20;
-          targetJ3 = -0.95;
-          targetJ5 = 0.75;
-          targetTele = 0.04;
-        } else {
-          // Backswing is an offset relative to startJ scaled strictly by alpha:
-          // alpha = 0 (short toss): Zero backswing! Arm stays in lift stance and simply turns to face target
-          // alpha = 1 (power throw): Deep athletic rear windup
-          targetJ2 = startJ[1] + 0.35 * alpha;
-          targetJ3 = startJ[2] - 0.95 * alpha;
-          targetJ5 = startJ[4] + 0.32 * alpha;
-          targetTele = Math.max(0.02, startTele - 0.14 * alpha);
-        }
-
-        const j2 = startJ[1] + (targetJ2 - startJ[1]) * p;
-        const j3 = startJ[2] + (targetJ3 - startJ[2]) * p;
-        const j4 = startJ[3] * (1.0 - p);
-        const j5 = startJ[4] + (targetJ5 - startJ[4]) * p;
-        const j6 = startJ[5] * (1.0 - p);
-        const tele = startTele + (targetTele - startTele) * p;
-
-        robot.setJointAngles([j1, j2, j3, j4, j5, j6]);
-        robot.setTelescope(tele);
-        robot.group.updateMatrixWorld(true);
+        const pCart = liftPos.clone().lerp(cockedPos, p);
+        kinematics.solveIK(pCart, 16, 0.002, true);
         robot.getTCPWorldPosition(tcpPos);
 
         if (ap.heldBall && ap.heldBall.mesh) {
@@ -1210,75 +1158,47 @@ export class BallInterceptor {
         if (ap.throwTimer <= 0) {
           // Step 5: Transition to FORWARD SWING & APEX RELEASE
           ap.throwState = 'SWING_THROW';
-          ap.cockedJointAngles = [j1, targetJ2, targetJ3, 0, targetJ5, 0];
-          ap.cockedTele = targetTele;
+          ap.cockedCartPos = cockedPos.clone();
+          // Release position: extended forward and upward along launch elevation angle
+          ap.releaseCartPos = ap.basePos.clone().addScaledVector(ap.targetThrowDir, 0.38 + 0.40 * alpha);
+          ap.releaseCartPos.y = 0.42 + 0.22 * alpha;
 
           // Compute forward stroke length (meters) based on power alpha
-          const strokeDist = 0.32 + 0.56 * alpha; // 0.32m (gentle pitch) to 0.88m (power whip)
+          const strokeDist = ap.cockedCartPos.distanceTo(ap.releaseCartPos);
           // Since v_peak = 2.0 * strokeDist / T_accel => T_accel = (2.0 * strokeDist) / reqSpeed
-          const reqSpeed = Math.max(2.0, ap.requiredLaunchSpeed || 4.5);
-          const tAccel = Math.max(0.12, Math.min(0.38, (2.0 * strokeDist) / reqSpeed));
+          const reqSpeed = Math.max(1.5, ap.requiredLaunchSpeed || 3.0);
+          const tAccel = Math.max(0.12, Math.min(0.35, (2.0 * strokeDist) / reqSpeed));
           const swingDuration = tAccel / 0.82; // Release at 82% of swing duration
 
           ap.throwTimer = swingDuration;
           ap.swingDuration = swingDuration;
         }
       } else if (ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
-        // Step 5, 6, 7: FORWARD SWING (Stroke amplitude & speed are strictly proportional to required distance alpha)
-        const localDir = ap.targetThrowDir.clone();
-        const invRot = robot.group.quaternion.clone().invert();
-        localDir.applyQuaternion(invRot);
-        const j1 = Math.atan2(localDir.x, localDir.z);
-
+        // Step 5, 6, 7: FORWARD & UPWARD SWING in Cartesian world space
         const sDuration = ap.swingDuration || 0.28;
         const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / sDuration));
-        const alpha = ap.throwPowerRatio || 0.5;
+        const tRelease = 0.82;
 
-        // Kinematic Motion Profile:
+        const strokeVec = new THREE.Vector3().subVectors(ap.releaseCartPos, ap.cockedCartPos);
+        const pCart = new THREE.Vector3();
+
         // 1. Forward Acceleration Phase (0 <= swingT <= tRelease):
-        //    Starts smoothly from rest at cocked pose, accelerating continuously to peak velocity at tRelease (82% of swing).
+        //    Starts smoothly from rest at cocked pose, accelerating continuously UP AND FORWARD to peak velocity at tRelease.
         // 2. Follow-Through & Deceleration Phase (swingT > tRelease):
         //    Smooth ease-out deceleration from peak velocity to rest with zero jerk.
-        const tRelease = 0.82;
-        let p;
         if (swingT <= tRelease) {
           const u = swingT / tRelease; // u in [0, 1]
-          p = 2.0 * u * u * u - u * u * u * u; // Continuous monotonic acceleration (p'(0)=0, p'(1)=2.0)
+          const p = 2.0 * u * u * u - u * u * u * u; // Continuous monotonic acceleration (p'(0)=0, p'(1)=2.0)
+          pCart.copy(ap.cockedCartPos).addScaledVector(strokeVec, p);
         } else {
           const w = (swingT - tRelease) / (1.0 - tRelease); // w in [0, 1]
-          p = 1.0 + 0.08 * w * (2.0 - w); // Smooth cushioned overtravel and deceleration to rest
-        }
-
-        let j2, j3, j4 = 0, j5, j6 = 0, tele;
-
-        const cockJ = ap.cockedJointAngles || [j1, -0.30, -0.70, 0, 0.55, 0];
-        const cockTele = (ap.cockedTele !== undefined) ? ap.cockedTele : 0.05;
-
-        if (ap.throwMode === 'CENTER_STRIKE') {
-          // Low forward bowling stroke directly along target line
-          j2 = cockJ[1] + (-0.85 - cockJ[1]) * p;
-          j3 = cockJ[2] + (-0.15 - cockJ[2]) * p;
-          j5 = cockJ[4] + (0.25 - cockJ[4]) * p;
-          tele = cockTele + (0.75 - cockTele) * p;
-        } else {
-          // Forward stroke targets matching the elevation angle and required launch energy
-          const endJ2 = cockJ[1] - (0.08 + 0.54 * alpha);
-          const endJ3 = cockJ[2] + (0.12 + 1.02 * alpha);
-          const endJ5 = cockJ[4] - (0.06 + 0.46 * alpha);
-          const endTele = Math.min(0.85, cockTele + 0.12 + 0.72 * alpha);
-
-          j2 = cockJ[1] + (endJ2 - cockJ[1]) * p;
-          j3 = cockJ[2] + (endJ3 - cockJ[2]) * p;
-          j5 = cockJ[4] + (endJ5 - cockJ[4]) * p;
-          tele = cockTele + (endTele - cockTele) * p;
+          const pFollow = 1.0 + 0.08 * w * (2.0 - w); // Smooth cushioned overtravel and deceleration to rest
+          pCart.copy(ap.cockedCartPos).addScaledVector(strokeVec, pFollow);
         }
 
         // Track instantaneous physical gripper velocity in 3D world space
         const prevTcpPos = tcpPos.clone();
-
-        robot.setJointAngles([j1, j2, j3, j4, j5, j6]);
-        robot.setTelescope(tele);
-        robot.group.updateMatrixWorld(true);
+        kinematics.solveIK(pCart, 16, 0.002, true);
         robot.getTCPWorldPosition(tcpPos);
 
         const vGripper = new THREE.Vector3().subVectors(tcpPos, prevTcpPos).divideScalar(Math.max(0.001, deltaTime));
@@ -1293,20 +1213,20 @@ export class BallInterceptor {
             ap.heldBall.mesh.position.copy(tcpPos);
           }
         } else if (ap.heldBall && ap.heldBall.mesh) {
-          // RELEASE BALL: Departing ball velocity and 3D trajectory are 100% mandated by the physical swing velocity of the gripper!
+          // RELEASE BALL: Both gripper and departing ball move FORWARD and UP in 100% unison!
           robot.setGripper(0.0);
           this.audio.playPneumatic(false);
 
-          // Use the calculated ballistic velocity vector (which matches the swing speed & trajectory)
-          const finalLaunchVel = (ap.requiredLaunchVel && ap.requiredLaunchVel.lengthSq() > 1.0)
+          // Ball velocity matches the forward-and-upward ballistic solution
+          const finalLaunchVel = (ap.requiredLaunchVel && ap.requiredLaunchVel.lengthSq() > 0.5)
             ? ap.requiredLaunchVel
-            : (vGripper.lengthSq() > 0.5 ? vGripper : ap.targetThrowDir.clone().multiplyScalar(4.0));
+            : (vGripper.lengthSq() > 0.5 ? vGripper : ap.targetThrowDir.clone().multiplyScalar(3.0));
 
           const launchDir = finalLaunchVel.clone().normalize();
           ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(launchDir, ap.heldBall.radius + 0.04);
           ap.heldBall.mesh.position.y += 0.01;
 
-          // Ball departs with the exact required ballistic velocity and 3D trajectory
+          // Ball departs with the exact calculated ballistic trajectory
           ap.heldBall.velocity.copy(finalLaunchVel);
 
           ap.heldBall.bounces = 0;
@@ -1333,8 +1253,6 @@ export class BallInterceptor {
           ap.pursuitPos.copy(tcpPos);
           ap.pursuitTarget.copy(tcpPos);
           ap.pursuitVelocity.set(0, 0, 0);
-          robot.setTargetAngles([j1, j2, j3, j4, j5, j6]);
-          robot.setTargetTelescope(tele);
           robot.setGripper(0.0);
 
           if (ap.heldBall) {
