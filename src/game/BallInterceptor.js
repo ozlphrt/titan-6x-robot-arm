@@ -988,11 +988,13 @@ export class BallInterceptor {
         robot.setGripper(1.0);
 
         const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
-        const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.45);
+        const perpDir = new THREE.Vector3(-behindDir.z, 0, behindDir.x);
+        const slotSpread = (((ap.retainsCount || 0) % 5) - 2) * 0.12;
+        const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48).addScaledVector(perpDir, slotSpread);
 
-        // Smooth parabolic carry arc
+        // Smooth parabolic carry arc over the pedestal
         const carryT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / 0.45));
-        const arcY = 0.12 + Math.sin(carryT * Math.PI) * 0.28;
+        const arcY = 0.15 + Math.sin(carryT * Math.PI) * 0.32;
         ap.pursuitTarget.set(
           ap.graspStartPos.x + (sanctuaryPos.x - ap.graspStartPos.x) * carryT,
           arcY,
@@ -1001,17 +1003,19 @@ export class BallInterceptor {
 
         ap.throwTimer -= deltaTime;
         const hDistToSanctuary = Math.hypot(tcpPos.x - sanctuaryPos.x, tcpPos.z - sanctuaryPos.z);
-        if (ap.throwTimer <= 0 || hDistToSanctuary < 0.10) {
+        if (ap.throwTimer <= 0 || hDistToSanctuary < 0.12) {
           ap.throwState = 'RETRIEVE_PLACE';
           ap.throwTimer = 0.22;
         }
       } else if (ap.throwState === 'RETRIEVE_PLACE') {
-        // Lower down smoothly and gently release into sanctuary
+        // Lower down smoothly and gently place into organized rear sanctuary
         if (ap.heldBall && ap.heldBall.mesh) {
           ap.heldBall.velocity.set(0, 0, 0);
         }
         const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
-        const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.45);
+        const perpDir = new THREE.Vector3(-behindDir.z, 0, behindDir.x);
+        const slotSpread = (((ap.retainsCount || 0) % 5) - 2) * 0.12;
+        const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48).addScaledVector(perpDir, slotSpread);
         const floorInfo = this.getFloorInfo(sanctuaryPos.x, sanctuaryPos.z);
         ap.pursuitTarget.set(sanctuaryPos.x, floorInfo.y + (ap.heldBall ? ap.heldBall.radius : 0.065), sanctuaryPos.z);
 
@@ -1022,9 +1026,9 @@ export class BallInterceptor {
 
           if (ap.heldBall && ap.heldBall.mesh) {
             ap.heldBall.isHeld = false;
-            ap.heldBall.velocity.set(behindDir.x * 0.10, 0, behindDir.z * 0.10);
-            ap.heldBall.lastPushTime = now + 400;
-            ap.retainsCount++;
+            ap.heldBall.velocity.set(0, 0, 0); // Settles gently in place behind arm
+            ap.heldBall.lastPushTime = now + 600;
+            ap.retainsCount = (ap.retainsCount || 0) + 1;
             this.pushCount++;
             this.score += 50;
           }
@@ -1258,23 +1262,11 @@ export class BallInterceptor {
 
           // 1. Horizontal Turntable Sway (Wide side-to-side swing)
           const j1 = baseDirYaw + Math.sin(t * tempo) * 0.65;
-
-          // 2. High-to-Low Elevation Swing (Deep low floor dip down to -1.15 rad, soaring high skyward reach up to +0.35 rad)
           const j2 = -0.40 + Math.cos(t * tempo) * 0.75;
-
-          // 3. Elbow Articulation (Folds on the low floor sweep and extends on the high soaring reach)
           const j3 = 0.20 - Math.cos(t * tempo) * 0.55 + Math.sin(t * tempo * 2.0) * 0.22;
-
-          // 4. Forearm Body Roll (Leaning rhythmically into the side curves)
           const j4 = Math.sin(t * tempo + 0.8) * 1.35;
-
-          // 5. Wrist Pitch Gesture (Gracefully tilts up on the low dip and down on the high soar)
           const j5 = -0.30 + Math.cos(t * tempo) * 0.80;
-
-          // 6. Flange Tool Spin (Rhythmic celebration twirls)
           const j6 = t * 3.8 + Math.sin(t * tempo) * 2.2;
-
-          // 7. Telescoping Forearm Extension (Reaches out high, tucks in low)
           const tele = 0.15 + 0.70 * (0.5 + 0.5 * Math.cos(t * tempo));
           robot.setTargetTelescope(tele);
 
@@ -1363,7 +1355,7 @@ export class BallInterceptor {
           let priorityScore = 0;
 
           if (!isOwnColor) {
-            // FOREIGN INTRUDER BALL: Eject towards its owner station
+            // FOREIGN INTRUDER BALL: Eject towards its owner station (Highest Priority)
             const oppBase = this.armPursuits[b.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
             const dxOpp = oppBase.x - pos.x;
             const dzOpp = oppBase.z - pos.z;
@@ -1373,38 +1365,32 @@ export class BallInterceptor {
             if (hDist <= 1.45) {
               // Inside home circle: Absolute top priority (clear out all intruders!)
               const speedUrgency = ballSpeed > 0.20 ? 0.08 : 0.0;
-              priorityScore = 0.01 + (hDist / 1.45) * 0.15 - speedUrgency;
+              priorityScore = 0.01 + (hDist / 1.45) * 0.12 - speedUrgency;
             } else {
               // In boundary corridor / outer reach: Proactive arena-wide clearance
               priorityScore = 0.22 + (hDist / 1.75) * 0.20;
             }
           } else {
-            // OWN COLOR BALL: Guide and retain in home defense circle
-            // 1. If already safely inside home defense circle (hDist <= 1.25) and settled, LEAVE IT ALONE!
-            // Do not keep nudging/tidying settled balls inside the circle.
-            if (hDist <= 1.25 && ballSpeed < 0.25) continue;
+            // OWN COLOR BALL: Check if already organized in rear sanctuary behind arm
+            const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
+            const vecFromBase = new THREE.Vector3().subVectors(pos, ap.basePos);
+            const projBehind = vecFromBase.dot(behindDir);
+            const isOrganizedBehind = (projBehind > 0.32 && hDist <= 0.78);
+
+            // If already organized in the rear sanctuary and settled, leave it undisturbed
+            if (isOrganizedBehind && ballSpeed < 0.25) continue;
 
             if (hDist > 1.78) continue; // Out of reach for arm
 
-            if (hDist > 1.25) {
-              // 2. OUTSIDE OWN BALL: This is a missing ball outside the station!
-              // High priority retrieval: pull/push it inward toward station base
-              const dxBase = ap.basePos.x - pos.x;
-              const dzBase = ap.basePos.z - pos.z;
-              const dBase = Math.hypot(dxBase, dzBase);
-              targetDir = dBase > 0.001 ? new THREE.Vector3(dxBase / dBase, 0, dzBase / dBase) : new THREE.Vector3(1, 0, 0);
-              // Give urgent priority so the arm goes to fetch it instead of idle fidgeting
-              priorityScore = 0.05 + (hDist / 1.78) * 0.12;
-            } else {
-              // 3. Inside circle but moving fast or escaping: guide toward rear sanctuary / base
-              const behindDir = new THREE.Vector3(ap.basePos.x, 0, ap.basePos.z).normalize();
-              const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48);
-              const dxS = sanctuaryPos.x - pos.x;
-              const dzS = sanctuaryPos.z - pos.z;
-              const dS = Math.hypot(dxS, dzS);
-              targetDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
-              priorityScore = 0.35 + (hDist / 1.25) * 0.20;
-            }
+            // Active Organization: Pick up own ball and carry it behind the arm to organize!
+            const sanctuaryPos = ap.basePos.clone().addScaledVector(behindDir, 0.48);
+            const dxS = sanctuaryPos.x - pos.x;
+            const dzS = sanctuaryPos.z - pos.z;
+            const dS = Math.hypot(dxS, dzS);
+            targetDir = dS > 0.001 ? new THREE.Vector3(dxS / dS, 0, dzS / dS) : behindDir;
+
+            // When no alien balls are present, arm actively organizes all un-organized own balls
+            priorityScore = 0.12 + (hDist / 1.78) * 0.18;
           }
 
           const angleOffset = (b === ap.lastAttemptBall) ? ap.currentAngleOffset : 0;
