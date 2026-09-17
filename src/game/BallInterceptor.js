@@ -1286,25 +1286,36 @@ export class BallInterceptor {
         robot.group.getWorldPosition(ap.basePos);
 
         // --- VICTORY CONDITION CHECK ---
-        // All own balls are gathered inside this circle AND zero foreign balls
+        // An arm can ONLY claim victory if:
+        // 1. It is not currently holding or throwing a ball (must finish throwing alien ball first)
+        // 2. All own balls are gathered inside this circle AND zero foreign balls in perimeter
         const totalOwnBalls = this.balls.filter(b => b.teamId === armTeam).length;
         const ownInCircle = distributions[k]?.counts[armTeam] || 0;
         const foreignInCircle = (distributions[k]?.total || 0) - ownInCircle;
-        const isComplete = (totalOwnBalls > 0 && ownInCircle === totalOwnBalls && foreignInCircle === 0);
+        const isBusyHandling = (ap.heldBall !== null || ap.throwState !== 'IDLE');
+
+        let hasForeignInZone = false;
+        for (let i = 0; i < this.balls.length; i++) {
+          const b = this.balls[i];
+          if (!b || !b.mesh || b.teamId === armTeam) continue;
+          const distBase = Math.hypot(b.mesh.position.x - ap.basePos.x, b.mesh.position.z - ap.basePos.z);
+          if (distBase <= 1.75) {
+            hasForeignInZone = true;
+            break;
+          }
+        }
+
+        const isComplete = (
+          !isBusyHandling &&
+          !hasForeignInZone &&
+          totalOwnBalls > 0 &&
+          ownInCircle === totalOwnBalls &&
+          foreignInCircle === 0
+        );
 
         ap.isDancing = isComplete;
 
         if (isComplete) {
-          if (ap.heldBall) {
-            ap.heldBall.isHeld = false;
-            ap.heldBall = null;
-          }
-          if (ap.throwBall) {
-            ap.throwBall.isHeld = false;
-            ap.throwBall = null;
-          }
-          ap.throwState = 'IDLE';
-
           ap.danceTimer = (ap.danceTimer || 0) + deltaTime;
           if (!ap.wasDancing) {
             ap.wasDancing = true;
