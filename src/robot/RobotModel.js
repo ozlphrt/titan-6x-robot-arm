@@ -80,8 +80,8 @@ export class RobotModel {
     this.targetAngles = [0, 0, 0, 0, 0, 0];
     // Joint angular velocities for smooth critically damped motion
     this.jointVelocities = [0, 0, 0, 0, 0, 0];
-    // Max angular speeds (rad/s) for smooth, high-precision industrial robotic tracking [J1..J6]
-    this.jointSpeeds = [2.2, 1.8, 2.2, 3.0, 3.0, 4.0];
+    // Max angular speeds (rad/s) for smooth, deliberate industrial robotic tracking [J1..J6]
+    this.jointSpeeds = [1.2, 0.9, 1.1, 1.5, 1.5, 2.0];
 
     // Joint Angle Limits in Degrees (Wide Industrial Range to Reach All Ground Circles)
     this.limits = [
@@ -918,7 +918,7 @@ export class RobotModel {
    * using critically damped robotic servo motor dynamics (no teleportation/snapping).
    */
   updateServoMotors(deltaTime) {
-    const smoothTime = 0.080; // Smooth realistic industrial servo response time
+    const smoothTime = 0.12; // Smooth realistic industrial servo response time
     const omega = 2.0 / Math.max(0.01, smoothTime);
     const x = omega * deltaTime;
     const exp = 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x);
@@ -963,7 +963,7 @@ export class RobotModel {
     // 2. Smooth Telescopic Forearm Piston Motor
     const currentTele = this.telescopeExtension;
     const targetTele = this.targetTelescopeExtension;
-    const maxTeleSpeed = 1.0; // Smooth realistic hydraulic telescopic stroke rate
+    const maxTeleSpeed = 0.45; // Smooth deliberate hydraulic telescopic stroke rate
 
     let teleChange = currentTele - targetTele;
     const teleMaxChange = maxTeleSpeed * smoothTime;

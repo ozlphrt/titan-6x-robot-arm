@@ -639,7 +639,7 @@ export class BallInterceptor {
     const simVel = ball.velocity.clone();
     const dt = 0.033;
     const maxSteps = 30;
-    const armSpeed = 12.0;
+    const armSpeed = 3.5;
 
     // Rotate attack vector horizontally around vertical Y axis if retry angleOffset is applied
     let rotatedAttackDir = targetDir;
@@ -1177,7 +1177,7 @@ export class BallInterceptor {
         }
       } else if (ap.throwState === 'CLAMPING') {
         // Step 2: Smooth progressive clamp
-        const cDuration = ap.clampDuration || 0.08;
+        const cDuration = ap.clampDuration || 0.12;
         const clampT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / cDuration));
         const pClamp = clampT * clampT * (3.0 - 2.0 * clampT);
         robot.setGripper(pClamp);
@@ -1192,15 +1192,15 @@ export class BallInterceptor {
           robot.setGripper(1.0);
           if (ap.throwMode === 'RETRIEVE_CARRY') {
             ap.throwState = 'RETRIEVE_CARRY';
-            ap.throwTimer = 0.24;
-            ap.carryDuration = 0.24;
+            ap.throwTimer = 0.35;
+            ap.carryDuration = 0.35;
           } else {
             // Step 3: Controlled joint-space windup
             ap.throwState = 'WINDUP';
             ap.windupStartAngles = [...robot.angles];
             ap.windupStartTele = robot.getTelescope();
             const alpha = ap.throwPowerRatio || 0.5;
-            ap.windupDuration = 0.15 + 0.03 * alpha;
+            ap.windupDuration = 0.28 + 0.05 * alpha;
             ap.throwTimer = ap.windupDuration;
           }
         }
@@ -1217,7 +1217,7 @@ export class BallInterceptor {
         const rIn = 0.55 + ((ap.retainsCount || 0) % 3) * 0.14;
         const sanctuaryPos = ap.basePos.clone().add(new THREE.Vector3(Math.cos(angle) * rIn, 0, Math.sin(angle) * rIn));
 
-        const cDuration = ap.carryDuration || 0.24;
+        const cDuration = ap.carryDuration || 0.35;
         const carryT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / cDuration));
         const pCarry = carryT * carryT * (3.0 - 2.0 * carryT);
         const arcY = 0.20 + Math.sin(carryT * Math.PI) * 0.24;
@@ -1231,8 +1231,8 @@ export class BallInterceptor {
         const hDistToSanctuary = Math.hypot(tcpPos.x - sanctuaryPos.x, tcpPos.z - sanctuaryPos.z);
         if (ap.throwTimer <= 0 || hDistToSanctuary < 0.10) {
           ap.throwState = 'RETRIEVE_PLACE';
-          ap.placeDuration = 0.12;
-          ap.throwTimer = 0.12;
+          ap.placeDuration = 0.18;
+          ap.throwTimer = 0.18;
         }
       } else if (ap.throwState === 'RETRIEVE_PLACE') {
         // Lower down smoothly and gently place inside home circle
@@ -1311,13 +1311,13 @@ export class BallInterceptor {
 
           // Seamless transition directly into SWING_THROW (zero artificial pause!)
           ap.throwState = 'SWING_THROW';
-          ap.swingDuration = 0.14;
-          ap.throwTimer = 0.14;
+          ap.swingDuration = 0.28;
+          ap.throwTimer = 0.28;
           ap.prevSwingTcpPos = null;
         }
       } else if (ap.throwState === 'SWING_THROW' || ap.throwState === 'RELEASE') {
         // Step 5-7: JOINT-SPACE THROW — continuous whip curve from cocked → release → follow-through
-        const sDuration = ap.swingDuration || 0.14;
+        const sDuration = ap.swingDuration || 0.28;
         const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / sDuration));
         const tRelease = 0.75; // Release at 75% peak velocity
 
@@ -1505,8 +1505,8 @@ export class BallInterceptor {
         // If arm is currently performing Grab / Carry waypoints, smooth tracking applies
         if (ap.throwState !== 'IDLE') {
           // Smooth tracking towards throw waypoints
-          const smoothTime = 0.075;
-          const maxSpeed = 2.0;
+          const smoothTime = 0.12;
+          const maxSpeed = 1.1;
 
           const omega = 2.0 / smoothTime;
           const x = omega * deltaTime;
@@ -1716,9 +1716,9 @@ export class BallInterceptor {
           robot.setTargetTelescope(0.0);
         }
 
-        // Fast, agile critically damped Cartesian pursuit (SmoothDamp)
-        const smoothTime = 0.075;
-        const maxSpeed = 2.0;
+        // Smooth critically damped Cartesian pursuit (SmoothDamp)
+        const smoothTime = 0.12;
+        const maxSpeed = 1.1;
 
         const omega = 2.0 / smoothTime;
         const x = omega * deltaTime;
