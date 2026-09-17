@@ -1,124 +1,3 @@
-import * as THREE from 'three';
-
-function drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius) {
-  let rot = (Math.PI / 2) * 3;
-  let x = cx;
-  let y = cy;
-  const step = Math.PI / spikes;
-
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - outerRadius);
-  for (let i = 0; i < spikes; i++) {
-    x = cx + Math.cos(rot) * outerRadius;
-    y = cy + Math.sin(rot) * outerRadius;
-    ctx.lineTo(x, y);
-    rot += step;
-
-    x = cx + Math.cos(rot) * innerRadius;
-    y = cy + Math.sin(rot) * innerRadius;
-    ctx.lineTo(x, y);
-    rot += step;
-  }
-  ctx.lineTo(cx, cy - outerRadius);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function createBouncyBallTexture(teamId, styleIndex, theme) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d');
-
-  const baseCol = theme.primary;
-  const accentCol = theme.secondary;
-  const numCol = theme.numCol;
-  const badgeCol = theme.badgeBg;
-  const teamNum = String(teamId + 1);
-
-  // 1. Base High-Saturation Color Fill
-  ctx.fillStyle = baseCol;
-  ctx.fillRect(0, 0, 512, 256);
-
-  // 2. High-Contrast Team Graphic Patterns
-  if (styleIndex === 0) {
-    // Pro Racing Dual-Band
-    ctx.fillStyle = accentCol;
-    ctx.fillRect(0, 80, 512, 96);
-    ctx.fillStyle = theme.stripeCol || '#ffffff';
-    ctx.fillRect(0, 108, 512, 40);
-  } else if (styleIndex === 1) {
-    // Bold Hemisphere Block
-    ctx.fillStyle = accentCol;
-    ctx.fillRect(0, 128, 512, 128);
-    ctx.fillStyle = theme.stripeCol || '#ffffff';
-    ctx.fillRect(0, 118, 512, 20);
-  } else if (styleIndex === 2) {
-    // Dynamic Wave Ribbons
-    ctx.fillStyle = accentCol;
-    ctx.beginPath();
-    ctx.moveTo(0, 128);
-    for (let x = 0; x <= 512; x += 8) {
-      ctx.lineTo(x, 128 + Math.sin((x / 512) * Math.PI * 4) * 60);
-    }
-    ctx.lineTo(512, 256);
-    ctx.lineTo(0, 256);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.strokeStyle = theme.stripeCol || '#ffffff';
-    ctx.lineWidth = 12;
-    ctx.beginPath();
-    ctx.moveTo(0, 128);
-    for (let x = 0; x <= 512; x += 8) {
-      ctx.lineTo(x, 128 + Math.sin((x / 512) * Math.PI * 4) * 60);
-    }
-    ctx.stroke();
-  } else {
-    // Arcade Stars Belt
-    ctx.fillStyle = accentCol;
-    ctx.fillRect(0, 85, 512, 86);
-    ctx.fillStyle = theme.stripeCol || '#ffffff';
-    for (let i = 0; i < 6; i++) {
-      drawStar(ctx, 42 + i * 85, 128, 5, 24, 11);
-    }
-  }
-
-  // 3. Prominent Bold Circular Team Number Badges (Opposite Equator Positions)
-  [128, 384].forEach(cx => {
-    // Outer shadow rim
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-    ctx.beginPath();
-    ctx.arc(cx + 2, 130, 44, 0, Math.PI * 2);
-    ctx.fill();
-
-    // White / Contrast Base Disc
-    ctx.fillStyle = badgeCol;
-    ctx.beginPath();
-    ctx.arc(cx, 128, 42, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Colored Border Ring
-    ctx.strokeStyle = accentCol;
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.arc(cx, 128, 39, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Large Bold Team Number
-    ctx.fillStyle = numCol;
-    ctx.font = '900 52px "Chakra Petch", "JetBrains Mono", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(teamNum, cx, 129);
-  });
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  return texture;
-}
-
 export class BallInterceptor {
   constructor(scene, robots, kinematicsList, audio) {
     this.scene = scene;
@@ -156,53 +35,47 @@ export class BallInterceptor {
     this.combo = 0;
     this.lastPushTime = 0;
 
-    // 4 Distinct, Vivid High-Contrast Team Color Themes
+    // 4 Solid Color Themes Identical to the 4 Robot Arm Primary Paints
     this.teamThemes = [
       {
         id: 0,
         name: 'ALPHA (ARM 1)',
-        label: 'Solar Yellow',
-        primary: '#ffea00',    // Vivid High-Luminance Solar Yellow
-        secondary: '#0f172a',  // Dark Obsidian
-        stripeCol: '#ffffff',
-        badgeBg: '#ffffff',
-        numCol: '#000000',
-        hex: 0xffea00
+        label: 'Fanuc Yellow',
+        primary: '#ffcb05',
+        hex: 0xffcb05
       },
       {
         id: 1,
         name: 'BETA (ARM 2)',
-        label: 'Blaze Orange',
-        primary: '#ff3d00',    // Vivid Fiery Crimson Orange
-        secondary: '#7f1d1d',  // Deep Burgundy Maroon
-        stripeCol: '#ffffff',
-        badgeBg: '#ffffff',
-        numCol: '#d50000',
-        hex: 0xff3d00
+        label: 'Kuka Orange',
+        primary: '#e65100',
+        hex: 0xe65100
       },
       {
         id: 2,
         name: 'GAMMA (ARM 3)',
-        label: 'Arctic White',
-        primary: '#ffffff',    // Brilliant Arctic Pure White
-        secondary: '#1d4ed8',  // Vivid Electric Sapphire Blue
-        stripeCol: '#38bdf8',  // Sky Blue Accent
-        badgeBg: '#1e3a8a',
-        numCol: '#ffffff',
+        label: 'ABB White',
+        primary: '#f8fafc',
         hex: 0xf8fafc
       },
       {
         id: 3,
         name: 'DELTA (ARM 4)',
-        label: 'Laser Cyan',
-        primary: '#00f0ff',    // Ultra-Vivid Neon Laser Cyan
-        secondary: '#030712',  // Midnight Void
-        stripeCol: '#4f46e5',  // Indigo Laser Accent
-        badgeBg: '#ffffff',
-        numCol: '#006699',
+        label: 'Cyber Cyan',
+        primary: '#00f0ff',
         hex: 0x00f0ff
       }
     ];
+
+    // High-Gloss Automotive Solid Finish Materials matching arm paints
+    this.teamMaterials = this.teamThemes.map(theme => new THREE.MeshPhysicalMaterial({
+      color: theme.hex,
+      metalness: 0.35,
+      roughness: 0.22,
+      clearcoat: 0.75,
+      clearcoatRoughness: 0.12,
+      envMapIntensity: 1.3
+    }));
 
     // Multi-Arm Pursuit & Defense States for all 4 Robot Arms
     this.armPursuits = this.robots.map((r, idx) => {
@@ -262,16 +135,6 @@ export class BallInterceptor {
 
     this.scene.add(this.targetReticle);
 
-    // Pre-create textures for the 4 teams
-    this.teamTextures = this.teamThemes.map((theme, teamId) => {
-      return [
-        createBouncyBallTexture(teamId, 0, theme),
-        createBouncyBallTexture(teamId, 1, theme),
-        createBouncyBallTexture(teamId, 2, theme),
-        createBouncyBallTexture(teamId, 3, theme)
-      ];
-    });
-
     // Initial staggered spawn of 80 balls matching all 4 arm colors
     this.spawnInitialBalls(this.targetFlockSize);
   }
@@ -297,7 +160,7 @@ export class BallInterceptor {
   }
 
   /**
-   * Spawns / drops a ball at the center circle with designated arm team color
+   * Spawns / drops a ball at the center circle with designated arm team solid color
    */
   spawnBall(dropAtCenter = true, specificTeamId = null) {
     let x = (Math.random() - 0.5) * 0.16;
@@ -314,10 +177,9 @@ export class BallInterceptor {
 
     const teamId = specificTeamId !== null ? specificTeamId : (this.spawnIndex++ % 4);
     const theme = this.teamThemes[teamId];
-    const styleIndex = Math.floor(Math.random() * 4);
-    const ballTexture = this.teamTextures[teamId][styleIndex];
+    const mat = this.teamMaterials[teamId];
 
-    // Uniform spherical ball size (0.062m - 0.076m)
+    // Uniform spherical ball size (0.064m - 0.074m)
     const ballRadius = 0.064 + Math.random() * 0.010;
     const baseRestitution = 0.74 + Math.random() * 0.04;
     const mass = Math.pow(ballRadius / 0.070, 3) * 0.08;
@@ -328,17 +190,6 @@ export class BallInterceptor {
     const vy = -0.20;
 
     const geo = new THREE.SphereGeometry(ballRadius, 24, 24);
-    const mat = new THREE.MeshPhysicalMaterial({
-      map: ballTexture,
-      roughness: 0.10,
-      metalness: 0.04,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.05,
-      reflectivity: 0.98,
-      emissive: new THREE.Color(theme.hex),
-      emissiveIntensity: 0.06
-    });
-
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, y, z);
     mesh.castShadow = true;
@@ -352,7 +203,6 @@ export class BallInterceptor {
       radius: ballRadius,
       mass: mass,
       color: theme.hex,
-      texture: ballTexture,
       velocity: new THREE.Vector3(vx, vy, vz),
       restitution: baseRestitution,
       bounces: 0,
