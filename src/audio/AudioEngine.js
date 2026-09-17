@@ -1,77 +1,77 @@
 // =============================================================================
-// TITAN-6X MULTI-SCHEMA ACOUSTIC SOUND ENGINE
+// TITAN-6X MULTI-SCHEMA ACOUSTIC SOUND ENGINE (Authentic Subtle Mechanical Acoustics)
 // =============================================================================
 
 export const SOUND_SCHEMAS = {
   cyber_actuators: {
     id: 'cyber_actuators',
-    name: 'Cyber Actuators (High-Tech Electromagnetic)',
-    desc: 'Modern, sleek, electromagnetic servo phase whirr with magnetic flux glide',
+    name: 'Precision Industrial Servos (Subtle Mechanical Whirr)',
+    desc: 'Warm harmonic drive gear mesh with subtle bearing friction texture',
     joints: [
-      { name: 'J1 (Base)', baseFreq: 90, maxFreq: 135, filterFreq: 320, wave1: 'sine', wave2: 'triangle', harmRatio: 1.5, vol1: 0.7, vol2: 0.25, maxVol: 0.016 },
-      { name: 'J2 (Shoulder)', baseFreq: 120, maxFreq: 175, filterFreq: 360, wave1: 'sine', wave2: 'sine', harmRatio: 1.5, vol1: 0.75, vol2: 0.25, maxVol: 0.015 },
-      { name: 'J3 (Elbow)', baseFreq: 155, maxFreq: 220, filterFreq: 420, wave1: 'sine', wave2: 'sine', harmRatio: 1.5, vol1: 0.75, vol2: 0.25, maxVol: 0.014 },
-      { name: 'J4 (Forearm)', baseFreq: 195, maxFreq: 275, filterFreq: 490, wave1: 'sine', wave2: 'sine', harmRatio: 1.5, vol1: 0.75, vol2: 0.25, maxVol: 0.013 },
-      { name: 'J5 (Wrist)', baseFreq: 240, maxFreq: 335, filterFreq: 570, wave1: 'sine', wave2: 'sine', harmRatio: 1.5, vol1: 0.8, vol2: 0.2, maxVol: 0.012 },
-      { name: 'J6 (Flange)', baseFreq: 290, maxFreq: 400, filterFreq: 660, wave1: 'sine', wave2: 'sine', harmRatio: 1.5, vol1: 0.8, vol2: 0.2, maxVol: 0.011 }
+      { name: 'J1 (Base)', baseFreq: 58, maxFreq: 72, filterFreq: 180, frictionFreq: 260, wave1: 'sine', wave2: 'triangle', harmRatio: 2.0, vol1: 0.65, vol2: 0.20, fricVol: 0.25, maxVol: 0.013 },
+      { name: 'J2 (Shoulder)', baseFreq: 76, maxFreq: 92, filterFreq: 210, frictionFreq: 290, wave1: 'sine', wave2: 'triangle', harmRatio: 2.0, vol1: 0.65, vol2: 0.20, fricVol: 0.25, maxVol: 0.012 },
+      { name: 'J3 (Elbow)', baseFreq: 102, maxFreq: 124, filterFreq: 250, frictionFreq: 340, wave1: 'sine', wave2: 'triangle', harmRatio: 2.0, vol1: 0.65, vol2: 0.20, fricVol: 0.25, maxVol: 0.011 },
+      { name: 'J4 (Forearm)', baseFreq: 135, maxFreq: 162, filterFreq: 290, frictionFreq: 390, wave1: 'sine', wave2: 'triangle', harmRatio: 2.0, vol1: 0.68, vol2: 0.18, fricVol: 0.22, maxVol: 0.010 },
+      { name: 'J5 (Wrist)', baseFreq: 175, maxFreq: 208, filterFreq: 340, frictionFreq: 450, wave1: 'sine', wave2: 'triangle', harmRatio: 2.0, vol1: 0.70, vol2: 0.15, fricVol: 0.20, maxVol: 0.009 },
+      { name: 'J6 (Flange)', baseFreq: 220, maxFreq: 260, filterFreq: 400, frictionFreq: 520, wave1: 'sine', wave2: 'triangle', harmRatio: 2.0, vol1: 0.70, vol2: 0.15, fricVol: 0.18, maxVol: 0.008 }
     ],
-    piston: { carrierFreq: 115, carrierMax: 165, filterFreq: 280, fluidCutoff: 300, carrierVol: 0.015, fluidVol: 0.012, hasChuff: true }
+    piston: { carrierFreq: 68, carrierMax: 92, filterFreq: 160, fluidCutoff: 220, carrierVol: 0.011, fluidVol: 0.007, hasChuff: true }
   },
   precision_servos: {
     id: 'precision_servos',
-    name: 'Precision Brushless Servos (Fanuc / ABB)',
-    desc: 'Dual-harmonic gear mesh (f0 + 2f0) with metallic cycloidal gear bite',
+    name: 'Heavy Industrial Machinery (Low-Pitch Planetary Gears)',
+    desc: 'Deep mechanical cast-iron body hum and cycloidal gear teeth friction',
     joints: [
-      { name: 'J1 (Base)', baseFreq: 82, maxFreq: 122, filterFreq: 240, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.72, vol2: 0.32, maxVol: 0.017 },
-      { name: 'J2 (Shoulder)', baseFreq: 108, maxFreq: 156, filterFreq: 280, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.72, vol2: 0.32, maxVol: 0.016 },
-      { name: 'J3 (Elbow)', baseFreq: 138, maxFreq: 196, filterFreq: 330, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.72, vol2: 0.32, maxVol: 0.015 },
-      { name: 'J4 (Forearm)', baseFreq: 172, maxFreq: 244, filterFreq: 390, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.72, vol2: 0.32, maxVol: 0.014 },
-      { name: 'J5 (Wrist)', baseFreq: 212, maxFreq: 298, filterFreq: 460, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.72, vol2: 0.32, maxVol: 0.013 },
-      { name: 'J6 (Flange)', baseFreq: 258, maxFreq: 362, filterFreq: 540, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.72, vol2: 0.32, maxVol: 0.012 }
+      { name: 'J1 (Base)', baseFreq: 48, maxFreq: 62, filterFreq: 150, frictionFreq: 220, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.60, vol2: 0.25, fricVol: 0.30, maxVol: 0.014 },
+      { name: 'J2 (Shoulder)', baseFreq: 65, maxFreq: 80, filterFreq: 175, frictionFreq: 250, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.60, vol2: 0.25, fricVol: 0.30, maxVol: 0.013 },
+      { name: 'J3 (Elbow)', baseFreq: 88, maxFreq: 108, filterFreq: 210, frictionFreq: 290, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.60, vol2: 0.25, fricVol: 0.30, maxVol: 0.012 },
+      { name: 'J4 (Forearm)', baseFreq: 118, maxFreq: 142, filterFreq: 250, frictionFreq: 340, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.65, vol2: 0.20, fricVol: 0.26, maxVol: 0.011 },
+      { name: 'J5 (Wrist)', baseFreq: 152, maxFreq: 182, filterFreq: 300, frictionFreq: 400, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.65, vol2: 0.20, fricVol: 0.24, maxVol: 0.010 },
+      { name: 'J6 (Flange)', baseFreq: 195, maxFreq: 232, filterFreq: 350, frictionFreq: 470, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.68, vol2: 0.18, fricVol: 0.22, maxVol: 0.009 }
     ],
-    piston: { carrierFreq: 92, carrierMax: 138, filterFreq: 220, fluidCutoff: 260, carrierVol: 0.016, fluidVol: 0.011, hasChuff: true }
+    piston: { carrierFreq: 56, carrierMax: 78, filterFreq: 140, fluidCutoff: 190, carrierVol: 0.013, fluidVol: 0.009, hasChuff: true }
   },
   heavy_hydraulics: {
     id: 'heavy_hydraulics',
-    name: 'Heavy Industrial Machinery & Hydraulics',
-    desc: 'Deep sub-bass cast iron planetary gears and heavy hydraulic fluid pressure',
+    name: 'Heavy Hydraulics & Fluid Power',
+    desc: 'Sub-bass pressurized fluid flow with heavy mechanical cylinder motion',
     joints: [
-      { name: 'J1 (Base)', baseFreq: 64, maxFreq: 98, filterFreq: 180, wave1: 'sawtooth', wave2: 'triangle', harmRatio: 2.0, vol1: 0.6, vol2: 0.4, maxVol: 0.022 },
-      { name: 'J2 (Shoulder)', baseFreq: 88, maxFreq: 130, filterFreq: 210, wave1: 'sawtooth', wave2: 'triangle', harmRatio: 2.0, vol1: 0.65, vol2: 0.35, maxVol: 0.020 },
-      { name: 'J3 (Elbow)', baseFreq: 115, maxFreq: 165, filterFreq: 260, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.7, vol2: 0.3, maxVol: 0.018 },
-      { name: 'J4 (Forearm)', baseFreq: 145, maxFreq: 205, filterFreq: 310, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.7, vol2: 0.3, maxVol: 0.016 },
-      { name: 'J5 (Wrist)', baseFreq: 180, maxFreq: 250, filterFreq: 370, wave1: 'sine', wave2: 'sine', harmRatio: 2.0, vol1: 0.75, vol2: 0.25, maxVol: 0.014 },
-      { name: 'J6 (Flange)', baseFreq: 220, maxFreq: 305, filterFreq: 440, wave1: 'sine', wave2: 'sine', harmRatio: 2.0, vol1: 0.75, vol2: 0.25, maxVol: 0.013 }
+      { name: 'J1 (Base)', baseFreq: 42, maxFreq: 56, filterFreq: 130, frictionFreq: 190, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.55, vol2: 0.30, fricVol: 0.35, maxVol: 0.016 },
+      { name: 'J2 (Shoulder)', baseFreq: 58, maxFreq: 74, filterFreq: 150, frictionFreq: 220, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.58, vol2: 0.28, fricVol: 0.35, maxVol: 0.015 },
+      { name: 'J3 (Elbow)', baseFreq: 80, maxFreq: 98, filterFreq: 180, frictionFreq: 260, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.60, vol2: 0.25, fricVol: 0.32, maxVol: 0.013 },
+      { name: 'J4 (Forearm)', baseFreq: 108, maxFreq: 130, filterFreq: 220, frictionFreq: 310, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.62, vol2: 0.22, fricVol: 0.30, maxVol: 0.012 },
+      { name: 'J5 (Wrist)', baseFreq: 140, maxFreq: 168, filterFreq: 260, frictionFreq: 360, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.65, vol2: 0.20, fricVol: 0.26, maxVol: 0.010 },
+      { name: 'J6 (Flange)', baseFreq: 178, maxFreq: 210, filterFreq: 310, frictionFreq: 420, wave1: 'triangle', wave2: 'sine', harmRatio: 2.0, vol1: 0.68, vol2: 0.18, fricVol: 0.24, maxVol: 0.009 }
     ],
-    piston: { carrierFreq: 76, carrierMax: 118, filterFreq: 180, fluidCutoff: 320, carrierVol: 0.022, fluidVol: 0.018, hasChuff: true }
+    piston: { carrierFreq: 50, carrierMax: 70, filterFreq: 130, fluidCutoff: 210, carrierVol: 0.016, fluidVol: 0.012, hasChuff: true }
   },
   stepper_cobot: {
     id: 'stepper_cobot',
-    name: 'Laboratory Cobot (Smooth Stepper Drives)',
-    desc: 'Musical, pure, whisper-clean micro-stepping sinusoidal resonance (UR-style)',
+    name: 'Laboratory Cobot (Quiet Sinusoidal Resonance)',
+    desc: 'Soft, clean sinusoidal micro-stepping purr with damped mechanical casing',
     joints: [
-      { name: 'J1 (Base)', baseFreq: 110, maxFreq: 150, filterFreq: 280, wave1: 'sine', wave2: 'sine', harmRatio: 3.0, vol1: 0.85, vol2: 0.15, maxVol: 0.014 },
-      { name: 'J2 (Shoulder)', baseFreq: 138, maxFreq: 190, filterFreq: 330, wave1: 'sine', wave2: 'sine', harmRatio: 3.0, vol1: 0.85, vol2: 0.15, maxVol: 0.013 },
-      { name: 'J3 (Elbow)', baseFreq: 175, maxFreq: 240, filterFreq: 390, wave1: 'sine', wave2: 'sine', harmRatio: 3.0, vol1: 0.85, vol2: 0.15, maxVol: 0.012 },
-      { name: 'J4 (Forearm)', baseFreq: 220, maxFreq: 300, filterFreq: 460, wave1: 'sine', wave2: 'sine', harmRatio: 3.0, vol1: 0.85, vol2: 0.15, maxVol: 0.011 },
-      { name: 'J5 (Wrist)', baseFreq: 275, maxFreq: 375, filterFreq: 540, wave1: 'sine', wave2: 'sine', harmRatio: 3.0, vol1: 0.9, vol2: 0.1, maxVol: 0.010 },
-      { name: 'J6 (Flange)', baseFreq: 330, maxFreq: 450, filterFreq: 620, wave1: 'sine', wave2: 'sine', harmRatio: 3.0, vol1: 0.9, vol2: 0.1, maxVol: 0.010 }
+      { name: 'J1 (Base)', baseFreq: 75, maxFreq: 90, filterFreq: 180, frictionFreq: 240, wave1: 'sine', wave2: 'sine', harmRatio: 2.0, vol1: 0.80, vol2: 0.10, fricVol: 0.15, maxVol: 0.010 },
+      { name: 'J2 (Shoulder)', baseFreq: 95, maxFreq: 112, filterFreq: 210, frictionFreq: 280, wave1: 'sine', wave2: 'sine', harmRatio: 2.0, vol1: 0.80, vol2: 0.10, fricVol: 0.15, maxVol: 0.009 },
+      { name: 'J3 (Elbow)', baseFreq: 120, maxFreq: 142, filterFreq: 250, frictionFreq: 330, wave1: 'sine', wave2: 'sine', harmRatio: 2.0, vol1: 0.80, vol2: 0.10, fricVol: 0.15, maxVol: 0.009 },
+      { name: 'J4 (Forearm)', baseFreq: 155, maxFreq: 180, filterFreq: 290, frictionFreq: 380, wave1: 'sine', wave2: 'sine', harmRatio: 2.0, vol1: 0.82, vol2: 0.10, fricVol: 0.14, maxVol: 0.008 },
+      { name: 'J5 (Wrist)', baseFreq: 195, maxFreq: 225, filterFreq: 340, frictionFreq: 440, wave1: 'sine', wave2: 'sine', harmRatio: 2.0, vol1: 0.85, vol2: 0.08, fricVol: 0.12, maxVol: 0.007 },
+      { name: 'J6 (Flange)', baseFreq: 245, maxFreq: 280, filterFreq: 390, frictionFreq: 500, wave1: 'sine', wave2: 'sine', harmRatio: 2.0, vol1: 0.85, vol2: 0.08, fricVol: 0.12, maxVol: 0.007 }
     ],
-    piston: { carrierFreq: 130, carrierMax: 180, filterFreq: 260, fluidCutoff: 240, carrierVol: 0.012, fluidVol: 0.008, hasChuff: false }
+    piston: { carrierFreq: 85, carrierMax: 110, filterFreq: 180, fluidCutoff: 180, carrierVol: 0.008, fluidVol: 0.005, hasChuff: false }
   },
   stealth_whisper: {
     id: 'stealth_whisper',
-    name: 'Stealth Whisper Mode (Ultra Subtle)',
-    desc: 'Ultra-quiet low-frequency haptic hum, perfect for silent monitoring',
+    name: 'Stealth Whisper Mode (Subtle Haptic Purr)',
+    desc: 'Near-silent low-frequency tactile vibration hum',
     joints: [
-      { name: 'J1 (Base)', baseFreq: 70, maxFreq: 100, filterFreq: 160, wave1: 'sine', wave2: 'sine', harmRatio: 1.0, vol1: 1.0, vol2: 0.0, maxVol: 0.006 },
-      { name: 'J2 (Shoulder)', baseFreq: 90, maxFreq: 125, filterFreq: 180, wave1: 'sine', wave2: 'sine', harmRatio: 1.0, vol1: 1.0, vol2: 0.0, maxVol: 0.006 },
-      { name: 'J3 (Elbow)', baseFreq: 110, maxFreq: 150, filterFreq: 200, wave1: 'sine', wave2: 'sine', harmRatio: 1.0, vol1: 1.0, vol2: 0.0, maxVol: 0.005 },
-      { name: 'J4 (Forearm)', baseFreq: 135, maxFreq: 180, filterFreq: 230, wave1: 'sine', wave2: 'sine', harmRatio: 1.0, vol1: 1.0, vol2: 0.0, maxVol: 0.005 },
-      { name: 'J5 (Wrist)', baseFreq: 160, maxFreq: 210, filterFreq: 260, wave1: 'sine', wave2: 'sine', harmRatio: 1.0, vol1: 1.0, vol2: 0.0, maxVol: 0.004 },
-      { name: 'J6 (Flange)', baseFreq: 190, maxFreq: 250, filterFreq: 300, wave1: 'sine', wave2: 'sine', harmRatio: 1.0, vol1: 1.0, vol2: 0.0, maxVol: 0.004 }
+      { name: 'J1 (Base)', baseFreq: 50, maxFreq: 62, filterFreq: 120, frictionFreq: 160, wave1: 'sine', wave2: 'sine', harmRatio: 1.0, vol1: 0.9, vol2: 0.0, fricVol: 0.10, maxVol: 0.005 },
+      { name: 'J2 (Shoulder)', baseFreq: 64, maxFreq: 78, filterFreq: 140, frictionFreq: 180, wave1: 'sine', wave2: 'sine', harmRatio: 1.0, vol1: 0.9, vol2: 0.0, fricVol: 0.10, maxVol: 0.005 },
+      { name: 'J3 (Elbow)', baseFreq: 82, maxFreq: 98, filterFreq: 160, frictionFreq: 210, wave1: 'sine', wave2: 'sine', harmRatio: 1.0, vol1: 0.9, vol2: 0.0, fricVol: 0.10, maxVol: 0.004 },
+      { name: 'J4 (Forearm)', baseFreq: 105, maxFreq: 124, filterFreq: 180, frictionFreq: 240, wave1: 'sine', wave2: 'sine', harmRatio: 1.0, vol1: 0.9, vol2: 0.0, fricVol: 0.08, maxVol: 0.004 },
+      { name: 'J5 (Wrist)', baseFreq: 130, maxFreq: 152, filterFreq: 200, frictionFreq: 270, wave1: 'sine', wave2: 'sine', harmRatio: 1.0, vol1: 0.9, vol2: 0.0, fricVol: 0.08, maxVol: 0.003 },
+      { name: 'J6 (Flange)', baseFreq: 160, maxFreq: 185, filterFreq: 230, frictionFreq: 310, wave1: 'sine', wave2: 'sine', harmRatio: 1.0, vol1: 0.9, vol2: 0.0, fricVol: 0.08, maxVol: 0.003 }
     ],
-    piston: { carrierFreq: 80, carrierMax: 110, filterFreq: 160, fluidCutoff: 180, carrierVol: 0.006, fluidVol: 0.004, hasChuff: false }
+    piston: { carrierFreq: 55, carrierMax: 72, filterFreq: 120, fluidCutoff: 140, carrierVol: 0.005, fluidVol: 0.003, hasChuff: false }
   }
 };
 
@@ -83,6 +83,7 @@ export class AudioEngine {
     this.masterGain = null;
     this.jointVoices = [];
     this.hydraulicVoice = null;
+    this.noiseBuffer = null;
     this.wasPistonMoving = false;
   }
 
@@ -99,18 +100,20 @@ export class AudioEngine {
         v.profile = jConfig;
         v.osc1.type = jConfig.wave1;
         v.osc2.type = jConfig.wave2;
-        v.osc1.frequency.setTargetAtTime(jConfig.baseFreq, curTime, 0.05);
-        v.osc2.frequency.setTargetAtTime(jConfig.baseFreq * jConfig.harmRatio, curTime, 0.05);
-        v.filter.frequency.setTargetAtTime(jConfig.filterFreq, curTime, 0.05);
-        v.gain1.gain.setTargetAtTime(jConfig.vol1, curTime, 0.05);
-        v.gain2.gain.setTargetAtTime(jConfig.vol2, curTime, 0.05);
+        v.osc1.frequency.setTargetAtTime(jConfig.baseFreq, curTime, 0.06);
+        v.osc2.frequency.setTargetAtTime(jConfig.baseFreq * jConfig.harmRatio, curTime, 0.06);
+        v.filter.frequency.setTargetAtTime(jConfig.filterFreq, curTime, 0.06);
+        v.frictionFilter.frequency.setTargetAtTime(jConfig.frictionFreq, curTime, 0.06);
+        v.gain1.gain.setTargetAtTime(jConfig.vol1, curTime, 0.06);
+        v.gain2.gain.setTargetAtTime(jConfig.vol2, curTime, 0.06);
+        v.fricGain.gain.setTargetAtTime(jConfig.fricVol, curTime, 0.06);
       }
 
       if (this.hydraulicVoice) {
         const p = schema.piston;
-        this.hydraulicVoice.pistonCarrier.frequency.setTargetAtTime(p.carrierFreq, curTime, 0.05);
-        this.hydraulicVoice.pistonFilter.frequency.setTargetAtTime(p.filterFreq, curTime, 0.05);
-        this.hydraulicVoice.fluidFilt.frequency.setTargetAtTime(p.fluidCutoff, curTime, 0.05);
+        this.hydraulicVoice.pistonCarrier.frequency.setTargetAtTime(p.carrierFreq, curTime, 0.06);
+        this.hydraulicVoice.pistonFilter.frequency.setTargetAtTime(p.filterFreq, curTime, 0.06);
+        this.hydraulicVoice.fluidFilt.frequency.setTargetAtTime(p.fluidCutoff, curTime, 0.06);
       }
     }
   }
@@ -131,18 +134,38 @@ export class AudioEngine {
     }
   }
 
+  createNoiseBuffer() {
+    if (this.noiseBuffer || !this.ctx) return this.noiseBuffer;
+    const len = Math.floor(this.ctx.sampleRate * 2.0);
+    this.noiseBuffer = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const data = this.noiseBuffer.getChannelData(0);
+    let b0 = 0.0, b1 = 0.0, b2 = 0.0;
+    for (let i = 0; i < len; i++) {
+      const white = Math.random() * 2.0 - 1.0;
+      // Pink noise filter algorithm
+      b0 = 0.99886 * b0 + white * 0.0555179;
+      b1 = 0.99332 * b1 + white * 0.0750759;
+      b2 = 0.96900 * b2 + white * 0.1538520;
+      data[i] = (b0 + b1 + b2 + white * 0.5362) * 0.45;
+    }
+    return this.noiseBuffer;
+  }
+
   initJointSynthesizers() {
     if (!this.ctx || this.jointVoices.length > 0) return;
     const schema = SOUND_SCHEMAS[this.currentSchemaKey] || SOUND_SCHEMAS.cyber_actuators;
+    const noiseBuf = this.createNoiseBuffer();
 
-    // 1. Create 6 distinct dual-harmonic joint voices
+    // 1. Create 6 distinct subtle mechanical voices (Stator Fundamental + Gear Mesh + Bearing Friction)
     for (let i = 0; i < 6; i++) {
       const profile = schema.joints[i];
 
+      // Oscillator 1: Motor stator fundamental
       const osc1 = this.ctx.createOscillator();
       osc1.type = profile.wave1;
       osc1.frequency.setValueAtTime(profile.baseFreq, this.ctx.currentTime);
 
+      // Oscillator 2: Harmonic gear mesh
       const osc2 = this.ctx.createOscillator();
       osc2.type = profile.wave2;
       osc2.frequency.setValueAtTime(profile.baseFreq * profile.harmRatio, this.ctx.currentTime);
@@ -153,10 +176,24 @@ export class AudioEngine {
       const gain2 = this.ctx.createGain();
       gain2.gain.setValueAtTime(profile.vol2, this.ctx.currentTime);
 
+      // Warm low-pass body resonance filter (no sharp whistles)
       const filter = this.ctx.createBiquadFilter();
       filter.type = 'lowpass';
       filter.frequency.setValueAtTime(profile.filterFreq, this.ctx.currentTime);
-      filter.Q.setValueAtTime(1.4, this.ctx.currentTime);
+      filter.Q.setValueAtTime(0.85, this.ctx.currentTime); // Gentle non-whistling Q
+
+      // Bearing & Cycloidal Gear Friction Noise Source
+      const frictionSrc = this.ctx.createBufferSource();
+      frictionSrc.buffer = noiseBuf;
+      frictionSrc.loop = true;
+
+      const frictionFilter = this.ctx.createBiquadFilter();
+      frictionFilter.type = 'bandpass';
+      frictionFilter.frequency.setValueAtTime(profile.frictionFreq, this.ctx.currentTime);
+      frictionFilter.Q.setValueAtTime(1.1, this.ctx.currentTime);
+
+      const fricGain = this.ctx.createGain();
+      fricGain.gain.setValueAtTime(profile.fricVol, this.ctx.currentTime);
 
       const voiceGain = this.ctx.createGain();
       voiceGain.gain.setValueAtTime(0, this.ctx.currentTime);
@@ -167,11 +204,16 @@ export class AudioEngine {
       osc2.connect(gain2);
       gain2.connect(filter);
 
+      frictionSrc.connect(frictionFilter);
+      frictionFilter.connect(fricGain);
+      fricGain.connect(filter);
+
       filter.connect(voiceGain);
       voiceGain.connect(this.masterGain);
 
       osc1.start();
       osc2.start();
+      frictionSrc.start();
 
       this.jointVoices.push({
         osc1,
@@ -179,6 +221,9 @@ export class AudioEngine {
         gain1,
         gain2,
         filter,
+        frictionSrc,
+        frictionFilter,
+        fricGain,
         gain: voiceGain,
         profile
       });
@@ -193,6 +238,7 @@ export class AudioEngine {
     const pistonFilter = this.ctx.createBiquadFilter();
     pistonFilter.type = 'lowpass';
     pistonFilter.frequency.setValueAtTime(pCfg.filterFreq, this.ctx.currentTime);
+    pistonFilter.Q.setValueAtTime(0.7, this.ctx.currentTime);
 
     const pistonGain = this.ctx.createGain();
     pistonGain.gain.setValueAtTime(0, this.ctx.currentTime);
@@ -202,25 +248,15 @@ export class AudioEngine {
     pistonGain.connect(this.masterGain);
     pistonCarrier.start();
 
-    // Fluid Flow / Air Buffer
-    const pBufferLen = Math.floor(this.ctx.sampleRate * 1.5);
-    const pBuffer = this.ctx.createBuffer(1, pBufferLen, this.ctx.sampleRate);
-    const pData = pBuffer.getChannelData(0);
-    let bOut = 0.0;
-    for (let i = 0; i < pBufferLen; i++) {
-      const white = Math.random() * 2 - 1;
-      bOut = bOut * 0.95 + white * 0.05;
-      pData[i] = bOut * 2.8;
-    }
-
+    // Fluid Flow / Air Hiss Buffer
     const fluidSrc = this.ctx.createBufferSource();
-    fluidSrc.buffer = pBuffer;
+    fluidSrc.buffer = noiseBuf;
     fluidSrc.loop = true;
 
     const fluidFilt = this.ctx.createBiquadFilter();
     fluidFilt.type = 'bandpass';
     fluidFilt.frequency.setValueAtTime(pCfg.fluidCutoff, this.ctx.currentTime);
-    fluidFilt.Q.setValueAtTime(1.2, this.ctx.currentTime);
+    fluidFilt.Q.setValueAtTime(1.0, this.ctx.currentTime);
 
     const fluidGainNode = this.ctx.createGain();
     fluidGainNode.gain.setValueAtTime(0, this.ctx.currentTime);
@@ -256,8 +292,8 @@ export class AudioEngine {
   }
 
   /**
-   * Modulates individual dual-harmonic voices for each joint (J1 to J6)
-   * and linear actuator for the telescoping forearm piston based on current schema.
+   * Modulates subtle mechanical sounds for each joint (J1 to J6)
+   * and linear sleeve actuator for the telescoping forearm piston.
    */
   updateJointMotors(jointVelocities = [], teleVelocity = 0) {
     if (!this.enabled) {
@@ -277,47 +313,48 @@ export class AudioEngine {
     const curTime = this.ctx.currentTime;
     const schema = SOUND_SCHEMAS[this.currentSchemaKey] || SOUND_SCHEMAS.cyber_actuators;
 
-    // 1. Update each joint J1 to J6 individually with current sound schema
+    // 1. Update each joint J1 to J6 with subtle mechanical purr
     for (let i = 0; i < 6; i++) {
       const voice = this.jointVoices[i];
       if (!voice) continue;
 
       const vel = jointVelocities[i] || 0;
-      const norm = Math.min(1.0, vel / 3.0);
+      const norm = Math.min(1.0, vel / 2.8);
 
-      if (norm > 0.018) {
+      if (norm > 0.02) {
         const p = voice.profile;
         const targetFreq = p.baseFreq + norm * (p.maxFreq - p.baseFreq);
         const targetVol = Math.min(p.maxVol, norm * p.maxVol);
 
-        voice.osc1.frequency.setTargetAtTime(targetFreq, curTime, 0.045);
-        voice.osc2.frequency.setTargetAtTime(targetFreq * p.harmRatio, curTime, 0.045);
-        voice.filter.frequency.setTargetAtTime(p.filterFreq + norm * 70, curTime, 0.045);
-        voice.gain.gain.setTargetAtTime(targetVol, curTime, 0.045);
+        voice.osc1.frequency.setTargetAtTime(targetFreq, curTime, 0.05);
+        voice.osc2.frequency.setTargetAtTime(targetFreq * p.harmRatio, curTime, 0.05);
+        voice.filter.frequency.setTargetAtTime(p.filterFreq + norm * 35, curTime, 0.05);
+        voice.frictionFilter.frequency.setTargetAtTime(p.frictionFreq + norm * 45, curTime, 0.05);
+        voice.gain.gain.setTargetAtTime(targetVol, curTime, 0.05);
       } else {
-        voice.gain.gain.setTargetAtTime(0, curTime, 0.06);
+        voice.gain.gain.setTargetAtTime(0, curTime, 0.07);
       }
     }
 
     // 2. Update Telescopic Linear Piston / Hydraulic Voice
     if (this.hydraulicVoice) {
       const pCfg = schema.piston;
-      const normTele = Math.min(1.0, teleVelocity / 1.6);
-      if (normTele > 0.018) {
+      const normTele = Math.min(1.0, teleVelocity / 1.5);
+      if (normTele > 0.02) {
         this.wasPistonMoving = true;
         const carrierFreq = pCfg.carrierFreq + normTele * (pCfg.carrierMax - pCfg.carrierFreq);
         const carrierVol = normTele * pCfg.carrierVol;
-        this.hydraulicVoice.pistonCarrier.frequency.setTargetAtTime(carrierFreq, curTime, 0.045);
-        this.hydraulicVoice.pistonFilter.frequency.setTargetAtTime(pCfg.filterFreq + normTele * 100, curTime, 0.045);
-        this.hydraulicVoice.pistonGain.gain.setTargetAtTime(carrierVol, curTime, 0.045);
+        this.hydraulicVoice.pistonCarrier.frequency.setTargetAtTime(carrierFreq, curTime, 0.05);
+        this.hydraulicVoice.pistonFilter.frequency.setTargetAtTime(pCfg.filterFreq + normTele * 40, curTime, 0.05);
+        this.hydraulicVoice.pistonGain.gain.setTargetAtTime(carrierVol, curTime, 0.05);
 
-        const fluidFreq = pCfg.fluidCutoff + normTele * 140;
+        const fluidFreq = pCfg.fluidCutoff + normTele * 60;
         const fluidVol = normTele * pCfg.fluidVol;
-        this.hydraulicVoice.fluidFilt.frequency.setTargetAtTime(fluidFreq, curTime, 0.045);
-        this.hydraulicVoice.fluidGainNode.gain.setTargetAtTime(fluidVol, curTime, 0.045);
+        this.hydraulicVoice.fluidFilt.frequency.setTargetAtTime(fluidFreq, curTime, 0.05);
+        this.hydraulicVoice.fluidGainNode.gain.setTargetAtTime(fluidVol, curTime, 0.05);
       } else {
-        this.hydraulicVoice.pistonGain.gain.setTargetAtTime(0, curTime, 0.06);
-        this.hydraulicVoice.fluidGainNode.gain.setTargetAtTime(0, curTime, 0.06);
+        this.hydraulicVoice.pistonGain.gain.setTargetAtTime(0, curTime, 0.07);
+        this.hydraulicVoice.fluidGainNode.gain.setTargetAtTime(0, curTime, 0.07);
 
         // Soft valve release on stroke stop if enabled in schema
         if (this.wasPistonMoving) {
