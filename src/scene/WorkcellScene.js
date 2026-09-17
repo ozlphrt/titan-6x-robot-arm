@@ -832,15 +832,10 @@ export class WorkcellScene {
       this.scene.fog.density = cfg.fogDensity;
     }
 
-    // Platform Floor Material & Corner Convex Ramps Material
+    // Platform Floor Material
     this.platformMat.color.setHex(cfg.platform);
     this.platformMat.roughness = cfg.platformRoughness;
     this.platformMat.metalness = cfg.platformMetalness;
-    if (this.cornerRampMat) {
-      this.cornerRampMat.color.setHex(cfg.platform);
-      this.cornerRampMat.roughness = cfg.platformRoughness;
-      this.cornerRampMat.metalness = cfg.platformMetalness;
-    }
 
     // Lights
     if (this.ambientLight) this.ambientLight.intensity = cfg.ambient;
