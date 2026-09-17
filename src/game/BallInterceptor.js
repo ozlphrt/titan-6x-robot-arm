@@ -96,8 +96,10 @@ export class BallInterceptor {
         currentTargetBall: null,
         lockedTargetBall: null,
         throwState: 'IDLE', // 'IDLE', 'APPROACH', 'CLAMP', 'WINDUP', 'RELEASE'
+        throwMode: 'EJECT', // 'EJECT' or 'CENTER_STRIKE'
         throwBall: null,
         heldBall: null,
+        centerTargetBall: null,
         throwTimer: 0,
         targetThrowDir: new THREE.Vector3(0, 0, 0),
         ejectionsCount: 0,
@@ -281,7 +283,7 @@ export class BallInterceptor {
     const numBalls = this.balls.length;
     const subSteps = 2; // High-precision sub-stepping for smooth 80-ball physics
     const dt = deltaTime / subSteps;
-    const maxSpeedLimit = 2.4;
+    const maxSpeedLimit = 8.0;
 
     for (let step = 0; step < subSteps; step++) {
       // 1. Single Ball Integration: Gravity, Velocity, Floor & Perimeter Wall Bounces
@@ -555,6 +557,58 @@ export class BallInterceptor {
       }
     }
 
+    // 2.5. Stationary Center Ball Billiard Snipe System:
+    // If a ball is resting inside the center circle (r <= 0.50m), its respective arm grabs an own-color ball and hurls it straight at the stuck ball!
+    for (let i = 0; i < this.balls.length; i++) {
+      const b = this.balls[i];
+      if (!b || !b.mesh || b.isHeld) continue;
+      const pos = b.mesh.position;
+      const distCenter = Math.hypot(pos.x, pos.z);
+
+      if (distCenter <= 0.50) {
+        const speed = b.velocity.length();
+        if (speed < 0.28) {
+          b.centerStuckTime = (b.centerStuckTime || 0) + deltaTime;
+        } else {
+          b.centerStuckTime = Math.max(0, (b.centerStuckTime || 0) - deltaTime * 0.5);
+        }
+
+        // If resting in center for > 0.35s, request kinetic rescue snipe from respective arm
+        if (b.centerStuckTime > 0.35) {
+          const armIdx = b.teamId; // Respective arm matching ball's team
+          const ap = this.armPursuits[armIdx];
+          if (ap && ap.throwState === 'IDLE') {
+            // Find an available own-color ball in this arm's zone to use as projectile ammo
+            let ammoBall = null;
+            let closestDist = Infinity;
+            for (let j = 0; j < this.balls.length; j++) {
+              const ab = this.balls[j];
+              if (!ab || !ab.mesh || ab.isHeld || ab === b) continue;
+              if (ab.teamId === armIdx) {
+                const d = Math.hypot(ab.mesh.position.x - ap.basePos.x, ab.mesh.position.z - ap.basePos.z);
+                if (d <= 1.35 && d < closestDist) {
+                  closestDist = d;
+                  ammoBall = ab;
+                }
+              }
+            }
+
+            if (ammoBall) {
+              ap.throwState = 'APPROACH';
+              ap.throwMode = 'CENTER_STRIKE';
+              ap.throwBall = ammoBall;
+              ap.centerTargetBall = b;
+              ap.throwTimer = 0;
+              ap.robot.setGripper(0.0);
+              b.centerStuckTime = 0; // Prevent duplicate triggers while arm approaches
+            }
+          }
+        }
+      } else {
+        b.centerStuckTime = 0;
+      }
+    }
+
     // 3. Multi-Arm Push Contact, Grab & Throw for Stuck Balls
     for (let rIdx = 0; rIdx < this.robots.length; rIdx++) {
       const robot = this.robots[rIdx];
@@ -590,7 +644,9 @@ export class BallInterceptor {
           // If ball has been stuck for > 0.35s, and arm is idle, initiate Grab & Throw!
           if (b.stuckTime > 0.35 && ap.throwState === 'IDLE') {
             ap.throwState = 'APPROACH';
+            ap.throwMode = 'EJECT';
             ap.throwBall = b;
+            ap.centerTargetBall = null;
             ap.throwTimer = 0;
             robot.setGripper(0.0); // Open wide!
           }
@@ -703,6 +759,8 @@ export class BallInterceptor {
             ap.throwBall.stuckTime = 0;
           }
           ap.throwBall = null;
+          ap.centerTargetBall = null;
+          ap.throwMode = 'EJECT';
           ap.throwState = 'IDLE';
         } else {
           // Track directly onto ball center
@@ -720,11 +778,17 @@ export class BallInterceptor {
             ap.throwState = 'WINDUP';
             ap.throwTimer = 0.22;
 
-            // Compute throw direction toward opponent station
-            const oppBase = this.armPursuits[ap.heldBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
-            ap.targetThrowDir.set(oppBase.x - ap.basePos.x, 0, oppBase.z - ap.basePos.z).normalize();
-            if (ap.targetThrowDir.lengthSq() < 0.001) {
-              ap.targetThrowDir.set(-ap.basePos.x, 0, -ap.basePos.z).normalize();
+            if (ap.throwMode === 'CENTER_STRIKE' && ap.centerTargetBall && ap.centerTargetBall.mesh) {
+              // Aim directly at the stationary center ball!
+              const targetPos = ap.centerTargetBall.mesh.position;
+              ap.targetThrowDir.set(targetPos.x - ap.basePos.x, 0, targetPos.z - ap.basePos.z).normalize();
+            } else {
+              // Compute throw direction toward opponent station
+              const oppBase = this.armPursuits[ap.heldBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
+              ap.targetThrowDir.set(oppBase.x - ap.basePos.x, 0, oppBase.z - ap.basePos.z).normalize();
+              if (ap.targetThrowDir.lengthSq() < 0.001) {
+                ap.targetThrowDir.set(-ap.basePos.x, 0, -ap.basePos.z).normalize();
+              }
             }
           }
         }
@@ -759,10 +823,21 @@ export class BallInterceptor {
           robot.setGripper(0.0); // Open wide to release!
 
           if (ap.heldBall && ap.heldBall.mesh) {
-            const throwPower = 5.6 + Math.random() * 0.8;
-            ap.heldBall.velocity.x = ap.targetThrowDir.x * throwPower;
-            ap.heldBall.velocity.z = ap.targetThrowDir.z * throwPower;
-            ap.heldBall.velocity.y = 1.30 + Math.random() * 0.35; // Lofty catapult arc!
+            if (ap.throwMode === 'CENTER_STRIKE' && ap.centerTargetBall && ap.centerTargetBall.mesh) {
+              // DIRECT BILLIARD SNIPE: Fast skimming projectile aimed right at center ball
+              const strikeSpeed = 6.4 + Math.random() * 0.6;
+              ap.heldBall.velocity.x = ap.targetThrowDir.x * strikeSpeed;
+              ap.heldBall.velocity.z = ap.targetThrowDir.z * strikeSpeed;
+              ap.heldBall.velocity.y = 0.38;
+              if (ap.centerTargetBall) ap.centerTargetBall.centerStuckTime = 0;
+            } else {
+              // High arc catapult throw
+              const throwPower = 5.6 + Math.random() * 0.8;
+              ap.heldBall.velocity.x = ap.targetThrowDir.x * throwPower;
+              ap.heldBall.velocity.z = ap.targetThrowDir.z * throwPower;
+              ap.heldBall.velocity.y = 1.30 + Math.random() * 0.35; // Lofty catapult arc!
+            }
+
             ap.heldBall.bounces++;
             ap.heldBall.stuckTime = 0;
             ap.heldBall.isHeld = false;
@@ -777,6 +852,8 @@ export class BallInterceptor {
 
           ap.heldBall = null;
           ap.throwBall = null;
+          ap.centerTargetBall = null;
+          ap.throwMode = 'EJECT';
           ap.throwState = 'IDLE';
         }
       }
