@@ -46,6 +46,9 @@
         <button id="btn-quick-telescope" class="floating-pill-btn" title="Step Telescoping Forearm [T]">
           <span id="quick-tele-label">📏 Telescope</span>
         </button>
+        <button id="btn-quick-theme" class="floating-pill-btn" title="Toggle Light Studio / Dark Cyber Mode [M]">
+          <span id="theme-btn-label">☀️ Light</span>
+        </button>
         <button id="btn-open-settings" class="floating-settings-trigger" title="Open Settings & Controls Menu">
           <span class="settings-gear-icon">⚙️</span>
           <span class="settings-trigger-text">SETTINGS</span>
@@ -344,6 +347,16 @@
 
           <div class="accordion-content" id="acc-content-theme">
             <div class="theme-picker-row" style="margin-bottom: 12px;">
+              <label for="env-theme-select" class="theme-picker-label">ENVIRONMENT LIGHTING THEME</label>
+              <select id="env-theme-select" class="select-input-styled">
+                <option value="light_studio" selected>☀️ Clean Studio (Daylight White)</option>
+                <option value="dark_cyber">🌌 Dark Cyber Void (High-Tech Neon)</option>
+                <option value="cad_blueprint">📐 CAD Blueprint (Engineering Navy)</option>
+                <option value="cleanroom_lab">🔬 Cleanroom Lab (Pure White)</option>
+              </select>
+            </div>
+
+            <div class="theme-picker-row" style="margin-bottom: 12px;">
               <label for="sound-schema-select" class="theme-picker-label">AUDIO SOUND SCHEMA</label>
               <select id="sound-schema-select" class="select-input-styled">
                 <option value="cyber_actuators" selected>⚡ Cyber Actuators (High-Tech Electromagnetic)</option>
@@ -358,9 +371,10 @@
               <label for="theme-select" class="theme-picker-label">ROBOT COLOR SCHEME</label>
               <select id="theme-select" class="select-input-styled">
                 <option value="fanuc" selected>Fanuc Yellow (Default)</option>
-                <option value="kuka">KUKA Orange</option>
                 <option value="abb">ABB White & Red</option>
+                <option value="kuka">KUKA Orange</option>
                 <option value="cyber">Cyber Neon Blue</option>
+                <option value="cleanroom">Cleanroom White & Sky Blue</option>
                 <option value="stealth">Stealth Dark Graphite</option>
               </select>
             </div>
@@ -482,6 +496,7 @@
               <div class="shortcut-row"><span class="kbd">E</span><span>Toggle Telescoping Retract / Extend</span></div>
               <div class="shortcut-row"><span class="kbd">G</span><span>Toggle Gripper Open / Close</span></div>
               <div class="shortcut-row"><span class="kbd">O</span><span>Toggle 360° Auto-Orbit</span></div>
+              <div class="shortcut-row"><span class="kbd">M</span><span>Toggle Light / Dark Theme Mode</span></div>
               <div class="shortcut-row"><span class="kbd">H</span><span>Reset to Home Pose</span></div>
               <div class="shortcut-row"><span class="kbd">1 / 2 / 4</span><span>FK Manual / IK Target / Pendant</span></div>
               <div class="shortcut-row"><span class="kbd">Space</span><span>Play / Pause Routine</span></div>

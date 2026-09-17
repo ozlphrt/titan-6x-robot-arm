@@ -41,8 +41,9 @@ export class RobotModel {
     this.themes = {
       fanuc: { primary: 0xffcb05, secondary: 0x1c2128, accent: 0xffe047, dark: 0x0f1318 },
       kuka: { primary: 0xe65100, secondary: 0x1e242d, accent: 0xff9800, dark: 0x11141a },
-      abb: { primary: 0xe5e7eb, secondary: 0x8b0000, accent: 0xd32f2f, dark: 0x1a1d24 },
+      abb: { primary: 0xf8fafc, secondary: 0xd32f2f, accent: 0xef4444, dark: 0x1e293b },
       cyber: { primary: 0x00f0ff, secondary: 0x0d1527, accent: 0x00ff9d, dark: 0x060913 },
+      cleanroom: { primary: 0xffffff, secondary: 0x0284c7, accent: 0x38bdf8, dark: 0x334155 },
       stealth: { primary: 0x374151, secondary: 0x0f172a, accent: 0x9ca3af, dark: 0x070b14 }
     };
     this.currentTheme = 'fanuc';

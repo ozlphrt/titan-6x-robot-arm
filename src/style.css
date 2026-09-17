@@ -1182,3 +1182,67 @@ input[type="range"]::-webkit-slider-thumb:hover {
   border-radius: 4px;
   color: var(--accent-cyan);
 }
+
+/* ==========================================================================
+   THEME: CLEAN STUDIO / LIGHT MODE
+   ========================================================================== */
+body.theme-light {
+  --bg-space: #f1f5f9;
+  --bg-panel: rgba(255, 255, 255, 0.94);
+  --bg-panel-solid: #ffffff;
+  --bg-card: rgba(241, 245, 249, 0.95);
+  --bg-hover: rgba(226, 232, 240, 0.9);
+  --bg-active: rgba(2, 132, 199, 0.15);
+  
+  --border-subtle: rgba(15, 23, 42, 0.14);
+  --border-active: rgba(5, 150, 105, 0.6);
+  --border-cyan: rgba(2, 132, 199, 0.5);
+  --border-amber: rgba(217, 119, 6, 0.5);
+  
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --text-dim: #64748b;
+  
+  --accent-cyan: #0284c7;
+  --accent-mint: #059669;
+  --accent-amber: #d97706;
+  --accent-red: #dc2626;
+  --accent-blue: #2563eb;
+  --accent-yellow: #ca8a04;
+  
+  --glow-mint: 0 0 10px rgba(5, 150, 105, 0.2);
+  --glow-cyan: 0 0 10px rgba(2, 132, 199, 0.2);
+  --glow-amber: 0 0 10px rgba(217, 119, 6, 0.2);
+  --glow-red: 0 0 12px rgba(220, 38, 38, 0.3);
+}
+
+body.theme-light .floating-brand,
+body.theme-light .floating-pill-btn,
+body.theme-light .floating-score-chip,
+body.theme-light .floating-settings-trigger,
+body.theme-light .dock-bar,
+body.theme-light .settings-drawer {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text-main);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+  border-color: var(--border-subtle);
+}
+
+body.theme-light .select-input-styled {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: rgba(15, 23, 42, 0.2);
+}
+
+body.theme-light .joint-card,
+body.theme-light .sub-control-card,
+body.theme-light .tcp-readout-card {
+  background: rgba(248, 250, 252, 0.95);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+body.theme-light .kbd {
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--accent-cyan);
+}
+

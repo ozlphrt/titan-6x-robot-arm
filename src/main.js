@@ -31,10 +31,10 @@ class RobotApp {
   initThree() {
     this.container = document.getElementById('canvas-container');
 
-    // 1. Scene
+    // 1. Scene (Default Clean Studio Light Theme)
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x07090e);
-    this.scene.fog = new THREE.FogExp2(0x07090e, 0.12);
+    this.scene.background = new THREE.Color(0xf1f5f9);
+    this.scene.fog = new THREE.FogExp2(0xf1f5f9, 0.05);
 
     // 2. Camera
     this.camera = new THREE.PerspectiveCamera(
@@ -96,6 +96,10 @@ class RobotApp {
     // Autonomous Ball Dropper & Interceptor Game AI
     this.ballInterceptor = new BallInterceptor(this.scene, this.robot, this.kinematics, this.audio);
 
+    // Initial Environment Theme (Clean Studio Daylight)
+    this.currentEnvTheme = 'light_studio';
+    this.setEnvironmentTheme('light_studio');
+
     // Set initial ready pose
     this.kinematics.moveToPreset('ready', 1.0);
   }
@@ -151,6 +155,17 @@ class RobotApp {
     const quickOrbit = document.getElementById('btn-quick-orbit');
     const quickGrip = document.getElementById('btn-quick-gripper');
     const quickTele = document.getElementById('btn-quick-telescope');
+    const quickTheme = document.getElementById('btn-quick-theme');
+
+    if (quickTheme) {
+      quickTheme.addEventListener('click', () => {
+        const nextTheme = this.currentEnvTheme === 'light_studio' || this.currentEnvTheme === 'cleanroom_lab'
+          ? 'dark_cyber'
+          : 'light_studio';
+        this.setEnvironmentTheme(nextTheme);
+        this.audio.playClick();
+      });
+    }
 
     if (quickOrbit) {
       quickOrbit.addEventListener('click', () => {
@@ -661,28 +676,47 @@ class RobotApp {
     });
   }
 
+  setEnvironmentTheme(themeKey) {
+    this.currentEnvTheme = themeKey;
+    if (this.workcell) {
+      this.workcell.setEnvironmentTheme(themeKey);
+    }
+
+    const isLight = themeKey === 'light_studio' || themeKey === 'cleanroom_lab';
+    document.body.classList.toggle('theme-light', isLight);
+
+    const themeLabel = document.getElementById('theme-btn-label');
+    if (themeLabel) {
+      themeLabel.textContent = isLight ? '🌙 Dark' : '☀️ Light';
+    }
+
+    const envSelect = document.getElementById('env-theme-select');
+    if (envSelect && envSelect.value !== themeKey) {
+      envSelect.value = themeKey;
+    }
+  }
+
   bindThemeSelector() {
+    const envSelect = document.getElementById('env-theme-select');
     const select = document.getElementById('theme-select');
     const soundSchemaSelect = document.getElementById('sound-schema-select');
     const badge = document.getElementById('current-theme-badge');
 
+    envSelect?.addEventListener('change', (e) => {
+      this.setEnvironmentTheme(e.target.value);
+      this.audio.playClick();
+    });
+
     select?.addEventListener('change', (e) => {
       this.robot.setTheme(e.target.value);
+      if (badge) {
+        badge.textContent = e.target.value.toUpperCase();
+      }
       this.audio.playClick();
     });
 
     soundSchemaSelect?.addEventListener('change', (e) => {
       this.audio.setSchema(e.target.value);
-      if (badge) {
-        const schemaNames = {
-          cyber_actuators: 'CYBER AUDIO',
-          precision_servos: 'SERVOS AUDIO',
-          heavy_hydraulics: 'HEAVY AUDIO',
-          stepper_cobot: 'COBOT AUDIO',
-          stealth_whisper: 'WHISPER AUDIO'
-        };
-        badge.textContent = schemaNames[e.target.value] || 'AUDIO SCHEMA';
-      }
       this.audio.playClick();
     });
 
@@ -855,6 +889,9 @@ class RobotApp {
       }
       if (e.key.toLowerCase() === 'e') {
         document.getElementById('btn-toggle-telescope')?.click();
+      }
+      if (e.key.toLowerCase() === 'm') {
+        document.getElementById('btn-quick-theme')?.click();
       }
       if (e.key.toLowerCase() === 'g') document.getElementById('btn-toggle-gripper')?.click();
       if (e.key.toLowerCase() === 'h') document.getElementById('btn-reset-pose')?.click();
