@@ -595,8 +595,8 @@ export class BallInterceptor {
 
       if (hDist <= this.maxDefenseRadius + 0.20 && hDist >= 0.15 && simPos.y <= 1.55) {
         const floorAtPos = this.getFloorInfo(simPos.x, simPos.z);
-        // Strike target: position TCP directly on the contact surface of the ball along attack vector
-        const strikePos = simPos.clone().addScaledVector(rotatedAttackDir, -ball.radius * 0.85);
+        // Strike target: drive TCP directly into and through the ball along attack vector
+        const strikePos = simPos.clone().addScaledVector(rotatedAttackDir, ball.radius * 0.15);
         
         // Clamp strikePos to robot's physical reach envelope (<= 1.35m)
         const sDx = strikePos.x - basePos.x;
@@ -607,7 +607,7 @@ export class BallInterceptor {
           strikePos.z = basePos.z + (sDz / sH) * 1.35;
         }
         
-        strikePos.y = Math.max(floorAtPos.y + ball.radius * 0.85 + yOffset, Math.min(simPos.y + yOffset, 0.45));
+        strikePos.y = Math.max(floorAtPos.y + 0.052 + yOffset, Math.min(simPos.y + yOffset, 0.40));
 
         const distFromTcp = currentTcp.distanceTo(strikePos);
         const timeNeeded = distFromTcp / armSpeed;
@@ -633,7 +633,7 @@ export class BallInterceptor {
     const fbFloor = this.getFloorInfo(fallbackPos.x, fallbackPos.z);
     fallbackPos.y = Math.max(fbFloor.y + ball.radius * 0.75 + yOffset, Math.min(1.40, fallbackPos.y));
 
-    const strikeFallback = fallbackPos.clone().addScaledVector(rotatedAttackDir, -ball.radius * 0.45);
+    const strikeFallback = fallbackPos.clone().addScaledVector(rotatedAttackDir, ball.radius * 0.15);
     const sfDx = strikeFallback.x - basePos.x;
     const sfDz = strikeFallback.z - basePos.z;
     const sfH = Math.hypot(sfDx, sfDz);
@@ -641,7 +641,7 @@ export class BallInterceptor {
       strikeFallback.x = basePos.x + (sfDx / sfH) * 1.35;
       strikeFallback.z = basePos.z + (sfDz / sfH) * 1.35;
     }
-    strikeFallback.y = Math.max(fbFloor.y + ball.radius * 0.75 + yOffset, strikeFallback.y);
+    strikeFallback.y = Math.max(fbFloor.y + 0.052 + yOffset, strikeFallback.y);
 
     return {
       interceptPos: strikeFallback,
@@ -818,12 +818,11 @@ export class BallInterceptor {
           const distToTcp = pos.distanceTo(tcpPos);
           const hDistTcp = Math.hypot(pos.x - tcpPos.x, pos.z - tcpPos.z);
           const vDistTcp = Math.abs(pos.y - tcpPos.y);
-          // Tight physical contact threshold: require ball to physically touch gripper fingers/TCP
-          const pushThreshold = b.radius + 0.045;
-          const isProximity = (distToTcp <= pushThreshold) || (hDistTcp <= b.radius + 0.048 && vDistTcp <= 0.095);
-          const canBePushed = (now - b.lastPushTime) > 80;
+          // Strict physical contact threshold: require ball to physically touch gripper finger surface (zero air gap)
+          const isDirectContact = (distToTcp <= b.radius + 0.008) || (hDistTcp <= b.radius + 0.012 && vDistTcp <= 0.055);
+          const canBePushed = (now - b.lastPushTime) > 90;
 
-          if (isProximity && pos.y >= 0.02 && canBePushed) {
+          if (isDirectContact && pos.y >= 0.02 && canBePushed) {
             b.lastPushTime = now;
 
             let pushDir;
@@ -1450,13 +1449,13 @@ export class BallInterceptor {
         }
 
         // Proactive Hover Stall-Breaker:
-        // If the arm's TCP has arrived in direct physical contact with target ball (dist <= radius + 0.048m)
+        // If the arm's TCP has arrived in direct physical contact with target ball (dist <= radius + 0.010m)
         // and ball is resting/slow (v < 0.25m/s) for more than 0.25s, trigger contact push.
         if (ap.currentTargetBall && ap.currentTargetBall.mesh) {
           const tb = ap.currentTargetBall;
           const tbPos = tb.mesh.position;
           const distTcpToTb = tcpPos.distanceTo(tbPos);
-          if (distTcpToTb <= (tb.radius + 0.048) && tb.velocity.length() < 0.25) {
+          if (distTcpToTb <= (tb.radius + 0.010) && tb.velocity.length() < 0.25) {
             ap.hoverStallTimer = (ap.hoverStallTimer || 0) + deltaTime;
             if (ap.hoverStallTimer > 0.30) {
               ap.hoverStallTimer = 0;

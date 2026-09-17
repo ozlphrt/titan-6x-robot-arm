@@ -1095,6 +1095,37 @@ export class RobotModel {
       radius: 0.08
     });
 
+    // 7. Gripper Tool Body & Fingers (J6 to TCP & finger pads)
+    const tcpPos = new THREE.Vector3();
+    this.getTCPWorldPosition(tcpPos);
+    colliders.push({
+      type: 'capsule',
+      p1: j6Pos,
+      p2: tcpPos,
+      radius: 0.048,
+      isGripper: true
+    });
+
+    if (this.fingerLeft && this.fingerRight) {
+      const fLeftPos = new THREE.Vector3();
+      const fRightPos = new THREE.Vector3();
+      this.fingerLeft.getWorldPosition(fLeftPos);
+      this.fingerRight.getWorldPosition(fRightPos);
+
+      colliders.push({
+        type: 'sphere',
+        center: fLeftPos,
+        radius: 0.038,
+        isGripper: true
+      });
+      colliders.push({
+        type: 'sphere',
+        center: fRightPos,
+        radius: 0.038,
+        isGripper: true
+      });
+    }
+
     return colliders;
   }
 
