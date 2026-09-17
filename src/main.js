@@ -154,6 +154,11 @@ class RobotApp {
       const drawerSync = document.getElementById('btn-drawer-arm-sync');
       if (drawerSync) drawerSync.classList.toggle('active', this.syncAllMode);
 
+      const railBadge = document.getElementById('rail-arm-badge');
+      if (railBadge) {
+        railBadge.textContent = this.syncAllMode ? 'SYNC 4X' : `ARM ${this.activeArmIndex + 1}`;
+      }
+
       const chip = document.getElementById('quick-status-chip');
       if (chip) {
         chip.textContent = this.syncAllMode ? 'SYNC 4X ALL' : `ARM ${this.activeArmIndex + 1} ACTIVE`;
@@ -227,6 +232,9 @@ class RobotApp {
     const drawer = document.getElementById('settings-drawer');
     const openBtn = document.getElementById('btn-open-settings');
     const closeBtn = document.getElementById('btn-close-settings');
+    const catButtons = document.querySelectorAll('.nav-cat-btn');
+    const panes = document.querySelectorAll('.flyout-pane');
+    const currentTitle = document.getElementById('flyout-current-title');
 
     if (openBtn && drawer) {
       openBtn.addEventListener('click', () => {
@@ -242,7 +250,27 @@ class RobotApp {
       });
     }
 
-    // Accordion expand / collapse logic
+    // Category rail navigation -> activates corresponding flyout pane
+    catButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tabId = btn.dataset.tab;
+        catButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        panes.forEach(pane => {
+          pane.classList.toggle('active', pane.id === `pane-${tabId}`);
+        });
+
+        if (currentTitle) {
+          const label = btn.querySelector('.cat-label')?.textContent || 'SETTINGS';
+          currentTitle.textContent = label.toUpperCase();
+        }
+
+        this.audio.playClick();
+      });
+    });
+
+    // Accordion expand / collapse logic (for nested accordion cards)
     document.querySelectorAll('.accordion-header').forEach(header => {
       header.addEventListener('click', () => {
         const item = header.closest('.accordion-item');
