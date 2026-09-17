@@ -402,27 +402,58 @@ export class AudioEngine {
     this.playPneumatic(true);
   }
 
-  // Satisfying bubble pop / ball burst sound
+  // Soft, subtle organic bubble pop / ball burst sound
   playBurst() {
     if (!this.enabled) return;
     this.init();
     if (!this.ctx) return;
 
+    const t = this.ctx.currentTime;
+
+    // 1. Soft warm low-frequency tonal body (gentle 260Hz -> 85Hz drop)
     const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+    const oscGain = this.ctx.createGain();
+    const filter = this.ctx.createBiquadFilter();
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(520, t);
+    filter.Q.setValueAtTime(0.7, t);
 
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(800 + Math.random() * 200, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(120, this.ctx.currentTime + 0.08);
+    osc.frequency.setValueAtTime(240 + Math.random() * 40, t);
+    osc.frequency.exponentialRampToValueAtTime(80, t + 0.042);
 
-    gain.gain.setValueAtTime(0.09, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.09);
+    // Subtle, low-level gain envelope
+    oscGain.gain.setValueAtTime(0.024, t);
+    oscGain.gain.exponentialRampToValueAtTime(0.0005, t + 0.045);
 
-    osc.connect(gain);
-    gain.connect(this.masterGain || this.ctx.destination);
+    osc.connect(filter);
+    filter.connect(oscGain);
+    oscGain.connect(this.masterGain || this.ctx.destination);
 
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.1);
+    osc.start(t);
+    osc.stop(t + 0.048);
+
+    // 2. Micro soft-air cushion texture (whisper quiet)
+    if (this.noiseBuffer) {
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = this.noiseBuffer;
+      const noiseFilter = this.ctx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.setValueAtTime(450, t);
+      noiseFilter.Q.setValueAtTime(1.2, t);
+
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.010, t);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0005, t + 0.030);
+
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(this.masterGain || this.ctx.destination);
+
+      noise.start(t);
+      noise.stop(t + 0.035);
+    }
   }
 
   // Subtle pneumatic air puff
