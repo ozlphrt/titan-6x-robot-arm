@@ -885,6 +885,20 @@ export class RobotModel {
     this.targetTelescopeExtension = Math.max(0, Math.min(1.0, val));
   }
 
+  setTargetAngles(anglesRad) {
+    const valid = [...anglesRad];
+    this.enforceSolidArmPhysics(valid);
+    for (let i = 0; i < 6; i++) {
+      if (valid[i] !== undefined) {
+        this.targetAngles[i] = valid[i];
+      }
+    }
+  }
+
+  setTargetJointAngles(anglesRad) {
+    this.setTargetAngles(anglesRad);
+  }
+
   setJointAngles(anglesRad) {
     const valid = [...anglesRad];
     this.enforceSolidArmPhysics(valid);
