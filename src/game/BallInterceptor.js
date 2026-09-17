@@ -280,7 +280,44 @@ export class BallInterceptor {
   }
 
   /**
-   * Fast, Optimized 80-Ball Bouncing Physics with True Spherical Integrity
+   * Returns precise floor elevation and surface normal across the arena,
+   * including the smooth concave center dish (r <= 0.82m, depth = 0.038m).
+   */
+  getFloorInfo(x, z) {
+    const r = Math.hypot(x, z);
+    const bowlRadius = 0.82;
+    const bowlDepth = 0.038;
+
+    if (r <= bowlRadius) {
+      const angle = (Math.PI * r) / bowlRadius;
+      const yFloor = -(bowlDepth / 2) * (1 + Math.cos(angle));
+      // Radial slope dy/dr
+      const slope = (bowlDepth * Math.PI) / (2 * bowlRadius) * Math.sin(angle);
+      const nx = r > 0.0001 ? -(slope * x / r) : 0;
+      const nz = r > 0.0001 ? -(slope * z / r) : 0;
+      const ny = 1.0;
+      const len = Math.hypot(nx, ny, nz);
+
+      return {
+        y: yFloor,
+        normal: new THREE.Vector3(nx / len, ny / len, nz / len),
+        slope: slope,
+        inBowl: true,
+        r: r
+      };
+    }
+
+    return {
+      y: 0.0,
+      normal: new THREE.Vector3(0, 1, 0),
+      slope: 0,
+      inBowl: false,
+      r: r
+    };
+  }
+
+  /**
+   * Fast, Optimized 80-Ball Bouncing Physics with True Spherical Integrity & Concave Center Bowl
    */
   updateBallPhysics(deltaTime) {
     const numBalls = this.balls.length;
@@ -305,20 +342,36 @@ export class BallInterceptor {
         // Integrate Position
         pos.addScaledVector(b.velocity, dt);
 
-        // Floor Contact & Damped Rubbery Bouncing (pos.y <= b.radius)
-        if (pos.y <= b.radius) {
-          pos.y = b.radius;
-          if (b.velocity.y < -0.15) {
-            b.velocity.y = -b.velocity.y * (b.restitution * 0.80);
+        // Floor Elevation & Concave Surface Evaluation
+        const floor = this.getFloorInfo(pos.x, pos.z);
+        const contactY = floor.y + b.radius;
+
+        // Concave Bowl Gravitational Inward Roll Acceleration
+        if (floor.inBowl && floor.r > 0.001) {
+          const inwardDirX = -pos.x / floor.r;
+          const inwardDirZ = -pos.z / floor.r;
+          const aInward = Math.abs(this.gravity) * floor.slope * 1.30;
+          b.velocity.x += inwardDirX * aInward * dt;
+          b.velocity.z += inwardDirZ * aInward * dt;
+        }
+
+        // Floor Contact & Damped Rubbery Bouncing
+        if (pos.y <= contactY) {
+          pos.y = contactY;
+          const normal = floor.normal;
+          const vDotN = b.velocity.dot(normal);
+
+          if (vDotN < -0.15) {
+            b.velocity.addScaledVector(normal, -(1.0 + b.restitution * 0.80) * vDotN);
             b.velocity.x *= 0.93;
             b.velocity.z *= 0.93;
             b.bounces++;
 
-            if (Math.abs(b.velocity.y) > 0.6) {
+            if (Math.abs(vDotN) > 0.6) {
               this.audio.playClick();
             }
           } else {
-            b.velocity.y = 0;
+            b.velocity.y = (normal.y - 1.0) * 0.08;
             b.velocity.x *= (1.0 - dt * 2.6);
             b.velocity.z *= (1.0 - dt * 2.6);
           }
@@ -471,8 +524,11 @@ export class BallInterceptor {
         simVel.y += this.gravity * dt;
         simPos.addScaledVector(simVel, dt);
 
-        if (simPos.y <= ball.radius) {
-          simPos.y = ball.radius;
+        const simFloor = this.getFloorInfo(simPos.x, simPos.z);
+        const contactY = simFloor.y + ball.radius;
+
+        if (simPos.y <= contactY) {
+          simPos.y = contactY;
           simVel.y = Math.abs(simVel.y) * ball.restitution;
         }
       }
@@ -482,9 +538,10 @@ export class BallInterceptor {
       const hDist = Math.hypot(dx, dz);
 
       if (hDist <= this.maxDefenseRadius + 0.20 && hDist >= 0.15 && simPos.y <= 1.55) {
+        const floorAtPos = this.getFloorInfo(simPos.x, simPos.z);
         // Strike target: position TCP slightly behind the ball relative to targetDir
         const strikePos = simPos.clone().addScaledVector(targetDir, -ball.radius * 0.45);
-        strikePos.y = Math.max(0.040, simPos.y);
+        strikePos.y = Math.max(floorAtPos.y + ball.radius * 0.75, simPos.y);
 
         const distFromTcp = currentTcp.distanceTo(strikePos);
         const timeNeeded = distFromTcp / armSpeed;
@@ -507,10 +564,11 @@ export class BallInterceptor {
       fallbackPos.x = basePos.x + (offset.x / fbH) * safeH;
       fallbackPos.z = basePos.z + (offset.z / fbH) * safeH;
     }
-    fallbackPos.y = Math.max(0.040, Math.min(1.40, fallbackPos.y));
+    const fbFloor = this.getFloorInfo(fallbackPos.x, fallbackPos.z);
+    fallbackPos.y = Math.max(fbFloor.y + ball.radius * 0.75, Math.min(1.40, fallbackPos.y));
 
     const strikeFallback = fallbackPos.clone().addScaledVector(targetDir, -ball.radius * 0.45);
-    strikeFallback.y = Math.max(0.040, strikeFallback.y);
+    strikeFallback.y = Math.max(fbFloor.y + ball.radius * 0.75, strikeFallback.y);
 
     return {
       interceptPos: strikeFallback,

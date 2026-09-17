@@ -113,20 +113,70 @@ export class WorkcellScene {
       this.sweeperMeshes.push(sweeper);
     });
 
-    // Central Shared Interaction Arena Reticle Ring
-    const centerRingGeo = new THREE.RingGeometry(0.78, 0.80, 64);
-    centerRingGeo.rotateX(-Math.PI / 2);
-    const centerRingMat = new THREE.MeshBasicMaterial({
-      color: 0x0284c7,
-      transparent: true,
-      opacity: 0.45,
-      side: THREE.DoubleSide
-    });
-    const centerRing = new THREE.Mesh(centerRingGeo, centerRingMat);
-    centerRing.position.set(0, 0.002, 0);
-    this.ringsGroup.add(centerRing);
+    // 5. Central Shared Interaction Arena - Smooth Concave Dish
+    this.createCenterConcaveDish();
 
     this.scene.add(this.ringsGroup);
+  }
+
+  createCenterConcaveDish() {
+    const bowlRadius = 0.82;
+    const bowlDepth = 0.038;
+
+    // Create smooth high-tessellation concave dish geometry
+    const geom = new THREE.PlaneGeometry(bowlRadius * 2, bowlRadius * 2, 72, 72);
+    geom.rotateX(-Math.PI / 2);
+
+    const posAttr = geom.attributes.position;
+    for (let i = 0; i < posAttr.count; i++) {
+      const x = posAttr.getX(i);
+      const z = posAttr.getZ(i);
+      const r = Math.hypot(x, z);
+
+      if (r <= bowlRadius) {
+        // Smooth C1 cosine concave depression
+        const y = -(bowlDepth / 2) * (1 + Math.cos((Math.PI * r) / bowlRadius));
+        posAttr.setY(i, y);
+      } else {
+        posAttr.setY(i, 0);
+      }
+    }
+    geom.computeVertexNormals();
+
+    this.centerDishMat = new THREE.MeshStandardMaterial({
+      color: 0x131824,
+      roughness: 0.30,
+      metalness: 0.40,
+      flatShading: false
+    });
+
+    this.centerDishMesh = new THREE.Mesh(geom, this.centerDishMat);
+    this.centerDishMesh.receiveShadow = true;
+    this.ringsGroup.add(this.centerDishMesh);
+
+    // Decorative Concentric Contour Elevation Rings indicating concave depth
+    const contourRadii = [0.25, 0.50, 0.75, 0.82];
+    this.contourRings = [];
+
+    contourRadii.forEach(r => {
+      const ringGeo = new THREE.RingGeometry(r - 0.007, r + 0.007, 64);
+      ringGeo.rotateX(-Math.PI / 2);
+
+      const y = -(bowlDepth / 2) * (1 + Math.cos((Math.PI * r) / bowlRadius)) + 0.0015;
+
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0x0284c7,
+        transparent: true,
+        opacity: r === 0.82 ? 0.75 : 0.28,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.position.y = y;
+      this.ringsGroup.add(ringMesh);
+      this.contourRings.push(ringMesh);
+    });
   }
 
   renderTacticalHUD(isDark) {
@@ -404,6 +454,18 @@ export class WorkcellScene {
     if (this.sweeperMat) {
       this.sweeperMat.color.setHex(cfg.gridCenter);
       this.sweeperMat.opacity = isDark ? 0.18 : 0.10;
+    }
+
+    // Center Concave Dish & Contour Rings Theme
+    if (this.centerDishMat) {
+      this.centerDishMat.color.setHex(cfg.platform);
+      this.centerDishMat.roughness = cfg.platformRoughness;
+      this.centerDishMat.metalness = cfg.platformMetalness;
+    }
+    if (this.contourRings) {
+      this.contourRings.forEach(rm => {
+        rm.material.color.setHex(cfg.gridCenter);
+      });
     }
 
     // Grid
