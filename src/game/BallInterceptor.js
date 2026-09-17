@@ -891,8 +891,8 @@ export class BallInterceptor {
         robot.setGripper(0.0); // Open wide!
         ap.throwTimer += deltaTime;
 
-        // Failsafe timeout or target invalidation: if grasp takes > 1.5s, reset to IDLE
-        if (!ap.throwBall || !ap.throwBall.mesh || (ap.throwBall.isHeld && ap.heldBall !== ap.throwBall) || ap.throwTimer > 1.5) {
+        // Failsafe timeout or target invalidation
+        if (!ap.throwBall || !ap.throwBall.mesh || (ap.throwBall.isHeld && ap.heldBall !== ap.throwBall)) {
           ap.throwBall = null;
           ap.centerTargetBall = null;
           ap.throwMode = 'EJECT';
@@ -901,11 +901,14 @@ export class BallInterceptor {
           // Track directly onto target ball center at exact spherical equator
           const ballPos = ap.throwBall.mesh.position;
           const floorInfo = this.getFloorInfo(ballPos.x, ballPos.z);
-          ap.pursuitTarget.set(ballPos.x, Math.max(floorInfo.y + ap.throwBall.radius, ballPos.y), ballPos.z);
+          const targetY = Math.max(floorInfo.y + ap.throwBall.radius - 0.010, Math.min(ballPos.y, 0.40));
+          ap.pursuitTarget.set(ballPos.x, targetY, ballPos.z);
 
           const distToBall = tcpPos.distanceTo(ballPos);
-          if (distToBall <= ap.throwBall.radius + 0.08) {
-            // Initiate Visible Clamping Phase (0.12s pause for visible jaw closure & LED flash)
+          const graspThreshold = ap.throwBall.radius + 0.16; // Generous reach for open 26cm jaws
+
+          if (distToBall <= graspThreshold || (ap.throwTimer > 0.35 && distToBall <= graspThreshold + 0.10)) {
+            // Initiate Visible Clamping Phase (0.10s pause for visible jaw closure & LED flash)
             robot.setGripper(1.0);
             ap.heldBall = ap.throwBall;
             ap.heldBall.isHeld = true;
@@ -914,7 +917,7 @@ export class BallInterceptor {
             this.audio.playPneumatic(true);
 
             ap.throwState = 'CLAMPING';
-            ap.throwTimer = 0.12;
+            ap.throwTimer = 0.10;
             ap.graspStartPos = tcpPos.clone();
 
             if (ap.throwMode === 'CENTER_STRIKE') {
@@ -927,6 +930,22 @@ export class BallInterceptor {
                 ap.targetThrowDir.set(-ap.basePos.x, 0, -ap.basePos.z).normalize();
               }
             }
+          } else if (ap.throwTimer > 0.85) {
+            // CLUSTER JAM BREAKER: If obstructed or unable to clamp inside dense ball pile, execute dynamic kinetic swat/sweep
+            const oppBase = this.armPursuits[ap.throwBall.teamId]?.basePos || new THREE.Vector3(0, 0, 0);
+            const pushDir = new THREE.Vector3(oppBase.x - ballPos.x, 0, oppBase.z - ballPos.z).normalize();
+            if (pushDir.lengthSq() < 0.001) pushDir.set(ballPos.x - ap.basePos.x, 0, ballPos.z - ap.basePos.z).normalize();
+
+            ap.throwBall.velocity.set(pushDir.x * 5.5, 1.35, pushDir.z * 5.5);
+            ap.throwBall.lastPushTime = now + 500;
+            ap.throwBall.isHeld = false;
+            this.audio.playPneumatic(false);
+            if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.3);
+
+            ap.throwBall = null;
+            ap.centerTargetBall = null;
+            ap.throwMode = 'EJECT';
+            ap.throwState = 'IDLE';
           }
         }
       } else if (ap.throwState === 'CLAMPING') {
