@@ -305,7 +305,7 @@ export class BallInterceptor {
     const numBalls = this.balls.length;
     const subSteps = 2; // High-precision sub-stepping for smooth 80-ball physics
     const dt = deltaTime / subSteps;
-    const maxSpeedLimit = 3.6;
+    const maxSpeedLimit = 9.0;
 
     for (let step = 0; step < subSteps; step++) {
       // 1. Single Ball Integration: Gravity, Velocity, Floor & Perimeter Wall Bounces
@@ -841,7 +841,7 @@ export class BallInterceptor {
         }
 
         // --- Physical Robot Arm Segment Collisions & Deflections ---
-        if (!b.isHeld) {
+        if (!b.isHeld && now > (b.lastPushTime || 0)) {
           const isTargetOfArm = (b === ap.throwBall || b === ap.currentTargetBall || b === ap.lockedTargetBall);
 
           for (const col of armColliders) {
@@ -1008,23 +1008,23 @@ export class BallInterceptor {
         localDir.applyQuaternion(invRot);
         const j1 = Math.atan2(localDir.x, localDir.z);
 
-        const windT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / 0.35));
+        const windT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / 0.32));
         const p = windT * windT * (3.0 - 2.0 * windT);
 
         let j2, j3, j4 = 0, j5, j6 = 0, tele;
 
         if (ap.throwMode === 'CENTER_STRIKE') {
           // Precision low bowling windup along line of sight
-          j2 = -0.45 + (-0.30 - (-0.45)) * p;
-          j3 = -0.55 + (-0.85 - (-0.55)) * p;
-          j5 = 0.60 + (0.65 - 0.60) * p;
-          tele = 0.40 - 0.25 * p;
+          j2 = -0.45 + (-0.25 - (-0.45)) * p;
+          j3 = -0.55 + (-0.90 - (-0.55)) * p;
+          j5 = 0.60 + (0.70 - 0.60) * p;
+          tele = 0.40 - 0.30 * p;
         } else {
           // High athletic catapult cocking arc directly along throw plane
-          j2 = -0.45 + (-0.10 - (-0.45)) * p;
-          j3 = -0.55 + (-1.25 - (-0.55)) * p;
-          j5 = 0.60 + (0.85 - 0.60) * p;
-          tele = 0.40 - 0.30 * p;
+          j2 = -0.45 + (-0.12 - (-0.45)) * p;
+          j3 = -0.55 + (-1.30 - (-0.55)) * p;
+          j5 = 0.60 + (0.90 - 0.60) * p;
+          tele = 0.40 - 0.35 * p;
         }
 
         robot.setJointAngles([j1, j2, j3, j4, j5, j6]);
@@ -1041,7 +1041,7 @@ export class BallInterceptor {
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
           ap.throwState = 'RELEASE';
-          ap.throwTimer = 0.24;
+          ap.throwTimer = 0.26;
         }
       } else if (ap.throwState === 'RELEASE') {
         // Forward power pitch swing strictly along targetThrowDir plane
@@ -1050,23 +1050,24 @@ export class BallInterceptor {
         localDir.applyQuaternion(invRot);
         const j1 = Math.atan2(localDir.x, localDir.z);
 
-        const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / 0.24));
-        const p = swingT * swingT; // Forward accelerating power whip
+        const swingT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / 0.26));
+        // Power whip acceleration curve peaking towards the end of the swing
+        const p = Math.pow(swingT, 1.30);
 
         let j2, j3, j4 = 0, j5, j6 = 0, tele;
 
         if (ap.throwMode === 'CENTER_STRIKE') {
           // Low forward bowling stroke directly along target line
-          j2 = -0.30 + (-0.88 - (-0.30)) * p;
-          j3 = -0.85 + (-0.15 - (-0.85)) * p;
-          j5 = 0.65 + (0.35 - 0.65) * p;
-          tele = 0.15 + 0.65 * p;
+          j2 = -0.25 + (-0.92 - (-0.25)) * p;
+          j3 = -0.90 + (-0.10 - (-0.90)) * p;
+          j5 = 0.70 + (0.30 - 0.70) * p;
+          tele = 0.10 + 0.75 * p;
         } else {
           // High-power catapult launch whip forward directly along throw vector
-          j2 = -0.10 + (-0.90 - (-0.10)) * p;
-          j3 = -1.25 + (0.25 - (-1.25)) * p;
-          j5 = 0.85 + (-0.55 - 0.85) * p;
-          tele = 0.10 + 0.75 * p;
+          j2 = -0.12 + (-0.95 - (-0.12)) * p;
+          j3 = -1.30 + (0.35 - (-1.30)) * p;
+          j5 = 0.90 + (-0.60 - 0.90) * p;
+          tele = 0.05 + 0.85 * p;
         }
 
         robot.setJointAngles([j1, j2, j3, j4, j5, j6]);
@@ -1074,33 +1075,40 @@ export class BallInterceptor {
         robot.group.updateMatrixWorld(true);
         robot.getTCPWorldPosition(tcpPos);
 
-        if (ap.heldBall && ap.heldBall.mesh) {
-          ap.heldBall.velocity.set(0, 0, 0);
-          ap.heldBall.mesh.position.copy(tcpPos);
-        }
-
-        // Release ball at peak forward acceleration point (throwTimer <= 0.05)
-        if (ap.throwTimer <= 0.05 && ap.heldBall && ap.heldBall.mesh) {
+        // Keep ball firmly gripped until towards the very end of the forward swing (swingT >= 0.90)
+        if (swingT < 0.90) {
+          robot.setGripper(1.0);
+          if (ap.heldBall && ap.heldBall.mesh) {
+            ap.heldBall.velocity.set(0, 0, 0);
+            ap.heldBall.mesh.position.copy(tcpPos);
+          }
+        } else if (ap.heldBall && ap.heldBall.mesh) {
+          // RELEASE BALL TOWARDS THE END OF THE SWING AT PEAK FORWARD EXTENSION
           robot.setGripper(0.0); // Snap open wide!
           this.audio.playPneumatic(false);
 
+          // Position ball cleanly in front of TCP to avoid arm body collision
+          ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(ap.targetThrowDir, ap.heldBall.radius + 0.12);
+          ap.heldBall.mesh.position.y += 0.03;
+
           if (ap.throwMode === 'CENTER_STRIKE') {
-            const strikeSpeed = 3.4;
-            ap.heldBall.velocity.set(ap.targetThrowDir.x * strikeSpeed, 0.02, ap.targetThrowDir.z * strikeSpeed);
+            const strikeSpeed = 6.8;
+            ap.heldBall.velocity.set(ap.targetThrowDir.x * strikeSpeed, 0.08, ap.targetThrowDir.z * strikeSpeed);
             if (ap.centerTargetBall) ap.centerTargetBall.centerStuckTime = 0;
           } else {
-            // Ballistic loft throw DIRECTLY along targetThrowDir vector
-            const throwPower = 3.2;
-            ap.heldBall.velocity.set(ap.targetThrowDir.x * throwPower, 0.62, ap.targetThrowDir.z * throwPower);
+            // Ballistic high-power loft throw DIRECTLY along targetThrowDir vector
+            const throwPower = 6.2;
+            const throwElev = 1.95;
+            ap.heldBall.velocity.set(ap.targetThrowDir.x * throwPower, throwElev, ap.targetThrowDir.z * throwPower);
           }
 
           ap.heldBall.bounces = 0;
           ap.heldBall.stuckTime = 0;
           ap.heldBall.isHeld = false;
-          ap.heldBall.lastPushTime = now + 400;
+          ap.heldBall.lastPushTime = now + 750; // Immune to arm collisions during launch
 
           if (this.audio && typeof this.audio.playArmSwat === 'function') {
-            this.audio.playArmSwat(1.2);
+            this.audio.playArmSwat(1.5);
           }
           ap.ejectionsCount++;
           this.pushCount++;
@@ -1110,7 +1118,14 @@ export class BallInterceptor {
 
         ap.throwTimer -= deltaTime;
         if (ap.throwTimer <= 0) {
-          robot.setGripper(0.0);
+          ap.throwState = 'FOLLOWTHROUGH';
+          ap.throwTimer = 0.14;
+        }
+      } else if (ap.throwState === 'FOLLOWTHROUGH') {
+        // Smoothly decelerate and settle back toward ready posture
+        robot.setGripper(0.0);
+        ap.throwTimer -= deltaTime;
+        if (ap.throwTimer <= 0) {
           ap.heldBall = null;
           ap.throwBall = null;
           ap.centerTargetBall = null;
