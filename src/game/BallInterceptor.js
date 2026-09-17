@@ -390,8 +390,8 @@ export class BallInterceptor {
         // Automatically rolls any balls from center, neutral corridors, and outer corner banks straight into circles!
         if (floor.isElevated) {
           const gMag = Math.abs(this.gravity);
-          const aX = -gMag * floor.gradX * 2.65;
-          const aZ = -gMag * floor.gradZ * 2.65;
+          const aX = -gMag * floor.gradX * 4.8;
+          const aZ = -gMag * floor.gradZ * 4.8;
           b.velocity.x += aX * dt;
           b.velocity.z += aZ * dt;
         }
@@ -413,10 +413,11 @@ export class BallInterceptor {
               this.audio.playBallBounce(Math.min(1.0, Math.abs(vDotN) / 3.2));
             }
           } else {
-            // Rolling / resting contact on floor with smooth tactile friction
+            // Rolling / resting contact on floor: low resistance on slopes so balls easily roll into circles, stable resting inside flat circles
             b.velocity.y = (normal.y - 1.0) * 0.04;
-            b.velocity.x *= (1.0 - dt * 3.8);
-            b.velocity.z *= (1.0 - dt * 3.8);
+            const friction = floor.isElevated ? 0.85 : 3.8;
+            b.velocity.x *= (1.0 - dt * friction);
+            b.velocity.z *= (1.0 - dt * friction);
           }
         }
 

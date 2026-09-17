@@ -4,15 +4,17 @@ import * as THREE from 'three';
  * Evaluates real-time 3D elevation, normal vector, and slope gradients across the entire arena floor.
  * 
  * Features:
- * 1. High-Convexity Central Dome: Outward radial slope that continuously rolls balls from center to stations.
- * 2. 4 Inter-Arm Corridor Ridges: Convex ridges along the 4 neutral gaps (+X, -X, +Z, -Z) that push
+ * 1. High-Convexity Central Dome (14.5cm): Outward radial slope that continuously rolls balls from center to the 4 stations.
+ * 2. 4 Inter-Arm Corridor Ridges (13.5cm): Convex ridges along the 4 neutral gaps (+X, -X, +Z, -Z) that push
  *    idle/trapped balls sideways directly into adjacent arm defense circles.
- * 3. Level Arm Base Zones: Guarantees flat, calm gathering floor within each arm's base sanctuary (radius <= 1.30m).
+ * 3. 4 Outer Corner & Perimeter Wall Banking Ramps (9.2cm): Banking slopes along perimeter walls and corners
+ *    that ensure any ball outside the circles naturally rolls inward towards one of the 4 circles.
+ * 4. Level Arm Base Zones: Flat, calm gathering floor within each arm's station sanctuary (radius <= 1.30m).
  */
 export function evaluateArenaTerrain(x, z) {
   const r = Math.hypot(x, z);
-  const domeRadius = 1.15;
-  const domeHeight = 0.096; // 9.6cm high-convexity center dome (was 6.2cm)
+  const domeRadius = 1.25;
+  const domeHeight = 0.145; // 14.5cm high-convexity center dome
 
   let yDome = 0;
   let gradDomeX = 0;
@@ -29,9 +31,9 @@ export function evaluateArenaTerrain(x, z) {
   }
 
   // 4 Cardinal Corridor Ridges (+X, -X, +Z, -Z) between adjacent arm base circles
-  const ridgeWidth = 0.92;   // Half-width of corridor ridge (covers neutral gap between circles)
-  const ridgeHeight = 0.088; // 8.8cm height of the ridge crest (was 5.2cm)
-  const ridgeReach = 2.75;   // Reaches all the way to the outer perimeter wall (was 2.45m)
+  const ridgeWidth = 1.05;   // Half-width of corridor ridge (covers neutral gap between circles)
+  const ridgeHeight = 0.135; // 13.5cm height of the ridge crest
+  const ridgeReach = 2.75;   // Reaches all the way to the outer perimeter wall
 
   const absZ = Math.abs(z);
   const absX = Math.abs(x);
@@ -106,7 +108,7 @@ export function evaluateArenaTerrain(x, z) {
     gz = gradRidgeZZ;
   }
 
-  // Level Arm Base Sanctuaries: smoothly fade central elevation inside each arm's station circle
+  // Level Arm Base Sanctuaries: smoothly fade central elevation inside each arm's station circle (r <= 1.30m)
   const dArmAlpha = Math.hypot(x - 1.4, z - (-1.4));
   const dArmBeta  = Math.hypot(x - (-1.4), z - (-1.4));
   const dArmGamma = Math.hypot(x - (-1.4), z - 1.4);
@@ -114,14 +116,14 @@ export function evaluateArenaTerrain(x, z) {
   const minArmDist = Math.min(dArmAlpha, dArmBeta, dArmGamma, dArmDelta);
 
   if (minArmDist < 1.30) {
-    const fade = Math.max(0, Math.min(1.0, (minArmDist - 0.75) / 0.55));
+    const fade = Math.max(0, Math.min(1.0, (minArmDist - 0.70) / 0.60));
     const smoothFade = (1 - Math.cos(Math.PI * fade)) / 2;
     y *= smoothFade;
     gx *= smoothFade;
     gz *= smoothFade;
   }
 
-  // 3. 4 Outer Corner Convex Banking Ramps (Redirects trapped corner balls radially inward to arm base)
+  // 3. 4 Outer Corner & Perimeter Wall Convex Banking Ramps
   const cornerStations = [
     { bx: 1.4, bz: -1.4, cx: 2.75, cz: -2.75 },  // Alpha (NE)
     { bx: -1.4, bz: -1.4, cx: -2.75, cz: -2.75 }, // Beta (NW)
@@ -129,8 +131,8 @@ export function evaluateArenaTerrain(x, z) {
     { bx: 1.4, bz: 1.4, cx: 2.75, cz: 2.75 }     // Delta (SE)
   ];
 
-  const cornerMaxHeight = 0.048; // Stays flush / below the 0.05m perimeter base curb rails
-  const rCornerStart = 1.38;     // Strictly outside the 1.35m circle track rails (does not block circle rails)
+  const cornerMaxHeight = 0.092; // 9.2cm corner apex incline
+  const rCornerStart = 1.36;     // Starts outside the 1.35m circle track rails
   const rCornerEnd = 1.95;       // Apex elevation at corner vertex
 
   let yCorner = 0;
@@ -142,14 +144,14 @@ export function evaluateArenaTerrain(x, z) {
     const dx = x - cs.bx;
     const dz = z - cs.bz;
 
-    // Must be in the outer quadrant facing the corner (behind the arm base)
-    if (dx * Math.sign(cs.cx) > 0 && dz * Math.sign(cs.cz) > 0) {
+    // Outer quadrant facing the corner (behind / outer side of the arm base)
+    if (dx * Math.sign(cs.cx) > 0 || dz * Math.sign(cs.cz) > 0) {
       const d = Math.hypot(dx, dz);
       if (d > rCornerStart) {
         const t = Math.min(1.0, (d - rCornerStart) / (rCornerEnd - rCornerStart));
-        // Smooth progressive rise towards the corner vertex
-        const profile = Math.pow((1 - Math.cos(Math.PI * t)) / 2, 1.15);
-        const slopeMag = (Math.PI / (2 * (rCornerEnd - rCornerStart))) * Math.sin(Math.PI * t) * 1.15;
+        // Progressive rise towards the outer wall / corner vertex
+        const profile = Math.pow((1 - Math.cos(Math.PI * t)) / 2, 1.10);
+        const slopeMag = (Math.PI / (2 * (rCornerEnd - rCornerStart))) * Math.sin(Math.PI * t) * 1.10;
 
         const curY = cornerMaxHeight * profile;
         if (curY > yCorner) {
@@ -161,10 +163,43 @@ export function evaluateArenaTerrain(x, z) {
     }
   }
 
+  // 4. Perimeter Wall Base Incline Ramps along Outer Glass Walls (|x| > 2.20 or |z| > 2.20)
+  const wallInclineStart = 2.15;
+  const wallInclineEnd = 2.75;
+  const wallMaxHeight = 0.085;
+
+  let yWall = 0;
+  let gradWallX = 0;
+  let gradWallZ = 0;
+
+  if (absX > wallInclineStart && absX <= wallInclineEnd && minArmDist > 1.25) {
+    const tX = (absX - wallInclineStart) / (wallInclineEnd - wallInclineStart);
+    const pX = (1 - Math.cos(Math.PI * Math.min(1.0, tX))) / 2;
+    const sX = (Math.PI / (2 * (wallInclineEnd - wallInclineStart))) * Math.sin(Math.PI * tX) * Math.sign(x);
+    yWall = wallMaxHeight * pX;
+    gradWallX = wallMaxHeight * sX;
+  }
+
+  if (absZ > wallInclineStart && absZ <= wallInclineEnd && minArmDist > 1.25) {
+    const tZ = (absZ - wallInclineStart) / (wallInclineEnd - wallInclineStart);
+    const pZ = (1 - Math.cos(Math.PI * Math.min(1.0, tZ))) / 2;
+    const sZ = (Math.PI / (2 * (wallInclineEnd - wallInclineStart))) * Math.sin(Math.PI * tZ) * Math.sign(z);
+    if (wallMaxHeight * pZ > yWall) {
+      yWall = wallMaxHeight * pZ;
+      gradWallZ = wallMaxHeight * sZ;
+    }
+  }
+
   if (yCorner > y) {
     y = yCorner;
     gx = gradCornerX;
     gz = gradCornerZ;
+  }
+
+  if (yWall > y) {
+    y = yWall;
+    gx = gradWallX;
+    gz = gradWallZ;
   }
 
   const nLen = Math.hypot(gx, 1.0, gz);
