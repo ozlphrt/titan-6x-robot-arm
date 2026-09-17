@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TITAN-6X | Industrial 3D Robot Arm Digital Twin</title>
+  <meta name="description" content="High-fidelity 6-Axis Industrial Robot Arm 3D Simulation with Telescoping Forearm, FK/IK, and Collapsible Settings Panel." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,600;0,700;1,400;1,700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <script type="module" crossorigin src="./assets/index-BqVafajJ.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-CgcHzRyH.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Floating Round Settings Cog (Lower Right Corner) -->
+    <button id="btn-open-settings" class="floating-settings-cog" title="Open Settings & Controls [S]" aria-label="Open Settings">
+      <svg class="cog-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
+
+    <!-- Collapsible Settings Hub (Modern Dual-Pane Flyout Architecture) -->
+    <aside class="settings-hub hidden" id="settings-drawer">
+      <!-- Primary Navigation Rail (Left Pane) -->
+      <nav class="settings-nav-rail">
+        <div class="nav-rail-header">
+          <div class="rail-brand">
+            <span class="rail-logo">🦾</span>
+            <div class="rail-title-wrap">
+              <span class="rail-title">TITAN-6X</span>
+              <span class="rail-subtitle">CONTROL HUB</span>
+            </div>
+          </div>
+          <button class="rail-close-btn" id="btn-close-settings" title="Close Settings [Esc]">&times;</button>
+        </div>
+
+        <div class="nav-categories-list custom-scroll">
+          <button class="nav-cat-btn active" data-tab="arm">
+            <span class="cat-icon">🤖</span>
+            <div class="cat-text">
+              <span class="cat-label">Robot Arms</span>
+              <span class="cat-desc">Active arm & multi-sync</span>
+            </div>
+            <span class="cat-badge" id="rail-arm-badge">ARM 1</span>
+            <span class="cat-arrow">›</span>
+          </button>
+
+          <button class="nav-cat-btn" data-tab="kinematics">
+            <span class="cat-icon">⚙️</span>
+            <div class="cat-text">
+              <span class="cat-label">Kinematics & Jog</span>
+              <span class="cat-desc">6-DOF joints, pose presets</span>
+            </div>
+            <span class="cat-badge" id="rail-mode-badge">FK</span>
+            <span class="cat-arrow">›</span>
+          </button>
+
+          <button class="nav-cat-btn" data-tab="tcp">
+            <span class="cat-icon">🎯</span>
+            <div class="cat-text">
+              <span class="cat-label">TCP & Cartesian IK</span>
+              <span class="cat-desc">Tool target & coords</span>
+            </div>
+            <span class="cat-arrow">›</span>
+          </button>
+
+          <button class="nav-cat-btn" data-tab="pendant">
+            <span class="cat-icon">📋</span>
+            <div class="cat-text">
+              <span class="cat-label">Teach Pendant</span>
+              <span class="cat-desc">Waypoints & sequence</span>
+            </div>
+            <span class="cat-badge" id="pendant-count-badge">0 POSES</span>
+            <span class="cat-arrow">›</span>
+          </button>
+
+          <button class="nav-cat-btn" data-tab="defense">
+            <span class="cat-icon">🛡️</span>
+            <div class="cat-text">
+              <span class="cat-label">Circle Defense AI</span>
+              <span class="cat-desc">4-station ball battle</span>
+            </div>
+            <span class="cat-badge" id="ball-ai-status-badge">AUTO</span>
+            <span class="cat-arrow">›</span>
+          </button>
+
+          <button class="nav-cat-btn" data-tab="camera">
+            <span class="cat-icon">🎥</span>
+            <div class="cat-text">
+              <span class="cat-label">Camera & Views</span>
+              <span class="cat-desc">Orbit, angles & overlays</span>
+            </div>
+            <span class="cat-arrow">›</span>
+          </button>
+
+          <button class="nav-cat-btn" data-tab="themes">
+            <span class="cat-icon">🎨</span>
+            <div class="cat-text">
+              <span class="cat-label">Themes & Sound</span>
+              <span class="cat-desc">Lighting, audio & colors</span>
+            </div>
+            <span class="cat-badge" id="current-theme-badge">STUDIO</span>
+            <span class="cat-arrow">›</span>
+          </button>
+
+          <button class="nav-cat-btn" data-tab="diagnostics">
+            <span class="cat-icon">📊</span>
+            <div class="cat-text">
+              <span class="cat-label">Diagnostics</span>
+              <span class="cat-desc">Live motor telemetry</span>
+            </div>
+            <span class="cat-badge live">LIVE</span>
+            <span class="cat-arrow">›</span>
+          </button>
+
+          <button class="nav-cat-btn" data-tab="guide">
+            <span class="cat-icon">⌨️</span>
+            <div class="cat-text">
+              <span class="cat-label">Hotkeys & Help</span>
+              <span class="cat-desc">Keyboard cheat-sheet</span>
+            </div>
+            <span class="cat-arrow">›</span>
+          </button>
+        </div>
+
+        <!-- Rail Bottom Quick Actions -->
+        <div class="nav-rail-footer">
+          <button id="btn-sound" class="rail-action-btn active" title="Toggle Audio FX">
+            <span id="sound-icon">🔊</span>
+            <span class="rail-action-text">Audio FX</span>
+          </button>
+          <button id="btn-estop" class="rail-estop-btn" title="Emergency Stop [Esc]">
+            <span>🛑 E-STOP</span>
+          </button>
+        </div>
+      </nav>
+
+      <!-- Sub-Menu Flyout Content Panel (Expands to the Side) -->
+      <section class="settings-flyout-panel custom-scroll">
+        <!-- Breadcrumb Header -->
+        <div class="flyout-header">
+          <div class="flyout-breadcrumbs">
+            <span class="crumb-root">SETTINGS</span>
+            <span class="crumb-sep">/</span>
+            <span class="crumb-current" id="flyout-current-title">ROBOT ARMS</span>
+          </div>
+          <span class="flyout-mode-badge" id="current-mode-badge">FK MANUAL</span>
+        </div>
+
+        <!-- ============================================================= -->
+        <!-- SUB-PANE 1: ROBOT ARMS -->
+        <!-- ============================================================= -->
+        <div class="flyout-pane active" id="pane-arm">
+          <div class="menu-section-label" style="margin-top: 0;"><span>SELECT ACTIVE ROBOT ARM</span></div>
+          <div class="drawer-arm-grid">
+            <button class="drawer-arm-btn active" data-arm="0" id="btn-drawer-arm-0">
+              <span class="arm-dot dot-fanuc"></span>
+              <div class="arm-btn-meta">
+                <span class="arm-btn-title">ARM 1 (Alpha)</span>
+                <span class="arm-btn-sub">Fanuc Industrial Yellow</span>
+              </div>
+            </button>
+            <button class="drawer-arm-btn" data-arm="1" id="btn-drawer-arm-1">
+              <span class="arm-dot dot-kuka"></span>
+              <div class="arm-btn-meta">
+                <span class="arm-btn-title">ARM 2 (Beta)</span>
+                <span class="arm-btn-sub">Kuka High-Torque Orange</span>
+              </div>
+            </button>
+            <button class="drawer-arm-btn" data-arm="2" id="btn-drawer-arm-2">
+              <span class="arm-dot dot-abb"></span>
+              <div class="arm-btn-meta">
+                <span class="arm-btn-title">ARM 3 (Gamma)</span>
+                <span class="arm-btn-sub">Emerald Green</span>
+              </div>
+            </button>
+            <button class="drawer-arm-btn" data-arm="3" id="btn-drawer-arm-3">
+              <span class="arm-dot dot-cyber"></span>
+              <div class="arm-btn-meta">
+                <span class="arm-btn-title">ARM 4 (Delta)</span>
+                <span class="arm-btn-sub">Cobalt Sapphire Blue</span>
+              </div>
+            </button>
+            <button class="drawer-arm-btn sync-btn" id="btn-drawer-arm-sync" style="grid-column: span 2;">
+              <span>🌐 SYNC & CONTROL ALL 4 ARMS SIMULTANEOUSLY</span>
+            </button>
+          </div>
+
+          <div class="menu-section-label"><span>ARM STATUS & SPECS</span></div>
+          <div class="sub-control-card">
+            <div class="spec-row"><span class="spec-lbl">Configuration:</span><span class="spec-val">6-DOF Articulated Arm + Telescoping Forearm</span></div>
+            <div class="spec-row"><span class="spec-lbl">Max Reach:</span><span class="spec-val">1.35 m (1.55 m extended)</span></div>
+            <div class="spec-row"><span class="spec-lbl">Payload Capacity:</span><span class="spec-val">12.0 kg</span></div>
+            <div class="spec-row"><span class="spec-lbl">Control Loop:</span><span class="spec-val">1000 Hz Real-Time Inverse Kinematics</span></div>
+          </div>
+        </div>
+
+        <!-- ============================================================= -->
+        <!-- SUB-PANE 2: KINEMATICS & JOG -->
+        <!-- ============================================================= -->
+        <div class="flyout-pane" id="pane-kinematics">
+          <!-- Mode Selector Tabs -->
+          <div class="menu-mode-tabs">
+            <button class="mode-tab active" data-mode="fk" id="tab-fk">
+              <span class="tab-icon">🎛️</span> FK Manual Jog
+            </button>
+            <button class="mode-tab" data-mode="ik" id="tab-ik">
+              <span class="tab-icon">🎯</span> IK Target
+            </button>
+            <button class="mode-tab" data-mode="teach" id="tab-teach">
+              <span class="tab-icon">📋</span> Teach Pendant
+            </button>
+          </div>
+
+          <!-- Joint Angle Sliders J1 - J6 -->
+          <div class="joint-controls-list" id="joints-container">
+            <!-- Dynamically populated via JS -->
+          </div>
+
+          <!-- Telescoping Forearm Control Section -->
+          <div class="sub-control-card">
+            <div class="sub-card-header">
+              <div class="sub-card-title">
+                <span>📏</span>
+                <span>TELESCOPIC FOREARM EXTENSION</span>
+              </div>
+              <span class="metric-val-pill" id="tele-extension-val">0% (0.38m)</span>
+            </div>
+            <div class="tele-slider-row">
+              <input type="range" id="telescope-slider" min="0" max="1" step="0.01" value="0" />
+            </div>
+            <div class="tele-btn-row">
+              <button class="action-btn-sm" id="btn-step-telescope" title="Step 0% -> 50% -> 100% [T]">
+                <span>⚡</span> Step [T]
+              </button>
+              <button class="action-btn-sm" id="btn-toggle-telescope" title="Toggle Retract/Extend [E]">
+                <span>↔️</span> Toggle [E]
+              </button>
+            </div>
+          </div>
+
+          <!-- Pose Preset Buttons -->
+          <div class="menu-section-label"><span>POSE PRESETS</span></div>
+          <div class="preset-grid">
+            <button class="preset-btn" data-preset="home">Home (0°)</button>
+            <button class="preset-btn" data-preset="ready">Ready</button>
+            <button class="preset-btn" data-preset="reach">Front Reach</button>
+            <button class="preset-btn" data-preset="inspect">Inspection</button>
+            <button class="preset-btn" data-preset="compact">Transport</button>
+            <button class="preset-btn-action" id="btn-reset-pose">Reset [H]</button>
+          </div>
+
+          <!-- End Effector Switcher & Toggle -->
+          <div class="menu-section-label"><span>END EFFECTOR TOOL</span></div>
+          <div class="tool-controls-row">
+            <div class="tool-select-btn-group">
+              <button class="tool-tab-btn active" id="tool-gripper-btn">
+                <span>🗜️</span> 2-Finger Gripper
+              </button>
+              <button class="tool-tab-btn" id="tool-welder-btn">
+                <span>⚡</span> Laser Welder
+              </button>
+            </div>
+            <button class="gripper-toggle-btn" id="btn-toggle-gripper">
+              <span id="gripper-state-icon">🟢</span>
+              <span id="gripper-state-label">GRIPPER: OPEN [G]</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- ============================================================= -->
+        <!-- SUB-PANE 3: TCP & CARTESIAN IK -->
+        <!-- ============================================================= -->
+        <div class="flyout-pane" id="pane-tcp">
+          <!-- Coordinates Readout Display -->
+          <div class="tcp-readout-card">
+            <div class="tcp-row">
+              <div class="tcp-cell"><span class="tcp-dim">X</span><span class="tcp-val" id="tcp-x">+0.000</span><span class="tcp-unit">m</span></div>
+              <div class="tcp-cell"><span class="tcp-dim">Y</span><span class="tcp-val" id="tcp-y">+0.650</span><span class="tcp-unit">m</span></div>
+              <div class="tcp-cell"><span class="tcp-dim">Z</span><span class="tcp-val" id="tcp-z">+0.320</span><span class="tcp-unit">m</span></div>
+            </div>
+            <div class="tcp-row">
+              <div class="tcp-cell"><span class="tcp-dim">ROLL</span><span class="tcp-val" id="tcp-roll">0.0°</span></div>
+              <div class="tcp-cell"><span class="tcp-dim">PITCH</span><span class="tcp-val" id="tcp-pitch">0.0°</span></div>
+              <div class="tcp-cell"><span class="tcp-dim">YAW</span><span class="tcp-val" id="tcp-yaw">0.0°</span></div>
+            </div>
+          </div>
+
+          <!-- Cartesian IK Joggers -->
+          <div id="ik-jog-section" class="ik-jog-container">
+            <div class="menu-section-label"><span>CARTESIAN TARGET JOG (IK)</span></div>
+            <div class="ik-axis-sliders">
+              <div class="ik-axis-row">
+                <span class="axis-lbl">X Pos</span>
+                <input type="range" id="ik-x-slider" min="-1.55" max="1.55" step="0.01" value="0.4" />
+                <span class="axis-val" id="ik-x-val">0.40m</span>
+              </div>
+              <div class="ik-axis-row">
+                <span class="axis-lbl">Y Height</span>
+                <input type="range" id="ik-y-slider" min="0.00" max="1.48" step="0.01" value="0.5" />
+                <span class="axis-val" id="ik-y-val">0.50m</span>
+              </div>
+              <div class="ik-axis-row">
+                <span class="axis-lbl">Z Depth</span>
+                <input type="range" id="ik-z-slider" min="-1.55" max="1.55" step="0.01" value="0.0" />
+                <span class="axis-val" id="ik-z-val">0.00m</span>
+              </div>
+              <div class="ik-axis-row">
+                <span class="axis-lbl">Tool Pitch</span>
+                <input type="range" id="ik-pitch-slider" min="-90" max="90" step="1" value="0" />
+                <span class="axis-val" id="ik-pitch-val">0°</span>
+              </div>
+            </div>
+            <div class="ik-hint">💡 Tip: Right Click + Drag on the 3D viewport to smoothly move gripper in real-time.</div>
+          </div>
+        </div>
+
+        <!-- ============================================================= -->
+        <!-- SUB-PANE 4: TEACH PENDANT -->
+        <!-- ============================================================= -->
+        <div class="flyout-pane" id="pane-pendant">
+          <div class="teach-toolbar">
+            <button class="action-btn primary" id="btn-record-waypoint">
+              <span>➕</span> Record Pose
+            </button>
+            <button class="action-btn" id="btn-clear-waypoints">
+              <span>🗑️</span> Clear
+            </button>
+            <button class="action-btn" id="btn-demo-routine">
+              <span>⚡</span> Load Demo
+            </button>
+          </div>
+
+          <!-- Waypoints List -->
+          <div class="waypoints-list" id="waypoints-list">
+            <div class="empty-state" id="empty-waypoints">
+              <span>No waypoints recorded. Jog the arm and click <strong>Record Pose</strong> or load demo.</span>
+            </div>
+          </div>
+
+          <!-- Playback Controls -->
+          <div class="playback-panel">
+            <div class="playback-buttons">
+              <button class="play-btn" id="btn-play-routine">
+                <span class="play-icon">▶</span> <span id="play-text">PLAY PROGRAM</span>
+              </button>
+              <button class="icon-btn" id="btn-step-routine" title="Step Next Pose">
+                <span>⏭</span>
+              </button>
+              <button class="icon-btn active" id="btn-loop-routine" title="Toggle Loop Execution">
+                <span>🔁</span>
+              </button>
+            </div>
+
+            <div class="speed-control-row">
+              <span class="speed-lbl">MOTION SPEED</span>
+              <input type="range" id="routine-speed-slider" min="0.2" max="3.0" step="0.1" value="1.0" />
+              <span class="speed-val" id="routine-speed-val">1.0x</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================================= -->
+        <!-- SUB-PANE 5: CIRCLE DEFENSE & PUSH AI -->
+        <!-- ============================================================= -->
+        <div class="flyout-pane" id="pane-defense">
+          <!-- 4-Team Territory Defense Scores -->
+          <div class="menu-section-label" style="margin-top: 0;"><span>4-STATION HOME CIRCLE // BALLS HELD</span></div>
+          <div class="drawer-arm-grid" style="margin-bottom: 10px;">
+            <div class="metric-card" style="padding: 6px 10px; border-left: 3px solid #ffb700;">
+              <span class="metric-name" style="color: #ffb700; font-weight: 700;">🟡 ARM 1 (ALPHA)</span>
+              <span class="metric-val" id="team-score-0" style="font-size: 16px;">0 IN CIRCLE</span>
+            </div>
+            <div class="metric-card" style="padding: 6px 10px; border-left: 3px solid #ff5500;">
+              <span class="metric-name" style="color: #ff5500; font-weight: 700;">🟠 ARM 2 (BETA)</span>
+              <span class="metric-val" id="team-score-1" style="font-size: 16px;">0 IN CIRCLE</span>
+            </div>
+            <div class="metric-card" style="padding: 6px 10px; border-left: 3px solid #10b981;">
+              <span class="metric-name" style="color: #10b981; font-weight: 700;">🟢 ARM 3 (GAMMA)</span>
+              <span class="metric-val" id="team-score-2" style="font-size: 16px;">0 IN CIRCLE</span>
+            </div>
+            <div class="metric-card" style="padding: 6px 10px; border-left: 3px solid #2563eb;">
+              <span class="metric-name" style="color: #3b82f6; font-weight: 700;">🔵 ARM 4 (DELTA)</span>
+              <span class="metric-val" id="team-score-3" style="font-size: 16px;">0 IN CIRCLE</span>
+            </div>
+          </div>
+
+          <div class="telemetry-metrics-grid" style="margin-bottom: 8px;">
+            <div class="metric-card">
+              <span class="metric-name">MATCH DEFENSE SCORE</span>
+              <span class="metric-val" id="drawer-score-val">0</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-name">TOTAL BALLS PUSHED</span>
+              <span class="metric-val" id="drawer-burst-val">0</span>
+            </div>
+          </div>
+
+          <div class="teach-toolbar" style="margin-bottom: 8px;">
+            <button class="action-btn primary" id="btn-drawer-drop-ball">
+              <span>⚡</span> Drop Ball at Center [D]
+            </button>
+            <button class="action-btn" id="btn-drawer-toggle-ball-ai">
+              <span>🛡️</span> Toggle Push AI [B]
+            </button>
+          </div>
+
+          <div class="speed-control-row">
+            <span class="speed-lbl">BALL POPULATION</span>
+            <input type="range" id="ball-spawn-rate-slider" min="20" max="120" step="10" value="80" />
+            <span class="speed-val" id="ball-spawn-rate-val">80 BALLS</span>
+          </div>
+
+          <div class="ik-hint" style="margin-top: 8px;">
+            💡 <strong>4-Team Circle Defense:</strong> Each arm defends its home circle: keeping its own color balls safely inside while actively swatting and ejecting opponent balls toward their home stations!
+          </div>
+        </div>
+
+        <!-- ============================================================= -->
+        <!-- SUB-PANE 6: CAMERA & OVERLAYS -->
+        <!-- ============================================================= -->
+        <div class="flyout-pane" id="pane-camera">
+          <div class="menu-section-label"><span>CAMERA PRESETS</span></div>
+          <div class="camera-btn-grid">
+            <button class="dock-btn active" data-cam="iso">Isometric</button>
+            <button class="dock-btn" data-cam="orbit">🔄 360° Orbit</button>
+            <button class="dock-btn" data-cam="top">Top Down</button>
+            <button class="dock-btn" data-cam="front">Front View</button>
+            <button class="dock-btn" data-cam="side">Side Profile</button>
+            <button class="dock-btn" data-cam="tcp">Gripper Cam</button>
+          </div>
+
+          <div class="menu-section-label"><span>DISPLAY & SHADING OVERLAYS</span></div>
+          <div class="display-toggle-grid">
+            <button class="dock-toggle-btn" id="btn-toggle-trail">
+              <span>〰️</span> TCP Trail
+            </button>
+            <button class="dock-toggle-btn active" id="btn-toggle-grid">
+              <span>📐</span> Reach Rings
+            </button>
+            <button class="dock-toggle-btn active" id="btn-toggle-shadows">
+              <span>💡</span> PBR Shadows
+            </button>
+            <button class="dock-toggle-btn" id="btn-toggle-wireframe">
+              <span>🕸️</span> Wireframe
+            </button>
+          </div>
+        </div>
+
+        <!-- ============================================================= -->
+        <!-- SUB-PANE 7: THEMES & AUDIO -->
+        <!-- ============================================================= -->
+        <div class="flyout-pane" id="pane-themes">
+          <div class="theme-picker-row" style="margin-bottom: 12px;">
+            <label for="env-theme-select" class="theme-picker-label">ENVIRONMENT LIGHTING THEME</label>
+            <select id="env-theme-select" class="select-input-styled">
+              <option value="light_studio" selected>☀️ Clean Studio (Daylight White)</option>
+              <option value="dark_cyber">🌌 Dark Cyber Void (High-Tech Neon)</option>
+              <option value="cad_blueprint">📐 CAD Blueprint (Engineering Navy)</option>
+              <option value="cleanroom_lab">🔬 Cleanroom Lab (Pure White)</option>
+            </select>
+          </div>
+
+          <div class="theme-picker-row" style="margin-bottom: 12px;">
+            <label for="sound-schema-select" class="theme-picker-label">AUDIO SOUND SCHEMA</label>
+            <select id="sound-schema-select" class="select-input-styled">
+              <option value="cyber_actuators" selected>⚡ Cyber Actuators (High-Tech Electromagnetic)</option>
+              <option value="precision_servos">🤖 Precision Brushless Servos (Fanuc / ABB)</option>
+              <option value="heavy_hydraulics">🏭 Heavy Industrial Machinery & Hydraulics</option>
+              <option value="stepper_cobot">🔬 Laboratory Cobot (Musical Steppers)</option>
+              <option value="stealth_whisper">🤫 Stealth Whisper Mode (Ultra Subtle)</option>
+            </select>
+          </div>
+
+          <div class="theme-picker-row">
+            <label for="theme-select" class="theme-picker-label">ROBOT COLOR SCHEME</label>
+            <select id="theme-select" class="select-input-styled">
+              <option value="fanuc" selected>Fanuc Yellow (Default)</option>
+              <option value="abb">ABB White & Red</option>
+              <option value="kuka">KUKA Orange</option>
+              <option value="cyber">Cyber Neon Blue</option>
+              <option value="cleanroom">Cleanroom White & Sky Blue</option>
+              <option value="stealth">Stealth Dark Graphite</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- ============================================================= -->
+        <!-- SUB-PANE 8: DIAGNOSTICS & TELEMETRY -->
+        <!-- ============================================================= -->
+        <div class="flyout-pane" id="pane-diagnostics">
+          <div class="telemetry-metrics-grid">
+            <div class="metric-card">
+              <span class="metric-name">MOTOR TEMP</span>
+              <span class="metric-val" id="val-temp">42.8°C</span>
+              <div class="metric-bar"><div class="metric-fill temp-fill" id="bar-temp" style="width: 45%"></div></div>
+            </div>
+            <div class="metric-card">
+              <span class="metric-name">TOTAL TORQUE</span>
+              <span class="metric-val" id="val-torque">184 Nm</span>
+              <div class="metric-bar"><div class="metric-fill torque-fill" id="bar-torque" style="width: 32%"></div></div>
+            </div>
+            <div class="metric-card">
+              <span class="metric-name">MAX VELOCITY</span>
+              <span class="metric-val" id="val-velocity">1.45 m/s</span>
+              <div class="metric-bar"><div class="metric-fill vel-fill" id="bar-velocity" style="width: 60%"></div></div>
+            </div>
+            <div class="metric-card">
+              <span class="metric-name">BUS VOLTAGE</span>
+              <span class="metric-val">48.2 V</span>
+              <div class="metric-bar"><div class="metric-fill bus-fill" style="width: 96%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================================= -->
+        <!-- SUB-PANE 9: KEYBOARD GUIDE -->
+        <!-- ============================================================= -->
+        <div class="flyout-pane" id="pane-guide">
+          <div class="shortcuts-list">
+            <div class="shortcut-row"><span class="kbd">Right Click + Drag</span><span>Move Gripper in 3D (IK Tracking)</span></div>
+            <div class="shortcut-row"><span class="kbd">Left Click + Drag</span><span>Orbit / Rotate Camera</span></div>
+            <div class="shortcut-row"><span class="kbd">Mouse Scroll</span><span>Zoom In / Out</span></div>
+            <div class="shortcut-row"><span class="kbd">S</span><span>Open / Close Settings Hub</span></div>
+            <div class="shortcut-row"><span class="kbd">D</span><span>Drop Ball at Center Circle</span></div>
+            <div class="shortcut-row"><span class="kbd">B</span><span>Toggle Push AI Circle Defense</span></div>
+            <div class="shortcut-row"><span class="kbd">T</span><span>Step Telescoping Forearm (0% / 50% / 100%)</span></div>
+            <div class="shortcut-row"><span class="kbd">E</span><span>Toggle Telescoping Retract / Extend</span></div>
+            <div class="shortcut-row"><span class="kbd">G</span><span>Toggle Gripper Open / Close</span></div>
+            <div class="shortcut-row"><span class="kbd">O</span><span>Toggle 360° Auto-Orbit</span></div>
+            <div class="shortcut-row"><span class="kbd">M</span><span>Toggle Light / Dark Theme Mode</span></div>
+            <div class="shortcut-row"><span class="kbd">H</span><span>Reset to Home Pose</span></div>
+            <div class="shortcut-row"><span class="kbd">1 / 2 / 3 / 4</span><span>Select Active Arm 1-4</span></div>
+            <div class="shortcut-row"><span class="kbd">0 / 5</span><span>Sync & Control All 4 Arms</span></div>
+            <div class="shortcut-row"><span class="kbd">Space</span><span>Play / Pause Routine</span></div>
+            <div class="shortcut-row"><span class="kbd">Esc</span><span>Emergency Stop</span></div>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+  </div>
+
+</body>
+</html>
