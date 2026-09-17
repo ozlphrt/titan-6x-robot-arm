@@ -918,12 +918,18 @@ export class BallInterceptor {
       for (let i = 0; i < this.balls.length; i++) {
         const b = this.balls[i];
         if (!b || !b.mesh || b.isHeld) continue;
-        const pos = b.mesh.position;
+        if (b.lastThrowArm === armTeam && now < (b.lastThrowTime || 0)) continue;
 
+        const pos = b.mesh.position;
         const isOwnColor = (b.teamId === armTeam);
         const dxBase = pos.x - basePos.x;
         const dzBase = pos.z - basePos.z;
         const distBase = Math.hypot(dxBase, dzBase);
+
+        // If ball is in air moving outward away from this base, let it fly
+        const vRad = (b.velocity.x * dxBase + b.velocity.z * dzBase) / Math.max(0.001, distBase);
+        if (vRad > 0.35 && pos.y > 0.08) continue;
+
         const isAlienInBase = (!isOwnColor && distBase <= 1.45);
 
         // Alien balls in territory ignore residual cooldown timers to ensure immediate action
@@ -1029,10 +1035,11 @@ export class BallInterceptor {
         ap.throwTimer += deltaTime;
 
         const isAlienInBase = ap.throwBall && ap.throwBall.teamId !== armTeam && Math.hypot(ap.throwBall.mesh.position.x - basePos.x, ap.throwBall.mesh.position.z - basePos.z) <= 1.45;
+        const isOwnThrowInFlight = ap.throwBall && ap.throwBall.lastThrowArm === armTeam && now < (ap.throwBall.lastThrowTime || 0);
         const isPushCooling = (now < (ap.throwBall?.lastPushTime || 0)) && !isAlienInBase;
 
         // Failsafe timeout or target invalidation (including balls currently in ballistic flight)
-        if (!ap.throwBall || !ap.throwBall.mesh || (ap.throwBall.isHeld && ap.heldBall !== ap.throwBall) || isPushCooling) {
+        if (!ap.throwBall || !ap.throwBall.mesh || (ap.throwBall.isHeld && ap.heldBall !== ap.throwBall) || isPushCooling || isOwnThrowInFlight) {
           ap.throwBall = null;
           ap.centerTargetBall = null;
           ap.throwMode = 'EJECT';
@@ -1133,8 +1140,8 @@ export class BallInterceptor {
             // CORNER / EDGE RAKE: Close enough but blocked from full clamping - perform instant kinetic swat
             if (ap.throwMode === 'RETRIEVE_CARRY') {
               const pushDir = new THREE.Vector3(ap.basePos.x - ballPos.x, 0, ap.basePos.z - ballPos.z).normalize();
-              ap.throwBall.velocity.set(pushDir.x * 4.5, 0.85, pushDir.z * 4.5);
-              ap.throwBall.lastPushTime = now + 80;
+              ap.throwBall.velocity.set(pushDir.x * 3.5, 0.75, pushDir.z * 3.5);
+              ap.throwBall.lastPushTime = now + 400;
               ap.throwBall.isHeld = false;
               this.audio.playPneumatic(false);
               if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.2);
@@ -1143,8 +1150,10 @@ export class BallInterceptor {
               const pushDir = new THREE.Vector3(oppBase.x - ballPos.x, 0, oppBase.z - ballPos.z).normalize();
               if (pushDir.lengthSq() < 0.001) pushDir.set(ballPos.x - ap.basePos.x, 0, ballPos.z - ap.basePos.z).normalize();
 
-              ap.throwBall.velocity.set(pushDir.x * 6.5, 1.35, pushDir.z * 6.5);
-              ap.throwBall.lastPushTime = now + 80;
+              ap.throwBall.velocity.set(pushDir.x * 4.5, 1.10, pushDir.z * 4.5);
+              ap.throwBall.lastThrowArm = armTeam;
+              ap.throwBall.lastThrowTime = now + 1500;
+              ap.throwBall.lastPushTime = now + 1500;
               ap.throwBall.isHeld = false;
               this.audio.playPneumatic(false);
               if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.3);
@@ -1376,12 +1385,14 @@ export class BallInterceptor {
           }
 
           const launchDir = finalLaunchVel.clone().normalize();
-          ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(launchDir, ap.heldBall.radius + 0.04);
+          ap.heldBall.mesh.position.copy(tcpPos).addScaledVector(launchDir, ap.heldBall.radius + 0.05);
           ap.heldBall.velocity.copy(finalLaunchVel);
           ap.heldBall.bounces = 0;
           ap.heldBall.stuckTime = 0;
           ap.heldBall.isHeld = false;
-          ap.heldBall.lastPushTime = now + 80;
+          ap.heldBall.lastThrowArm = armTeam;
+          ap.heldBall.lastThrowTime = now + 1500;
+          ap.heldBall.lastPushTime = now + 1500;
 
           if (this.audio && typeof this.audio.playArmSwat === 'function') {
             this.audio.playArmSwat(Math.min(1.6, 0.5 + finalLaunchVel.length() * 0.20));
@@ -1600,9 +1611,18 @@ export class BallInterceptor {
         for (let i = 0; i < this.balls.length; i++) {
           const b = this.balls[i];
           if (!b || !b.mesh || b.isHeld) continue;
+          if (b.lastThrowArm === armTeam && now < (b.lastThrowTime || 0)) continue;
+
           const isOwnColor = (b.teamId === armTeam);
           const pos = b.mesh.position;
-          const hDist = Math.hypot(pos.x - basePos.x, pos.z - basePos.z);
+          const dxBase = pos.x - basePos.x;
+          const dzBase = pos.z - basePos.z;
+          const hDist = Math.hypot(dxBase, dzBase);
+
+          // If ball is in air moving outward away from this base, let it fly across arena
+          const vRad = (b.velocity.x * dxBase + b.velocity.z * dzBase) / Math.max(0.001, hDist);
+          if (vRad > 0.35 && pos.y > 0.08) continue;
+
           const isAlienInBase = (!isOwnColor && hDist <= 1.35);
 
           if (!isAlienInBase && (now < (b.lastPushTime || 0))) continue;
