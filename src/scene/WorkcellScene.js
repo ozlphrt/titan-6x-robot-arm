@@ -188,11 +188,13 @@ export class WorkcellScene {
   }
 
   /**
-   * Renders the dynamic Pie Chart HUD for a specific robot arm station
-   * depicting the exact composition of ball colors currently inside its defense circle.
-   * - Desaturated matte color palette matching the 4 robot arm native paints
-   * - Clean minimalist wedges with NO interior numbers or percentage badges
-   * - 20-ball capacity gauge display for circles with < 20 balls
+   * Renders the dynamic Circular Progress Bar HUD for a specific robot arm station
+   * depicting real-time 20-ball capacity progress and color composition.
+   * - Sleek perimeter progress ring gauge (unobstructed open floor center)
+   * - Desaturated matte palette matching the 4 robot arm native paints
+   * - 20-ball capacity graduated track with 5-step milestone markers
+   * - Sequential progress fill (Own secured balls + intruder balls)
+   * - Glowing active progress front indicator
    */
   renderArmPieHUD(armIdx, animatedCounts, animatedTotal, isDark) {
     const ctx = this.armHudCtxs[armIdx];
@@ -210,24 +212,24 @@ export class WorkcellScene {
     // Desaturated, elegant color palette perfectly matching each robot arm's native paint
     // Alpha = Fanuc Yellow (#ffcb05), Beta = Kuka Orange (#e65100), Gamma = ABB White (#f8fafc), Delta = Cyber Cyan (#00f0ff)
     const teamFills = [
-      'rgba(215, 175, 60, 0.65)',   // Fanuc Yellow (muted warm ochre)
-      'rgba(195, 100, 50, 0.65)',   // Kuka Orange (muted terracotta)
-      'rgba(175, 185, 200, 0.60)',  // ABB Slate White (muted cool platinum)
-      'rgba(55, 160, 175, 0.65)'    // Cyber Cyan (muted slate teal)
+      'rgba(215, 175, 60, 0.80)',   // Fanuc Yellow (muted warm ochre)
+      'rgba(195, 100, 50, 0.80)',   // Kuka Orange (muted terracotta)
+      'rgba(180, 190, 205, 0.75)',  // ABB Slate White (muted cool platinum)
+      'rgba(55, 160, 175, 0.80)'    // Cyber Cyan (muted slate teal)
     ];
 
     const teamDividers = [
-      'rgba(240, 205, 95, 0.85)',
-      'rgba(225, 130, 80, 0.85)',
-      'rgba(220, 228, 238, 0.85)',
-      'rgba(85, 195, 210, 0.85)'
+      'rgba(240, 205, 95, 0.95)',
+      'rgba(225, 130, 80, 0.95)',
+      'rgba(225, 232, 242, 0.95)',
+      'rgba(85, 195, 210, 0.95)'
     ];
 
     const teamStandbyGlows = [
-      'rgba(215, 175, 60, 0.18)',
-      'rgba(195, 100, 50, 0.18)',
-      'rgba(175, 185, 200, 0.16)',
-      'rgba(55, 160, 175, 0.18)'
+      'rgba(215, 175, 60, 0.15)',
+      'rgba(195, 100, 50, 0.15)',
+      'rgba(180, 190, 205, 0.12)',
+      'rgba(55, 160, 175, 0.15)'
     ];
 
     const teamNames = ['ALPHA (YELLOW)', 'BETA (ORANGE)', 'GAMMA (ABB WHITE)', 'DELTA (CYAN)'];
@@ -238,140 +240,161 @@ export class WorkcellScene {
     const colGhost = isDark ? 'rgba(0, 240, 255, 0.16)' : 'rgba(2, 132, 199, 0.20)';
     const colSubtle = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.10)';
 
-    const rBase = 0.355 * scale; // 113.6px
-    const rCore = 0.55 * scale;  // 176px
-    const rMid = 0.95 * scale;   // 304px
-    const rOuter = 1.35 * scale; // 432px
+    // Progress Bar Ring Radii (Perimeter Ring Gauge)
+    const rOuter = 1.35 * scale;    // 432px (outer boundary)
+    const rBarOuter = 430;          // Outer progress ring edge
+    const rBarInner = 388;          // Inner progress ring edge (42px thick progress track)
+    const rMid = 0.90 * scale;      // 288px (mid working envelope)
+    const rCore = 0.55 * scale;     // 176px (inner core defense)
+    const rBase = 0.355 * scale;    // 113.6px (pedestal base collar)
 
     const counts = animatedCounts || [0, 0, 0, 0];
     const MAX_CAPACITY = 20.0;
     const activeSum = counts.reduce((acc, v) => acc + Math.max(0, v), 0);
     const startAngle = -Math.PI / 2; // Start at 12 o'clock top
 
-    // 1. GAUGE BACKGROUND TRACK & 20-BALL CAPACITY INDICATORS
+    // 1. CIRCULAR PROGRESS BAR GROOVE / BASE TRACK
     ctx.save();
-    // Base track fill between rBase and rOuter
-    const trackBg = isDark ? 'rgba(255, 255, 255, 0.035)' : 'rgba(15, 23, 42, 0.045)';
+    // Track background fill
+    const trackBg = isDark ? 'rgba(255, 255, 255, 0.040)' : 'rgba(15, 23, 42, 0.055)';
     ctx.fillStyle = trackBg;
     ctx.beginPath();
-    ctx.arc(cx, cy, rOuter, 0, Math.PI * 2);
-    ctx.arc(cx, cy, rBase, Math.PI * 2, 0, true);
+    ctx.arc(cx, cy, rBarOuter, 0, Math.PI * 2);
+    ctx.arc(cx, cy, rBarInner, Math.PI * 2, 0, true);
     ctx.fill();
 
-    // 20 Subtle radial notch dividers across the 360 degree circle (1 notch every 18 deg for capacity)
-    ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(15, 23, 42, 0.08)';
-    ctx.lineWidth = 1.5;
+    // Track inner & outer subtle border rails
+    ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.14)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rBarOuter, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, rBarInner, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 20 Discrete Capacity Graduation Notches
     for (let i = 0; i < 20; i++) {
       const angle = startAngle + (i / 20) * Math.PI * 2;
       const cos = Math.cos(angle);
       const sin = Math.sin(angle);
+      const isMajor = i % 5 === 0; // 0, 5, 10, 15 (25% quarters)
+
+      ctx.strokeStyle = isMajor
+        ? (isDark ? 'rgba(255, 255, 255, 0.35)' : 'rgba(15, 23, 42, 0.35)')
+        : (isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(15, 23, 42, 0.12)');
+      ctx.lineWidth = isMajor ? 2.2 : 1.2;
+
       ctx.beginPath();
-      ctx.moveTo(cx + cos * (rBase + 6), cy + sin * (rBase + 6));
-      ctx.lineTo(cx + cos * (rOuter - 6), cy + sin * (rOuter - 6));
+      ctx.moveTo(cx + cos * (rBarInner + 2), cy + sin * (rBarInner + 2));
+      ctx.lineTo(cx + cos * (rBarOuter - 2), cy + sin * (rBarOuter - 2));
       ctx.stroke();
     }
     ctx.restore();
 
-    // 2. DYNAMIC PIE CHART WEDGES (Clean, desaturated, no interior numbers)
+    // 2. FILLED PROGRESS BAR SEGMENTS (Sequential: Own balls first, then intruders)
     if (activeSum > 0.02) {
       let currentAngle = startAngle;
-      // If activeSum < 20, angle per ball is 2pi / 20. If activeSum >= 20, angle per ball is 2pi / activeSum
+      // If activeSum < 20, progress angle is (count / 20) * 2pi. If >= 20, normalized to 2pi.
       const anglePerUnit = activeSum < MAX_CAPACITY ? (Math.PI * 2 / MAX_CAPACITY) : (Math.PI * 2 / activeSum);
 
-      for (let t = 0; t < 4; t++) {
+      // Prioritize own balls first in the progress sequence, then other teams
+      const fillOrder = [armIdx, ...[0, 1, 2, 3].filter(t => t !== armIdx)];
+
+      fillOrder.forEach(t => {
         const count = Math.max(0, counts[t]);
-        if (count < 0.01) continue;
+        if (count < 0.01) return;
 
         const sliceAngle = count * anglePerUnit;
         const nextAngle = currentAngle + sliceAngle;
 
         ctx.save();
-        // Annular Pie Slice
+        // Progress Bar Arc Segment
         ctx.beginPath();
-        ctx.arc(cx, cy, rOuter, currentAngle, nextAngle);
-        ctx.arc(cx, cy, rBase, nextAngle, currentAngle, true);
+        ctx.arc(cx, cy, rBarOuter, currentAngle, nextAngle);
+        ctx.arc(cx, cy, rBarInner, nextAngle, currentAngle, true);
         ctx.closePath();
 
-        // Soft Matte Desaturated Radial Fill
-        const grad = ctx.createRadialGradient(cx, cy, rBase, cx, cy, rOuter);
-        grad.addColorStop(0, teamFills[t].replace('0.65', '0.35').replace('0.60', '0.30'));
-        grad.addColorStop(0.7, teamFills[t]);
-        grad.addColorStop(1, teamFills[t].replace('0.65', '0.78').replace('0.60', '0.72'));
+        // Soft Radial Gradient along track width
+        const grad = ctx.createRadialGradient(cx, cy, rBarInner, cx, cy, rBarOuter);
+        grad.addColorStop(0, teamFills[t].replace('0.80', '0.65').replace('0.75', '0.60'));
+        grad.addColorStop(0.5, teamFills[t]);
+        grad.addColorStop(1, teamFills[t].replace('0.80', '0.90').replace('0.75', '0.85'));
 
         ctx.fillStyle = grad;
         ctx.fill();
 
-        // Clean Divider Stroke
+        // Segment Divider
         ctx.strokeStyle = teamDividers[t];
         ctx.lineWidth = 2.0;
         ctx.stroke();
         ctx.restore();
 
         currentAngle = nextAngle;
-      }
+      });
 
-      // If circle is filled < 20 balls, draw a clean gauge termination end cap line
+      // Active Progress Front Indicator / Leading Edge Cap
       if (activeSum < MAX_CAPACITY - 0.05) {
         ctx.save();
-        ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.40)' : 'rgba(15, 23, 42, 0.35)';
-        ctx.lineWidth = 2.5;
+        const headCos = Math.cos(currentAngle);
+        const headSin = Math.sin(currentAngle);
+
+        // Glowing progress needle line
+        ctx.strokeStyle = isDark ? '#ffffff' : '#0f172a';
+        ctx.lineWidth = 3.0;
         ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(currentAngle) * rBase, cy + Math.sin(currentAngle) * rBase);
-        ctx.lineTo(cx + Math.cos(currentAngle) * rOuter, cy + Math.sin(currentAngle) * rOuter);
+        ctx.moveTo(cx + headCos * (rBarInner - 2), cy + headSin * (rBarInner - 2));
+        ctx.lineTo(cx + headCos * (rBarOuter + 2), cy + headSin * (rBarOuter + 2));
         ctx.stroke();
+
+        // Subtle leading bead dot
+        ctx.fillStyle = isDark ? '#00f0ff' : '#0284c7';
+        ctx.beginPath();
+        ctx.arc(cx + headCos * ((rBarInner + rBarOuter) / 2), cy + headSin * ((rBarInner + rBarOuter) / 2), 3.5, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
       }
     } else {
-      // Empty Standby Ring in Native Arm Color
+      // Empty Standby Track Glow
       ctx.save();
-      const grad = ctx.createRadialGradient(cx, cy, rBase, cx, cy, rOuter);
-      grad.addColorStop(0, 'rgba(0, 0, 0, 0.0)');
-      grad.addColorStop(0.6, teamStandbyGlows[armIdx]);
-      grad.addColorStop(1, teamStandbyGlows[armIdx]);
-      ctx.fillStyle = grad;
+      ctx.strokeStyle = teamStandbyGlows[armIdx];
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.arc(cx, cy, rOuter, 0, Math.PI * 2);
-      ctx.arc(cx, cy, rBase, Math.PI * 2, 0, true);
-      ctx.fill();
+      ctx.arc(cx, cy, (rBarInner + rBarOuter) / 2, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.restore();
     }
 
-    // 3. TACTICAL OVERLAY MARKINGS & ENVELOPE RIMS
+    // 3. TACTICAL RADAR INTERIOR & WORKING ENVELOPE RIMS (Clean Open Floor Center)
     ctx.save();
-    // Outer boundary ring (rOuter)
-    ctx.strokeStyle = colPrimary;
-    ctx.lineWidth = 3.0;
-    ctx.beginPath();
-    ctx.arc(cx, cy, rOuter, 0, Math.PI * 2);
-    ctx.stroke();
-
+    // Outer boundary rim
     ctx.strokeStyle = colGhost;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(cx, cy, rOuter + 14, 0, Math.PI * 2);
     ctx.stroke();
 
-    // 72 Radial Perimeter Ticks
+    // 72 Perimeter Ticks outside the progress bar
     for (let deg = 0; deg < 360; deg += 5) {
       const rad = (deg * Math.PI) / 180;
       const cos = Math.cos(rad);
       const sin = Math.sin(rad);
       const isMajor = deg % 45 === 0;
       const isMedium = deg % 15 === 0;
-      const len = isMajor ? 12 : isMedium ? 7 : 4;
+      const len = isMajor ? 10 : isMedium ? 6 : 3;
 
       ctx.strokeStyle = isMajor ? colAccent : isMedium ? colPrimary : colGhost;
-      ctx.lineWidth = isMajor ? 3 : isMedium ? 2 : 1;
+      ctx.lineWidth = isMajor ? 2.5 : isMedium ? 1.8 : 1.0;
       ctx.beginPath();
-      ctx.moveTo(cx + cos * (rOuter - len), cy + sin * (rOuter - len));
-      ctx.lineTo(cx + cos * (rOuter + len), cy + sin * (rOuter + len));
+      ctx.moveTo(cx + cos * (rBarOuter + 2), cy + sin * (rBarOuter + 2));
+      ctx.lineTo(cx + cos * (rBarOuter + 2 + len), cy + sin * (rBarOuter + 2 + len));
       ctx.stroke();
     }
 
     // Mid working envelope ring (rMid)
     ctx.strokeStyle = colSecondary;
-    ctx.lineWidth = 2.0;
-    ctx.setLineDash([14, 10]);
+    ctx.lineWidth = 1.8;
+    ctx.setLineDash([12, 10]);
     ctx.beginPath();
     ctx.arc(cx, cy, rMid, 0, Math.PI * 2);
     ctx.stroke();
@@ -379,21 +402,21 @@ export class WorkcellScene {
 
     // Inner core defense ring (rCore)
     ctx.strokeStyle = colPrimary;
-    ctx.lineWidth = 1.8;
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.arc(cx, cy, rCore, 0, Math.PI * 2);
     ctx.stroke();
 
     // Base collar (rBase)
     ctx.strokeStyle = colGhost;
-    ctx.lineWidth = 1.8;
+    ctx.lineWidth = 1.6;
     ctx.setLineDash([6, 6]);
     ctx.beginPath();
     ctx.arc(cx, cy, rBase, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
 
-    // 4. TOP TACTICAL HEADER (Minimal & Clean)
+    // 4. TOP TACTICAL PROGRESS HEADER (Clean & Informative)
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -402,13 +425,14 @@ export class WorkcellScene {
     const displayTotal = Math.round(animatedTotal || 0);
     const ownCount = Math.round(counts[armIdx] || 0);
     const foreignCount = Math.max(0, displayTotal - ownCount);
-    const headerTitle = `ARM ${armIdx + 1} (${teamNames[armIdx]}) // ${displayTotal}/20 CAPACITY`;
-    const subTitle = displayTotal > 0 ? `[${ownCount} OWN • ${foreignCount} INTRUDERS]` : '[CIRCLE CLEAR • 0/20]';
+    const pct = Math.min(100, Math.round((displayTotal / 20) * 100));
+    const headerTitle = `ARM ${armIdx + 1} (${teamNames[armIdx]}) // PROGRESS: ${displayTotal}/20 [${pct}%]`;
+    const subTitle = displayTotal > 0 ? `[${ownCount} OWN SECURED • ${foreignCount} INTRUDERS]` : '[STANDBY • 0/20 CAPACITY]';
 
-    ctx.fillText(headerTitle, cx, cy - rOuter - 32);
+    ctx.fillText(headerTitle, cx, cy - rBarOuter - 30);
     ctx.font = '600 12px "JetBrains Mono", monospace';
     ctx.fillStyle = foreignCount > 0 ? '#ffb300' : '#00ff9d';
-    ctx.fillText(subTitle, cx, cy - rOuter - 14);
+    ctx.fillText(subTitle, cx, cy - rBarOuter - 12);
     ctx.restore();
 
     this.armHudTextures[armIdx].needsUpdate = true;
