@@ -46,13 +46,13 @@
 
       <!-- Quick Action Buttons -->
       <div class="floating-actions">
-        <!-- Ball Buster Score Chip & Toggle -->
-        <button id="btn-toggle-ball-mode" class="floating-pill-btn active" title="Toggle Auto-Catch & Burst Mode [B]">
-          <span id="ball-mode-icon">🎯</span>
-          <span id="ball-mode-text">Catch AI: ON</span>
+        <!-- Ball Pusher Score Chip & Toggle -->
+        <button id="btn-toggle-ball-mode" class="floating-pill-btn active" title="Toggle Auto Push & Circle Defense [B]">
+          <span id="ball-mode-icon">🛡️</span>
+          <span id="ball-mode-text">Push AI: ON</span>
         </button>
-        <div class="floating-score-chip" id="ball-score-chip" title="Balls Burst Score">
-          <span class="score-label">BURST:</span>
+        <div class="floating-score-chip" id="ball-score-chip" title="Balls Pushed Outside Circles">
+          <span class="score-label">PUSHED:</span>
           <span class="score-val" id="score-burst-count">0</span>
         </div>
 
@@ -459,13 +459,13 @@
         </div>
 
         <!-- ================================================================= -->
-        <!-- GROUP 7: 3D BALL FLOCK BUSTER & AUTONOMOUS DEFENSE -->
+        <!-- GROUP 7: 3D BALL PUSH DEFENSE & CIRCLE PROTECTOR -->
         <!-- ================================================================= -->
         <div class="accordion-item open" id="acc-ballbuster">
           <button class="accordion-header" data-target="acc-content-ballbuster">
             <div class="acc-title-left">
-              <span class="acc-icon">🪶</span>
-              <span class="acc-heading">Flying Flocks & Auto-Catch AI</span>
+              <span class="acc-icon">🛡️</span>
+              <span class="acc-heading">Circle Defense & Push AI</span>
             </div>
             <div class="acc-title-right">
               <span class="acc-badge" id="ball-ai-status-badge">AUTO ACTIVE</span>
@@ -476,32 +476,32 @@
           <div class="accordion-content" id="acc-content-ballbuster">
             <div class="telemetry-metrics-grid" style="margin-bottom: 8px;">
               <div class="metric-card">
-                <span class="metric-name">TOTAL SCORE</span>
+                <span class="metric-name">DEFENSE SCORE</span>
                 <span class="metric-val" id="drawer-score-val">0</span>
               </div>
               <div class="metric-card">
-                <span class="metric-name">BALLS BURST</span>
+                <span class="metric-name">BALLS PUSHED</span>
                 <span class="metric-val" id="drawer-burst-val">0</span>
               </div>
             </div>
 
             <div class="teach-toolbar" style="margin-bottom: 8px;">
               <button class="action-btn primary" id="btn-drawer-drop-ball">
-                <span>🪶</span> Spawn Flock [D]
+                <span>⚡</span> Drop Ball at Center [D]
               </button>
               <button class="action-btn" id="btn-drawer-toggle-ball-ai">
-                <span>🎯</span> Toggle AI [B]
+                <span>🛡️</span> Toggle Push AI [B]
               </button>
             </div>
 
             <div class="speed-control-row">
-              <span class="speed-lbl">FLOCK POPULATION</span>
-              <input type="range" id="ball-spawn-rate-slider" min="1" max="8" step="1" value="3" />
-              <span class="speed-val" id="ball-spawn-rate-val">3 BOIDS</span>
+              <span class="speed-lbl">BALL POPULATION</span>
+              <input type="range" id="ball-spawn-rate-slider" min="1" max="10" step="1" value="5" />
+              <span class="speed-val" id="ball-spawn-rate-val">5 BALLS</span>
             </div>
 
             <div class="ik-hint" style="margin-top: 8px;">
-              💡 3D Boids flocking simulation. Balls fly in coordinated aerodynamic swarms across the workcell and swoop through the 1.35m defense zone. Catching a boid triggers an evasive scatter impulse on nearby flockmates.
+              💡 <strong>Circle Defense Rule:</strong> Each robot arm actively protects its 1.35m station perimeter. When a ball enters an arm's circle, the arm calculates an outward strike vector, swings behind the ball, and pushes/deflects it outward toward the arena center.
             </div>
           </div>
         </div>
@@ -526,15 +526,15 @@
               <div class="shortcut-row"><span class="kbd">Right Click + Drag</span><span>Move Gripper in 3D (IK Tracking)</span></div>
               <div class="shortcut-row"><span class="kbd">Left Click + Drag</span><span>Orbit / Rotate Camera</span></div>
               <div class="shortcut-row"><span class="kbd">Mouse Scroll</span><span>Zoom In / Out</span></div>
-              <div class="shortcut-row"><span class="kbd">D</span><span>Spawn Flying Flock Burst</span></div>
-              <div class="shortcut-row"><span class="kbd">B</span><span>Toggle Catch AI Autonomous Mode</span></div>
+              <div class="shortcut-row"><span class="kbd">D</span><span>Drop Ball at Center Circle</span></div>
+              <div class="shortcut-row"><span class="kbd">B</span><span>Toggle Push AI Circle Defense</span></div>
               <div class="shortcut-row"><span class="kbd">T</span><span>Step Telescoping Forearm (0% / 50% / 100%)</span></div>
               <div class="shortcut-row"><span class="kbd">E</span><span>Toggle Telescoping Retract / Extend</span></div>
               <div class="shortcut-row"><span class="kbd">G</span><span>Toggle Gripper Open / Close</span></div>
               <div class="shortcut-row"><span class="kbd">O</span><span>Toggle 360° Auto-Orbit</span></div>
               <div class="shortcut-row"><span class="kbd">M</span><span>Toggle Light / Dark Theme Mode</span></div>
               <div class="shortcut-row"><span class="kbd">H</span><span>Reset to Home Pose</span></div>
-              <div class="shortcut-row"><span class="kbd">1 / 2 / 4</span><span>FK Manual / IK Target / Pendant</span></div>
+              <div class="shortcut-row"><span class="kbd">1 / 2 / 3 / 4</span><span>Select Active Arm 1-4</span></div>
               <div class="shortcut-row"><span class="kbd">Space</span><span>Play / Pause Routine</span></div>
               <div class="shortcut-row"><span class="kbd">Esc</span><span>Emergency Stop</span></div>
             </div>

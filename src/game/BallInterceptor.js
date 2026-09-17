@@ -110,16 +110,16 @@ export class BallInterceptor {
       minZ: -2.35, maxZ: 2.35
     };
 
-    // The reach zone the robot arms actively defend (r <= 1.35m from base)
+    // The reach zone the robot arms actively defend (r <= 1.35m from station base)
     this.maxDefenseRadius = 1.35;
     this.minWorkspaceRadius = 0.18;
 
     this.score = 0;
-    this.burstCount = 0;
+    this.pushCount = 0;
     this.combo = 0;
-    this.lastBurstTime = 0;
+    this.lastPushTime = 0;
 
-    // Multi-Arm Pursuit States for all 4 Robot Arms
+    // Multi-Arm Pursuit & Defense States for all 4 Robot Arms
     this.armPursuits = this.robots.map((r) => {
       const basePos = new THREE.Vector3();
       r.group.getWorldPosition(basePos);
@@ -132,7 +132,9 @@ export class BallInterceptor {
         pursuitVelocity: new THREE.Vector3(0, 0, 0),
         defaultRestPos: restPos.clone(),
         currentTargetBall: null,
-        lockedTargetBall: null
+        lockedTargetBall: null,
+        isStriking: false,
+        strikeTimer: 0
       };
     });
 
@@ -151,7 +153,7 @@ export class BallInterceptor {
     this.scene.add(this.ballsGroup);
 
     this.particlesGroup = new THREE.Group();
-    this.particlesGroup.name = 'BurstParticlesGroup';
+    this.particlesGroup.name = 'DeflectionParticlesGroup';
     this.scene.add(this.particlesGroup);
 
     // Holographic AI Targeting Lock-On Reticle
@@ -198,7 +200,7 @@ export class BallInterceptor {
 
   /**
    * Spawns / drops a ball at the center circle with variable size and mass
-   * Pure vertical drop (0 horizontal velocity) - horizontal speed is gained exclusively through collisions
+   * Pure vertical drop (0 horizontal velocity) - horizontal speed is gained exclusively through collisions and arm pushes
    */
   spawnBall(dropAtCenter = true) {
     // 1. Center Circle Spawn Coordinates (purely centered above the center ground disc)
@@ -214,7 +216,7 @@ export class BallInterceptor {
       y = 0.8 + Math.random() * 0.4;
     }
 
-    // 2. Increased Variable Sizes & Reduced Lightweight Masses
+    // 2. Variable Sizes & Lightweight Masses
     const sizeRoll = Math.random();
     let ballRadius;
     let baseRestitution;
@@ -233,7 +235,7 @@ export class BallInterceptor {
       baseRestitution = 0.68 + Math.random() * 0.04;
     }
 
-    // Reduced lightweight masses
+    // Lightweight masses
     const mass = Math.pow(ballRadius / 0.095, 3) * 0.09;
 
     // 3. ZERO initial horizontal speed - gentle downward drop!
@@ -276,30 +278,38 @@ export class BallInterceptor {
       squash: 1.0,
       bounces: 0,
       age: 0,
-      burst: false
+      lastPushTime: 0
     };
 
     this.balls.push(ball);
     return ball;
   }
 
-  createBurstEffect(pos, color, radius) {
-    const count = 36;
-    const particleGeo = new THREE.SphereGeometry(0.014, 8, 8);
-    const particleMat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 1.0 });
+  /**
+   * Creates an energetic outward push ripple shockwave and deflective sparks
+   */
+  createPushRippleEffect(pos, color, radius, pushDir) {
+    const count = 18;
+    const particleGeo = new THREE.SphereGeometry(0.012, 6, 6);
+    const particleMat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.95 });
 
+    // Outward directional spark burst
     for (let i = 0; i < count; i++) {
       const pMesh = new THREE.Mesh(particleGeo, particleMat.clone());
       pMesh.position.copy(pos);
 
-      const speed = 1.0 + Math.random() * 2.0;
-      const phi = Math.random() * Math.PI * 2;
-      const theta = Math.random() * Math.PI;
+      const spreadAngle = (Math.random() - 0.5) * 1.2;
+      const cosA = Math.cos(spreadAngle);
+      const sinA = Math.sin(spreadAngle);
+      
+      const dirX = pushDir.x * cosA - pushDir.z * sinA;
+      const dirZ = pushDir.x * sinA + pushDir.z * cosA;
+      const speed = 1.2 + Math.random() * 1.8;
 
       const vel = new THREE.Vector3(
-        Math.sin(theta) * Math.cos(phi) * speed,
-        Math.sin(theta) * Math.sin(phi) * speed + 0.2,
-        Math.cos(theta) * speed
+        dirX * speed,
+        0.3 + Math.random() * 0.7,
+        dirZ * speed
       );
 
       this.particlesGroup.add(pMesh);
@@ -307,44 +317,33 @@ export class BallInterceptor {
         mesh: pMesh,
         vel: vel,
         life: 1.0,
-        decay: 1.8 + Math.random() * 1.0
+        decay: 2.2 + Math.random() * 1.0
       });
     }
 
-    // Expanding Shockwave Ring
-    const shockGeo = new THREE.RingGeometry(radius * 0.4, radius * 0.9, 32);
+    // Expanding Horizontal Push Wave Ring
+    const shockGeo = new THREE.RingGeometry(radius * 0.5, radius * 1.1, 32);
     shockGeo.rotateX(-Math.PI / 2);
     const shockMat = new THREE.MeshBasicMaterial({
       color: color,
       transparent: true,
-      opacity: 0.95,
+      opacity: 0.9,
       side: THREE.DoubleSide
     });
     const shockMesh = new THREE.Mesh(shockGeo, shockMat);
-    shockMesh.position.copy(pos);
+    shockMesh.position.set(pos.x, Math.max(0.02, pos.y), pos.z);
     this.particlesGroup.add(shockMesh);
 
     this.particles.push({
       mesh: shockMesh,
-      vel: new THREE.Vector3(0, 0, 0),
+      vel: new THREE.Vector3(pushDir.x * 0.4, 0, pushDir.z * 0.4),
       isRing: true,
-      life: 0.85,
-      decay: 2.8
+      life: 0.8,
+      decay: 2.5
     });
 
-    // Scatter nearby balls gently
-    for (const other of this.balls) {
-      if (other.burst) continue;
-      const d = other.mesh.position.distanceTo(pos);
-      if (d < 1.0 && d > 0.01) {
-        const scatterDir = new THREE.Vector3().subVectors(other.mesh.position, pos).normalize();
-        const impulse = (1.0 - d) * 1.2 / (other.mass || 0.10);
-        other.velocity.addScaledVector(scatterDir, Math.min(impulse, 1.2));
-        other.squash = 0.82;
-      }
-    }
-
-    this.audio.playBurst();
+    // Tactile acoustic push sound
+    this.audio.playPuff();
   }
 
   /**
@@ -354,13 +353,13 @@ export class BallInterceptor {
     const numBalls = this.balls.length;
     const subSteps = 3;
     const dt = deltaTime / subSteps;
-    const maxSpeedLimit = 1.35; // Controlled, smooth maximum speed limit
+    const maxSpeedLimit = 2.4; // Responsive speed limit for dynamic pushes
 
     for (let step = 0; step < subSteps; step++) {
       // 1. Single Ball Integration: Gravity, Velocity, Floor & Perimeter Wall Bounces
       for (let i = 0; i < numBalls; i++) {
         const b = this.balls[i];
-        if (b.burst) continue;
+        if (!b || !b.mesh) continue;
 
         const pos = b.mesh.position;
 
@@ -368,7 +367,7 @@ export class BallInterceptor {
         b.velocity.y += this.gravity * dt;
 
         // Clamp maximum downward fall speed
-        if (b.velocity.y < -2.2) b.velocity.y = -2.2;
+        if (b.velocity.y < -2.4) b.velocity.y = -2.4;
 
         // Integrate Position
         pos.addScaledVector(b.velocity, dt);
@@ -401,21 +400,21 @@ export class BallInterceptor {
         // Arena Perimeter Wall Bounces (Keep balls bouncing within active workcell arena)
         if (pos.x < this.bounds.minX + b.radius) {
           pos.x = this.bounds.minX + b.radius;
-          b.velocity.x = Math.abs(b.velocity.x) * 0.75;
+          b.velocity.x = Math.abs(b.velocity.x) * 0.85;
           b.squash = 0.82;
         } else if (pos.x > this.bounds.maxX - b.radius) {
           pos.x = this.bounds.maxX - b.radius;
-          b.velocity.x = -Math.abs(b.velocity.x) * 0.75;
+          b.velocity.x = -Math.abs(b.velocity.x) * 0.85;
           b.squash = 0.82;
         }
 
         if (pos.z < this.bounds.minZ + b.radius) {
           pos.z = this.bounds.minZ + b.radius;
-          b.velocity.z = Math.abs(b.velocity.z) * 0.75;
+          b.velocity.z = Math.abs(b.velocity.z) * 0.85;
           b.squash = 0.82;
         } else if (pos.z > this.bounds.maxZ - b.radius) {
           pos.z = this.bounds.maxZ - b.radius;
-          b.velocity.z = -Math.abs(b.velocity.z) * 0.75;
+          b.velocity.z = -Math.abs(b.velocity.z) * 0.85;
           b.squash = 0.82;
         }
 
@@ -426,8 +425,8 @@ export class BallInterceptor {
         }
 
         // Air drag
-        b.velocity.x *= (1.0 - dt * 0.15);
-        b.velocity.z *= (1.0 - dt * 0.15);
+        b.velocity.x *= (1.0 - dt * 0.12);
+        b.velocity.z *= (1.0 - dt * 0.12);
 
         // Overall speed clamp
         const currentSpeed = b.velocity.length();
@@ -439,11 +438,11 @@ export class BallInterceptor {
       // 2. Ball-to-Ball Elastic & Inelastic Collision Physics with Conservation of Momentum
       for (let i = 0; i < numBalls; i++) {
         const b1 = this.balls[i];
-        if (b1.burst) continue;
+        if (!b1 || !b1.mesh) continue;
 
         for (let j = i + 1; j < numBalls; j++) {
           const b2 = this.balls[j];
-          if (b2.burst) continue;
+          if (!b2 || !b2.mesh) continue;
 
           const p1 = b1.mesh.position;
           const p2 = b2.mesh.position;
@@ -484,8 +483,8 @@ export class BallInterceptor {
 
             // Only apply impulse if balls are moving toward each other
             if (vNormal < 0) {
-              const restitution = Math.min(b1.restitution, b2.restitution) * 0.70;
-              const impulse = -(1.0 + restitution) * vNormal / (1.0 / b1.mass + 1.0 / b2.mass) * 0.75;
+              const restitution = Math.min(b1.restitution, b2.restitution) * 0.75;
+              const impulse = -(1.0 + restitution) * vNormal / (1.0 / b1.mass + 1.0 / b2.mass) * 0.80;
 
               b1.velocity.x += (impulse / b1.mass) * nx;
               b1.velocity.y += (impulse / b1.mass) * ny;
@@ -518,7 +517,7 @@ export class BallInterceptor {
     // 3. Visual Rotation & Squash Recovery
     for (let i = 0; i < numBalls; i++) {
       const b = this.balls[i];
-      if (b.burst) continue;
+      if (!b || !b.mesh) continue;
 
       // 3D Rolling spin based on velocity
       const speed = b.velocity.length();
@@ -539,14 +538,16 @@ export class BallInterceptor {
   }
 
   /**
-   * Spacetime Rendezvous Trajectory Predictor for Bouncing Ball with Gravity
+   * Spacetime Outward Strike Trajectory Predictor:
+   * Positions the robot TCP slightly behind the incoming ball along the outward vector from station base,
+   * driving outward through the ball to swat/push it away from the circle perimeter.
    */
   predictInterception(ball, currentTcp, basePos = new THREE.Vector3(0, 0, 0)) {
     const simPos = ball.mesh.position.clone();
     const simVel = ball.velocity.clone();
     const dt = 0.035; // 35ms simulation slice
-    const maxSteps = 45; // ~1.55 seconds lookahead
-    const armSpeed = 4.5; // m/s effective robotic intercept capability
+    const maxSteps = 40; // ~1.40 seconds lookahead
+    const armSpeed = 5.2; // m/s effective robotic intercept capability
 
     for (let step = 1; step <= maxSteps; step++) {
       const t = step * dt;
@@ -560,14 +561,26 @@ export class BallInterceptor {
         simVel.y = Math.abs(simVel.y) * ball.restitution;
       }
 
-      // Check if candidate point is within physical reachable defense envelope of this arm
-      const hDist = Math.hypot(simPos.x - basePos.x, simPos.z - basePos.z);
-      if (hDist <= 1.30 && hDist >= 0.15 && simPos.y >= 0.10 && simPos.y <= 1.45) {
-        const distFromTcp = currentTcp.distanceTo(simPos);
+      // Outward vector from station base to predicted ball location
+      const dx = simPos.x - basePos.x;
+      const dz = simPos.z - basePos.z;
+      const hDist = Math.hypot(dx, dz);
+
+      // Check if candidate point is within physical defense circle perimeter of this arm (r <= 1.35m)
+      if (hDist <= this.maxDefenseRadius && hDist >= this.minWorkspaceRadius && simPos.y >= 0.08 && simPos.y <= 1.45) {
+        // Calculate outward unit direction
+        const dirOut = new THREE.Vector3(dx / hDist, 0, dz / hDist);
+
+        // Strike target: position TCP slightly on the base side (behind ball) and slightly down to scoop/push
+        const strikePos = simPos.clone().subScaledVector(dirOut, ball.radius * 0.35);
+        strikePos.y = Math.max(0.08, strikePos.y);
+
+        const distFromTcp = currentTcp.distanceTo(strikePos);
         const timeNeeded = distFromTcp / armSpeed;
         if (timeNeeded <= (t + 0.18)) {
           return {
-            interceptPos: simPos.clone(),
+            interceptPos: strikePos,
+            outwardDir: dirOut,
             time: t,
             dist: distFromTcp
           };
@@ -576,29 +589,42 @@ export class BallInterceptor {
     }
 
     // Fallback: direct lead clamped within reach envelope of this arm
-    const fallbackPos = ball.mesh.position.clone().addScaledVector(ball.velocity, 0.18);
+    const fallbackPos = ball.mesh.position.clone().addScaledVector(ball.velocity, 0.15);
     const offset = new THREE.Vector3().subVectors(fallbackPos, basePos);
     const fbH = Math.hypot(offset.x, offset.z);
-    if (fbH > 1.20) {
-      fallbackPos.x = basePos.x + (offset.x / fbH) * 1.20;
-      fallbackPos.z = basePos.z + (offset.z / fbH) * 1.20;
+    const dirOut = fbH > 0.001 ? new THREE.Vector3(offset.x / fbH, 0, offset.z / fbH) : new THREE.Vector3(1, 0, 0);
+
+    if (fbH > 1.25) {
+      fallbackPos.x = basePos.x + dirOut.x * 1.25;
+      fallbackPos.z = basePos.z + dirOut.z * 1.25;
+    } else if (fbH < 0.20) {
+      fallbackPos.x = basePos.x + dirOut.x * 0.20;
+      fallbackPos.z = basePos.z + dirOut.z * 0.20;
     }
-    fallbackPos.y = Math.max(0.12, Math.min(1.30, fallbackPos.y));
+    fallbackPos.y = Math.max(0.10, Math.min(1.30, fallbackPos.y));
+
+    const strikeFallback = fallbackPos.clone().subScaledVector(dirOut, ball.radius * 0.35);
+    strikeFallback.y = Math.max(0.08, strikeFallback.y);
+
     return {
-      interceptPos: fallbackPos,
+      interceptPos: strikeFallback,
+      outwardDir: dirOut,
       time: 0.20,
-      dist: currentTcp.distanceTo(fallbackPos)
+      dist: currentTcp.distanceTo(strikeFallback)
     };
   }
 
   update(deltaTime) {
+    const now = performance.now();
+
     // 1. Particle Effects Simulation
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= deltaTime * p.decay;
 
       if (p.isRing) {
-        p.mesh.scale.multiplyScalar(1.0 + deltaTime * 6.5);
+        p.mesh.position.addScaledVector(p.vel, deltaTime);
+        p.mesh.scale.multiplyScalar(1.0 + deltaTime * 5.0);
         p.mesh.material.opacity = Math.max(0, p.life);
       } else {
         p.mesh.position.addScaledVector(p.vel, deltaTime);
@@ -627,48 +653,64 @@ export class BallInterceptor {
       }
     }
 
-    // 3. Multi-Arm Collision, Deflection & Gripper Contact Checks
+    // 3. Multi-Arm Push Contact & Link Deflections (Pushing Balls Outside Circles)
     for (let rIdx = 0; rIdx < this.robots.length; rIdx++) {
       const robot = this.robots[rIdx];
+      const ap = this.armPursuits[rIdx];
+      const basePos = ap.basePos;
+      robot.group.getWorldPosition(basePos);
+
       const tcpPos = new THREE.Vector3();
       robot.getTCPWorldPosition(tcpPos);
       const armColliders = robot.getArmColliders();
 
-      for (let i = this.balls.length - 1; i >= 0; i--) {
+      for (let i = 0; i < this.balls.length; i++) {
         const b = this.balls[i];
         if (!b || !b.mesh) continue;
         const pos = b.mesh.position;
 
-        // --- Precise Physical Contact Check: ONLY BURSTS WHEN GRIPPER TOUCHES THE BALL ---
+        // --- Active Gripper / TCP Push Contact Zone ---
         const distToTcp = pos.distanceTo(tcpPos);
-        const touchThreshold = b.radius + 0.070; // Physical pinch contact zone with gripper jaws
+        const pushThreshold = b.radius + 0.085; // Physical contact reach with gripper jaws
 
-        if (distToTcp <= touchThreshold && pos.y > 0.05) {
-          // BURST THE BALL!
-          this.createBurstEffect(pos, b.color, b.radius);
-          this.score += Math.round(100 * (1.1 - b.radius * 4));
-          this.burstCount++;
+        const canBePushed = (now - b.lastPushTime) > 260; // 260ms cooldown between push events
+
+        if (distToTcp <= pushThreshold && pos.y > 0.04 && canBePushed) {
+          b.lastPushTime = now;
+
+          // Calculate outward push vector directed away from this arm's station base
+          const dx = pos.x - basePos.x;
+          const dz = pos.z - basePos.z;
+          const distBase = Math.hypot(dx, dz);
+          const pushDir = distBase > 0.001 
+            ? new THREE.Vector3(dx / distBase, 0, dz / distBase) 
+            : new THREE.Vector3(1, 0, 0);
+
+          // Impart powerful outward velocity impulse
+          const pushForce = 2.1 + Math.random() * 0.7;
+          b.velocity.x = pushDir.x * pushForce;
+          b.velocity.z = pushDir.z * pushForce;
+          b.velocity.y = 0.50 + Math.random() * 0.35; // Uplifting arc bounce
+
+          // Elastic squash & bounce counter
+          b.squash = 0.62;
+          b.bounces++;
+
+          // Score & stats
+          this.score += 50;
+          this.pushCount++;
           this.combo++;
-          this.lastBurstTime = performance.now();
+          this.lastPushTime = now;
 
-          // Snap Gripper closed for physical pinch / bite
-          robot.setGripper(1.0);
-          setTimeout(() => robot.setGripper(0.0), 160);
+          // Trigger outward ripple shockwave & tactile sound
+          this.createPushRippleEffect(pos, b.color, b.radius, pushDir);
 
-          for (const ap of this.armPursuits) {
-            if (ap.lockedTargetBall === b) ap.lockedTargetBall = null;
-            if (ap.currentTargetBall === b) ap.currentTargetBall = null;
-          }
-
-          this.ballsGroup.remove(b.mesh);
-          b.mesh.geometry.dispose();
-          b.mesh.material.dispose();
-          if (b.texture) b.texture.dispose();
-          this.balls.splice(i, 1);
-          continue;
+          // Cycle gripper jaws for active swatting motion
+          robot.setGripper(0.85);
+          setTimeout(() => robot.setGripper(0.0), 180);
         }
 
-        // --- Physical Robot Arm Segment Collisions & Bounce Deflections ---
+        // --- Physical Robot Arm Segment Collisions & Outward Bounce Deflections ---
         for (const col of armColliders) {
           let closestPoint = null;
           const colRadius = col.radius;
@@ -677,9 +719,9 @@ export class BallInterceptor {
             closestPoint = col.center;
           } else if (col.type === 'capsule') {
             const ab = new THREE.Vector3().subVectors(col.p2, col.p1);
-            const ap = new THREE.Vector3().subVectors(pos, col.p1);
+            const apVec = new THREE.Vector3().subVectors(pos, col.p1);
             const abLenSq = ab.lengthSq();
-            const t = abLenSq > 0.0001 ? Math.max(0, Math.min(1, ap.dot(ab) / abLenSq)) : 0;
+            const t = abLenSq > 0.0001 ? Math.max(0, Math.min(1, apVec.dot(ab) / abLenSq)) : 0;
             closestPoint = new THREE.Vector3().copy(col.p1).addScaledVector(ab, t);
           }
 
@@ -694,12 +736,18 @@ export class BallInterceptor {
               pos.copy(closestPoint).addScaledVector(normal, minDist + 0.006);
               b.mesh.position.copy(pos);
 
-              // Reflect velocity with lively elasticity and momentum deflection
+              // Outward deflection away from base
+              const dxBase = pos.x - basePos.x;
+              const dzBase = pos.z - basePos.z;
+              const dBase = Math.hypot(dxBase, dzBase);
+              const outBaseDir = dBase > 0.001 ? new THREE.Vector3(dxBase / dBase, 0, dzBase / dBase) : normal;
+
               const vDotN = b.velocity.dot(normal);
               if (vDotN < 0) {
                 b.velocity.subScaledVector(normal, (1.0 + b.restitution) * vDotN);
               }
-              b.velocity.addScaledVector(normal, 0.55 + Math.random() * 0.25);
+              // Add outward boost
+              b.velocity.addScaledVector(outBaseDir, 0.75 + Math.random() * 0.35);
 
               b.bounces++;
               b.squash = 0.62;
@@ -710,7 +758,7 @@ export class BallInterceptor {
       }
     }
 
-    // 4. Cooperative 4-Arm Intelligent Dynamic Targeting & Pursuit
+    // 4. Cooperative 4-Arm Intelligent Dynamic Targeting & Outward Push Pursuit
     let primaryTargetBall = null;
 
     if (this.enabled) {
@@ -722,13 +770,13 @@ export class BallInterceptor {
         robot.getTCPWorldPosition(tcpPos);
         robot.group.getWorldPosition(ap.basePos);
 
-        // Validate locked target for this arm
+        // Validate locked target for this arm (must still be within or approaching this arm's circle zone)
         if (ap.lockedTargetBall) {
           const b = ap.lockedTargetBall;
           const bIndex = this.balls.indexOf(b);
           const pos = b ? b.mesh.position : null;
           const hDist = pos ? Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z) : 999;
-          const isStillValid = bIndex !== -1 && !b.burst && hDist <= 1.45 && pos.y >= 0.10 && pos.y <= 1.65;
+          const isStillValid = bIndex !== -1 && hDist <= 1.45 && pos.y >= 0.06 && pos.y <= 1.65;
           if (!isStillValid) {
             ap.lockedTargetBall = null;
           }
@@ -742,17 +790,17 @@ export class BallInterceptor {
           const pos = b.mesh.position;
           const hDist = Math.hypot(pos.x - ap.basePos.x, pos.z - ap.basePos.z);
 
-          // Candidate filtering relative to this arm's base
-          if (hDist > 1.50 || pos.y < 0.08) continue;
+          // Only defend balls inside or invading this arm's circle (r <= 1.40m)
+          if (hDist > 1.40 || pos.y < 0.06) continue;
 
           const prediction = this.predictInterception(b, tcpPos, ap.basePos);
           if (prediction) {
-            // Dynamic Priority Score: Lower is better
-            let score = prediction.time * 1.6 + prediction.dist * 1.8 + Math.abs(pos.y - 0.70) * 0.4;
+            // Prioritize balls closest to arm base (most threatening to circle)
+            let score = prediction.time * 1.5 + (hDist / 1.35) * 1.8 + prediction.dist * 1.2;
 
             // Balanced lock-on hysteresis
             if (b === ap.lockedTargetBall) {
-              score -= 0.35;
+              score -= 0.40;
             }
 
             if (score < lowestScore) {
@@ -774,14 +822,17 @@ export class BallInterceptor {
         } else {
           ap.currentTargetBall = null;
           ap.lockedTargetBall = null;
-          // Rest position slightly above arm base
-          const restY = 0.55;
-          ap.pursuitTarget.set(ap.basePos.x * 0.55, restY, ap.basePos.z * 0.55);
+          // Guard rest position: hovering defensively inside circle perimeter facing center
+          const dirToCenter = new THREE.Vector3(-ap.basePos.x, 0, -ap.basePos.z).normalize();
+          const restX = ap.basePos.x + dirToCenter.x * 0.45;
+          const restZ = ap.basePos.z + dirToCenter.z * 0.45;
+          const restY = 0.52;
+          ap.pursuitTarget.set(restX, restY, restZ);
         }
 
         // Fast, agile critically damped Cartesian pursuit (SmoothDamp)
-        const smoothTime = 0.06;
-        const maxSpeed = 5.8;
+        const smoothTime = 0.055;
+        const maxSpeed = 6.2;
 
         const omega = 2.0 / smoothTime;
         const x = omega * deltaTime;
@@ -811,7 +862,7 @@ export class BallInterceptor {
         // Solve IK target configuration smoothly into targetAngles for this arm
         kinematics.solveIK(ap.pursuitPos, 16, 0.002, false);
 
-        // Open gripper jaws on approach
+        // Keep gripper jaws open ready to push/swat
         if (ap.currentTargetBall) {
           robot.setGripper(0.0);
         }
@@ -819,7 +870,7 @@ export class BallInterceptor {
 
       // Update Holographic Reticle
       if (this.targetReticle) {
-        if (primaryTargetBall) {
+        if (primaryTargetBall && primaryTargetBall.mesh) {
           this.targetReticle.visible = true;
           this.targetReticle.position.copy(primaryTargetBall.mesh.position);
           this.targetReticle.lookAt(this.targetReticle.position.clone().add(new THREE.Vector3(0, 1, 0)));
@@ -834,9 +885,11 @@ export class BallInterceptor {
   getStats() {
     return {
       score: this.score,
-      burstCount: this.burstCount,
+      pushCount: this.pushCount,
+      burstCount: this.pushCount, // Backwards compatibility for UI bindings
       combo: this.combo,
       activeBalls: this.balls.length
     };
   }
 }
+

@@ -292,7 +292,7 @@ class RobotApp {
     const updateStateUI = () => {
       const active = this.ballInterceptor.enabled;
       if (quickToggle) quickToggle.classList.toggle('active', active);
-      if (quickText) quickText.textContent = active ? 'Catch AI: ON' : 'Catch AI: OFF';
+      if (quickText) quickText.textContent = active ? 'Push AI: ON' : 'Push AI: OFF';
       if (badge) {
         badge.textContent = active ? 'AUTO ACTIVE' : 'MANUAL';
         badge.style.color = active ? 'var(--accent-mint)' : 'var(--text-muted)';
@@ -327,7 +327,7 @@ class RobotApp {
       spawnSlider.addEventListener('input', (e) => {
         const flockCount = parseInt(e.target.value, 10);
         this.ballInterceptor.targetFlockSize = flockCount;
-        if (spawnVal) spawnVal.textContent = `${flockCount} BOIDS`;
+        if (spawnVal) spawnVal.textContent = `${flockCount} BALLS`;
       });
     }
   }
@@ -1062,16 +1062,16 @@ class RobotApp {
     const delta = Math.min(this.clock.getDelta(), 0.05);
 
     if (!this.isEStopped) {
-      // 0. Update Ball Dropper & Autonomous Catch AI across all 4 arms
+      // 0. Update Ball Dropper & Autonomous Push AI across all 4 arms
       if (!this.isRightClickDragging) {
         this.ballInterceptor.update(delta);
         const stats = this.ballInterceptor.getStats();
         const scoreBurst = document.getElementById('score-burst-count');
         const drawerScore = document.getElementById('drawer-score-val');
         const drawerBurst = document.getElementById('drawer-burst-val');
-        if (scoreBurst) scoreBurst.textContent = stats.burstCount;
+        if (scoreBurst) scoreBurst.textContent = stats.pushCount ?? stats.burstCount;
         if (drawerScore) drawerScore.textContent = stats.score;
-        if (drawerBurst) drawerBurst.textContent = stats.burstCount;
+        if (drawerBurst) drawerBurst.textContent = stats.pushCount ?? stats.burstCount;
       }
 
       // 0.5. Smooth Robotic Servo Motors (Joint-by-Joint Continuous Movement across all 4 arms)
