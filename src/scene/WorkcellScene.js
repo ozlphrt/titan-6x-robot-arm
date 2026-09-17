@@ -150,22 +150,28 @@ export class WorkcellScene {
     domeGeom.computeVertexNormals();
 
     this.centerDishMat = new THREE.MeshStandardMaterial({
-      color: 0x131824,
-      roughness: 0.30,
-      metalness: 0.40,
-      flatShading: false
+      color: 0x0284c7,
+      transparent: true,
+      opacity: 0.14,
+      roughness: 0.20,
+      metalness: 0.10,
+      depthWrite: false,
+      side: THREE.DoubleSide
     });
 
     this.centerDishMesh = new THREE.Mesh(domeGeom, this.centerDishMat);
-    this.centerDishMesh.receiveShadow = true;
+    this.centerDishMesh.receiveShadow = false;
     this.ringsGroup.add(this.centerDishMesh);
 
-    // 2. Four Inter-Arm Elevated Convex Corridor Ridges (Connecting neutral dead-zones between base circles)
-    const corridorMat = new THREE.MeshStandardMaterial({
-      color: 0x182030,
-      roughness: 0.32,
-      metalness: 0.38,
-      flatShading: false
+    // 2. Four Inter-Arm Elevated Convex Corridor Ridges (Transparent overlay with active slope physics)
+    this.corridorMat = new THREE.MeshStandardMaterial({
+      color: 0x0284c7,
+      transparent: true,
+      opacity: 0.12,
+      roughness: 0.20,
+      metalness: 0.10,
+      depthWrite: false,
+      side: THREE.DoubleSide
     });
 
     const corridorConfigs = [
@@ -186,9 +192,9 @@ export class WorkcellScene {
         cPosAttr.setY(i, info.y);
       }
       cGeom.computeVertexNormals();
-      const cMesh = new THREE.Mesh(cGeom, corridorMat);
+      const cMesh = new THREE.Mesh(cGeom, this.corridorMat);
       cMesh.position.set(cfg.center.x, 0, cfg.center.z);
-      cMesh.receiveShadow = true;
+      cMesh.receiveShadow = false;
       this.ringsGroup.add(cMesh);
     });
 
@@ -678,11 +684,14 @@ export class WorkcellScene {
       this.sweeperMat.opacity = isDark ? 0.18 : 0.10;
     }
 
-    // Center Concave Dish & Contour Rings Theme
+    // Center Concave Dish & Corridor Ridges Theme
     if (this.centerDishMat) {
-      this.centerDishMat.color.setHex(cfg.platform);
-      this.centerDishMat.roughness = cfg.platformRoughness;
-      this.centerDishMat.metalness = cfg.platformMetalness;
+      this.centerDishMat.color.setHex(cfg.gridCenter);
+      this.centerDishMat.opacity = isDark ? 0.22 : 0.14;
+    }
+    if (this.corridorMat) {
+      this.corridorMat.color.setHex(cfg.gridCenter);
+      this.corridorMat.opacity = isDark ? 0.18 : 0.12;
     }
     if (this.contourRings) {
       this.contourRings.forEach(rm => {
