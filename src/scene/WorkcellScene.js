@@ -79,6 +79,13 @@ export class WorkcellScene {
       { total: 0, counts: [0, 0, 0, 0] },
       { total: 0, counts: [0, 0, 0, 0] }
     ];
+    this.armAnimatedCounts = [
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0]
+    ];
+    this.armAnimatedTotal = [0, 0, 0, 0];
     this.currentThemeKey = 'light_studio';
     this.forceHudUpdate = true;
 
@@ -183,8 +190,11 @@ export class WorkcellScene {
   /**
    * Renders the dynamic Pie Chart HUD for a specific robot arm station
    * depicting the exact composition of ball colors currently inside its defense circle.
+   * - Desaturated matte color palette matching the 4 robot arm native paints
+   * - Clean minimalist wedges with NO interior numbers or percentage badges
+   * - 20-ball capacity gauge display for circles with < 20 balls
    */
-  renderArmPieHUD(armIdx, distribution, isDark) {
+  renderArmPieHUD(armIdx, animatedCounts, animatedTotal, isDark) {
     const ctx = this.armHudCtxs[armIdx];
     const canvas = this.armHudCanvases[armIdx];
     if (!ctx || !canvas) return;
@@ -197,16 +207,30 @@ export class WorkcellScene {
 
     ctx.clearRect(0, 0, w, h);
 
-    const teamColors = ['#ffcb05', '#ff5500', '#e60026', '#00f0ff'];
-    const teamGlows = [
-      'rgba(255, 203, 5, 0.48)',
-      'rgba(255, 85, 0, 0.48)',
-      'rgba(230, 0, 38, 0.48)',
-      'rgba(0, 240, 255, 0.48)'
+    // Desaturated, elegant color palette perfectly matching each robot arm's native paint
+    // Alpha = Fanuc Yellow (#ffcb05), Beta = Kuka Orange (#e65100), Gamma = ABB White (#f8fafc), Delta = Cyber Cyan (#00f0ff)
+    const teamFills = [
+      'rgba(215, 175, 60, 0.65)',   // Fanuc Yellow (muted warm ochre)
+      'rgba(195, 100, 50, 0.65)',   // Kuka Orange (muted terracotta)
+      'rgba(175, 185, 200, 0.60)',  // ABB Slate White (muted cool platinum)
+      'rgba(55, 160, 175, 0.65)'    // Cyber Cyan (muted slate teal)
     ];
-    const teamNames = ['ALPHA (YELLOW)', 'BETA (ORANGE)', 'GAMMA (RED)', 'DELTA (CYAN)'];
-    const nativeColor = teamColors[armIdx];
-    const nativeGlow = teamGlows[armIdx];
+
+    const teamDividers = [
+      'rgba(240, 205, 95, 0.85)',
+      'rgba(225, 130, 80, 0.85)',
+      'rgba(220, 228, 238, 0.85)',
+      'rgba(85, 195, 210, 0.85)'
+    ];
+
+    const teamStandbyGlows = [
+      'rgba(215, 175, 60, 0.18)',
+      'rgba(195, 100, 50, 0.18)',
+      'rgba(175, 185, 200, 0.16)',
+      'rgba(55, 160, 175, 0.18)'
+    ];
+
+    const teamNames = ['ALPHA (YELLOW)', 'BETA (ORANGE)', 'GAMMA (ABB WHITE)', 'DELTA (CYAN)'];
 
     const colPrimary = isDark ? '#00f0ff' : '#0284c7';
     const colSecondary = isDark ? '#00ff9d' : '#059669';
@@ -219,32 +243,46 @@ export class WorkcellScene {
     const rMid = 0.95 * scale;   // 304px
     const rOuter = 1.35 * scale; // 432px
 
-    const total = distribution ? distribution.total : 0;
-    const counts = distribution ? distribution.counts : [0, 0, 0, 0];
+    const counts = animatedCounts || [0, 0, 0, 0];
+    const MAX_CAPACITY = 20.0;
+    const activeSum = counts.reduce((acc, v) => acc + Math.max(0, v), 0);
+    const startAngle = -Math.PI / 2; // Start at 12 o'clock top
 
-    // 1. DYNAMIC PIE CHART WEDGES
-    if (total === 0) {
-      // Empty / Standby Ring in Native Arm Color
-      ctx.save();
-      const grad = ctx.createRadialGradient(cx, cy, rBase, cx, cy, rOuter);
-      grad.addColorStop(0, 'rgba(0, 0, 0, 0.0)');
-      grad.addColorStop(0.6, nativeGlow.replace('0.48', '0.12'));
-      grad.addColorStop(1, nativeGlow.replace('0.48', '0.22'));
-      ctx.fillStyle = grad;
+    // 1. GAUGE BACKGROUND TRACK & 20-BALL CAPACITY INDICATORS
+    ctx.save();
+    // Base track fill between rBase and rOuter
+    const trackBg = isDark ? 'rgba(255, 255, 255, 0.035)' : 'rgba(15, 23, 42, 0.045)';
+    ctx.fillStyle = trackBg;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rOuter, 0, Math.PI * 2);
+    ctx.arc(cx, cy, rBase, Math.PI * 2, 0, true);
+    ctx.fill();
+
+    // 20 Subtle radial notch dividers across the 360 degree circle (1 notch every 18 deg for capacity)
+    ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(15, 23, 42, 0.08)';
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 20; i++) {
+      const angle = startAngle + (i / 20) * Math.PI * 2;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
       ctx.beginPath();
-      ctx.arc(cx, cy, rOuter, 0, Math.PI * 2);
-      ctx.arc(cx, cy, rBase, Math.PI * 2, 0, true);
-      ctx.fill();
-      ctx.restore();
-    } else {
-      let currentAngle = -Math.PI / 2; // Start at 12 o'clock top
+      ctx.moveTo(cx + cos * (rBase + 6), cy + sin * (rBase + 6));
+      ctx.lineTo(cx + cos * (rOuter - 6), cy + sin * (rOuter - 6));
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // 2. DYNAMIC PIE CHART WEDGES (Clean, desaturated, no interior numbers)
+    if (activeSum > 0.02) {
+      let currentAngle = startAngle;
+      // If activeSum < 20, angle per ball is 2pi / 20. If activeSum >= 20, angle per ball is 2pi / activeSum
+      const anglePerUnit = activeSum < MAX_CAPACITY ? (Math.PI * 2 / MAX_CAPACITY) : (Math.PI * 2 / activeSum);
 
       for (let t = 0; t < 4; t++) {
-        const count = counts[t];
-        if (count <= 0) continue;
+        const count = Math.max(0, counts[t]);
+        if (count < 0.01) continue;
 
-        const fraction = count / total;
-        const sliceAngle = fraction * Math.PI * 2;
+        const sliceAngle = count * anglePerUnit;
         const nextAngle = currentAngle + sliceAngle;
 
         ctx.save();
@@ -254,74 +292,55 @@ export class WorkcellScene {
         ctx.arc(cx, cy, rBase, nextAngle, currentAngle, true);
         ctx.closePath();
 
-        // Vibrant Fill with soft gradient
+        // Soft Matte Desaturated Radial Fill
         const grad = ctx.createRadialGradient(cx, cy, rBase, cx, cy, rOuter);
-        grad.addColorStop(0, teamGlows[t].replace('0.48', '0.25'));
-        grad.addColorStop(0.6, teamGlows[t]);
-        grad.addColorStop(1, teamGlows[t].replace('0.48', '0.58'));
+        grad.addColorStop(0, teamFills[t].replace('0.65', '0.35').replace('0.60', '0.30'));
+        grad.addColorStop(0.7, teamFills[t]);
+        grad.addColorStop(1, teamFills[t].replace('0.65', '0.78').replace('0.60', '0.72'));
 
         ctx.fillStyle = grad;
         ctx.fill();
 
-        // Slice Outline / Divider Ray
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2.5;
+        // Clean Divider Stroke
+        ctx.strokeStyle = teamDividers[t];
+        ctx.lineWidth = 2.0;
         ctx.stroke();
         ctx.restore();
 
-        // Data Label Badge in the center of the slice
-        if (fraction >= 0.065) {
-          const midA = currentAngle + sliceAngle / 2;
-          const badgeR = rBase + (rOuter - rBase) * 0.56;
-          const bx = cx + Math.cos(midA) * badgeR;
-          const by = cy + Math.sin(midA) * badgeR;
-
-          ctx.save();
-          const pct = Math.round(fraction * 100) + '%';
-          const isOwn = t === armIdx;
-          const roleStr = isOwn ? 'OWN' : 'INTRUDER';
-          const countStr = `${count} ${count === 1 ? 'BALL' : 'BALLS'}`;
-
-          ctx.font = 'bold 22px "JetBrains Mono", monospace';
-          const pctWidth = ctx.measureText(pct).width;
-          const boxW = Math.max(88, pctWidth + 28);
-          const boxH = fraction >= 0.13 ? 48 : 28;
-
-          // Dark pill badge background
-          ctx.fillStyle = 'rgba(6, 9, 18, 0.88)';
-          ctx.strokeStyle = teamColors[t];
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.roundRect(bx - boxW / 2, by - boxH / 2, boxW, boxH, 6);
-          ctx.fill();
-          ctx.stroke();
-
-          // Percentage Text
-          ctx.fillStyle = '#ffffff';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.font = 'bold 20px "JetBrains Mono", monospace';
-          ctx.fillText(pct, bx, fraction >= 0.13 ? by - 8 : by);
-
-          // Sub-label (Count + Role)
-          if (fraction >= 0.13) {
-            ctx.fillStyle = isOwn ? '#00ff9d' : '#ffb300';
-            ctx.font = 'bold 10px "JetBrains Mono", monospace';
-            ctx.fillText(`${countStr} • ${roleStr}`, bx, by + 12);
-          }
-
-          ctx.restore();
-        }
-
         currentAngle = nextAngle;
       }
+
+      // If circle is filled < 20 balls, draw a clean gauge termination end cap line
+      if (activeSum < MAX_CAPACITY - 0.05) {
+        ctx.save();
+        ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.40)' : 'rgba(15, 23, 42, 0.35)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(currentAngle) * rBase, cy + Math.sin(currentAngle) * rBase);
+        ctx.lineTo(cx + Math.cos(currentAngle) * rOuter, cy + Math.sin(currentAngle) * rOuter);
+        ctx.stroke();
+        ctx.restore();
+      }
+    } else {
+      // Empty Standby Ring in Native Arm Color
+      ctx.save();
+      const grad = ctx.createRadialGradient(cx, cy, rBase, cx, cy, rOuter);
+      grad.addColorStop(0, 'rgba(0, 0, 0, 0.0)');
+      grad.addColorStop(0.6, teamStandbyGlows[armIdx]);
+      grad.addColorStop(1, teamStandbyGlows[armIdx]);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rOuter, 0, Math.PI * 2);
+      ctx.arc(cx, cy, rBase, Math.PI * 2, 0, true);
+      ctx.fill();
+      ctx.restore();
     }
 
-    // 2. TACTICAL OVERLAY MARKINGS & ENVELOPE RIMS
+    // 3. TACTICAL OVERLAY MARKINGS & ENVELOPE RIMS
     ctx.save();
     // Outer boundary ring (rOuter)
     ctx.strokeStyle = colPrimary;
-    ctx.lineWidth = 3.5;
+    ctx.lineWidth = 3.0;
     ctx.beginPath();
     ctx.arc(cx, cy, rOuter, 0, Math.PI * 2);
     ctx.stroke();
@@ -351,7 +370,7 @@ export class WorkcellScene {
 
     // Mid working envelope ring (rMid)
     ctx.strokeStyle = colSecondary;
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 2.0;
     ctx.setLineDash([14, 10]);
     ctx.beginPath();
     ctx.arc(cx, cy, rMid, 0, Math.PI * 2);
@@ -360,72 +379,57 @@ export class WorkcellScene {
 
     // Inner core defense ring (rCore)
     ctx.strokeStyle = colPrimary;
-    ctx.lineWidth = 2.0;
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
     ctx.arc(cx, cy, rCore, 0, Math.PI * 2);
     ctx.stroke();
 
     // Base collar (rBase)
     ctx.strokeStyle = colGhost;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.8;
     ctx.setLineDash([6, 6]);
     ctx.beginPath();
     ctx.arc(cx, cy, rBase, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
 
-    // 3. TOP TACTICAL HEADER BADGE
+    // 4. TOP TACTICAL HEADER (Minimal & Clean)
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = isDark ? '#ffffff' : '#0f172a';
-    ctx.font = 'bold 18px "JetBrains Mono", monospace';
-    const ownCount = counts[armIdx] || 0;
-    const foreignCount = total - ownCount;
-    const headerTitle = `ARM ${armIdx + 1} (${teamNames[armIdx]}) // ${total} BALLS IN CIRCLE`;
-    const subTitle = total > 0 ? `[${ownCount} OWN SECURED • ${foreignCount} INTRUDERS]` : '[CIRCLE CLEAR • 0 BALLS]';
+    ctx.font = 'bold 16px "JetBrains Mono", monospace';
+    const displayTotal = Math.round(animatedTotal || 0);
+    const ownCount = Math.round(counts[armIdx] || 0);
+    const foreignCount = Math.max(0, displayTotal - ownCount);
+    const headerTitle = `ARM ${armIdx + 1} (${teamNames[armIdx]}) // ${displayTotal}/20 CAPACITY`;
+    const subTitle = displayTotal > 0 ? `[${ownCount} OWN • ${foreignCount} INTRUDERS]` : '[CIRCLE CLEAR • 0/20]';
 
-    ctx.fillText(headerTitle, cx, cy - rOuter - 34);
+    ctx.fillText(headerTitle, cx, cy - rOuter - 32);
     ctx.font = '600 12px "JetBrains Mono", monospace';
     ctx.fillStyle = foreignCount > 0 ? '#ffb300' : '#00ff9d';
-    ctx.fillText(subTitle, cx, cy - rOuter - 15);
+    ctx.fillText(subTitle, cx, cy - rOuter - 14);
     ctx.restore();
 
     this.armHudTextures[armIdx].needsUpdate = true;
   }
 
   /**
-   * Updates all 4 Arm Pie Chart HUDs based on real-time ball territory distributions
+   * Updates all 4 Arm Pie Chart HUD targets based on real-time ball territory distributions
    */
   updateArmPieHUDs(distributions, isDark = null) {
     if (!distributions || distributions.length < 4) return;
-    const darkTheme = isDark !== null ? isDark : (this.currentThemeKey === 'dark_cyber' || this.currentThemeKey === 'cad_blueprint');
-
     for (let i = 0; i < 4; i++) {
       const dist = distributions[i];
-      const prev = this.armBallDistributions[i];
-
-      let changed = false;
-      if (!prev || dist.total !== prev.total) {
-        changed = true;
-      } else {
-        for (let t = 0; t < 4; t++) {
-          if (dist.counts[t] !== prev.counts[t]) {
-            changed = true;
-            break;
-          }
-        }
-      }
-
-      if (changed || this.forceHudUpdate) {
-        this.armBallDistributions[i] = {
-          total: dist.total,
-          counts: [...dist.counts]
-        };
-        this.renderArmPieHUD(i, dist, darkTheme);
-      }
+      this.armBallDistributions[i] = {
+        total: dist.total,
+        counts: [...dist.counts]
+      };
     }
-    this.forceHudUpdate = false;
+    if (isDark !== null) {
+      this.currentThemeKey = isDark ? 'dark_cyber' : 'light_studio';
+      this.forceHudUpdate = true;
+    }
   }
 
   renderTacticalHUD(isDark) {
@@ -580,6 +584,43 @@ export class WorkcellScene {
         mesh.rotation.y += deltaTime * (0.18 + idx * 0.04);
       });
     }
+
+    // Smooth continuous interpolation of Dynamic Pie Chart HUDs
+    const darkTheme = (this.currentThemeKey === 'dark_cyber' || this.currentThemeKey === 'cad_blueprint');
+    const lerpRate = 8.5; // Smooth, fluid response without sluggish lag
+    const factor = 1 - Math.exp(-lerpRate * Math.min(deltaTime, 0.1));
+
+    for (let i = 0; i < 4; i++) {
+      let needsRender = false;
+      const targetCounts = this.armBallDistributions[i]?.counts || [0, 0, 0, 0];
+      const targetTotal = this.armBallDistributions[i]?.total || 0;
+
+      for (let t = 0; t < 4; t++) {
+        const target = targetCounts[t];
+        const diff = target - this.armAnimatedCounts[i][t];
+        if (Math.abs(diff) > 0.003) {
+          this.armAnimatedCounts[i][t] += diff * factor;
+          needsRender = true;
+        } else if (this.armAnimatedCounts[i][t] !== target) {
+          this.armAnimatedCounts[i][t] = target;
+          needsRender = true;
+        }
+      }
+
+      const diffTot = targetTotal - this.armAnimatedTotal[i];
+      if (Math.abs(diffTot) > 0.003) {
+        this.armAnimatedTotal[i] += diffTot * factor;
+        needsRender = true;
+      } else if (this.armAnimatedTotal[i] !== targetTotal) {
+        this.armAnimatedTotal[i] = targetTotal;
+        needsRender = true;
+      }
+
+      if (needsRender || this.forceHudUpdate) {
+        this.renderArmPieHUD(i, this.armAnimatedCounts[i], this.armAnimatedTotal[i], darkTheme);
+      }
+    }
+    this.forceHudUpdate = false;
   }
 
   toggleSafetyCurtain(visible) {
