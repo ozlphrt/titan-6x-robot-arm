@@ -912,7 +912,7 @@ export class BallInterceptor {
           const graspThreshold = ap.throwBall.radius + 0.16; // Generous reach for open 26cm jaws
 
           if ((distToBall <= graspThreshold || (ap.throwTimer > 0.35 && distToBall <= graspThreshold + 0.10)) && now > (ap.throwBall.lastPushTime || 0)) {
-            // Initiate Visible Clamping Phase (0.10s pause for visible jaw closure & LED flash)
+            // Initiate Visible Clamping Phase (0.08s smooth jaw closure)
             robot.setGripper(1.0);
             ap.heldBall = ap.throwBall;
             ap.heldBall.isHeld = true;
@@ -921,8 +921,10 @@ export class BallInterceptor {
             this.audio.playPneumatic(true);
 
             ap.throwState = 'CLAMPING';
-            ap.throwTimer = 0.10;
+            ap.throwTimer = 0.08;
             ap.graspStartPos = tcpPos.clone();
+            ap.graspJointAngles = [...robot.jointAngles];
+            ap.graspTele = robot.telescope;
 
             if (ap.throwMode === 'CENTER_STRIKE') {
               const targetPos = (ap.centerTargetBall && ap.centerTargetBall.mesh) ? ap.centerTargetBall.mesh.position : new THREE.Vector3(0, 0.065, 0);
@@ -980,7 +982,7 @@ export class BallInterceptor {
           } else {
             ap.throwState = 'WINDUP';
             const alpha = ap.throwPowerRatio || 0.5;
-            ap.throwTimer = 0.28 + 0.12 * alpha; // Proportional windup time
+            ap.throwTimer = 0.32 + 0.10 * alpha; // Smooth proportional lift & windup time
             ap.windupDuration = ap.throwTimer;
           }
         }
@@ -1043,37 +1045,49 @@ export class BallInterceptor {
           ap.throwState = 'IDLE';
         }
       } else if (ap.throwState === 'WINDUP') {
-        // 1. Compute Base Yaw (J1) locked directly onto targetThrowDir in robot local space
+        // Smooth continuous lift & windup from exact grasp pose
+        const startJ = ap.graspJointAngles || [0, -0.45, -0.55, 0, 0.60, 0];
+        const startTele = (ap.graspTele !== undefined) ? ap.graspTele : 0.40;
+
+        // Target Base Yaw (J1) aligned directly with targetThrowDir in robot local space
         const localDir = ap.targetThrowDir.clone();
         const invRot = robot.group.quaternion.clone().invert();
         localDir.applyQuaternion(invRot);
-        const j1 = Math.atan2(localDir.x, localDir.z);
+        const targetJ1 = Math.atan2(localDir.x, localDir.z);
+
+        // Shortest angular rotation path for J1
+        let diffJ1 = targetJ1 - startJ[0];
+        while (diffJ1 > Math.PI) diffJ1 -= Math.PI * 2;
+        while (diffJ1 < -Math.PI) diffJ1 += Math.PI * 2;
 
         const wDuration = ap.windupDuration || 0.35;
         const windT = Math.max(0, Math.min(1.0, 1.0 - ap.throwTimer / wDuration));
-        const p = windT * windT * (3.0 - 2.0 * windT);
+        // Quintic smoothstep for zero-jerk acceleration from grasp into cocked stance
+        const p = windT * windT * windT * (windT * (windT * 6.0 - 15.0) + 10.0);
         const alpha = ap.throwPowerRatio || 0.5;
 
-        let j2, j3, j4 = 0, j5, j6 = 0, tele;
+        const j1 = startJ[0] + diffJ1 * p;
+        let targetJ2, targetJ3, targetJ5, targetTele;
 
         if (ap.throwMode === 'CENTER_STRIKE') {
-          // Precision low bowling windup along line of sight
-          j2 = -0.45 + (-0.20 - (-0.45)) * p;
-          j3 = -0.55 + (-0.95 - (-0.55)) * p;
-          j5 = 0.60 + (0.75 - 0.60) * p;
-          tele = 0.40 - 0.30 * p;
+          targetJ2 = -0.20;
+          targetJ3 = -0.95;
+          targetJ5 = 0.75;
+          targetTele = 0.10;
         } else {
-          // Cocking depth proportional to aimed distance and speed
-          const targetJ2 = -0.20 + 0.15 * (1.0 - alpha);
-          const targetJ3 = -0.90 - 0.40 * alpha;
-          const targetJ5 = 0.68 + 0.20 * alpha;
-          const targetTele = 0.40 - 0.35 * alpha;
-
-          j2 = -0.45 + (targetJ2 - (-0.45)) * p;
-          j3 = -0.55 + (targetJ3 - (-0.55)) * p;
-          j5 = 0.60 + (targetJ5 - 0.60) * p;
-          tele = 0.40 + (targetTele - 0.40) * p;
+          // Dynamic cocking pose proportional to aimed distance and speed
+          targetJ2 = -0.20 + 0.15 * (1.0 - alpha);
+          targetJ3 = -0.90 - 0.40 * alpha;
+          targetJ5 = 0.68 + 0.20 * alpha;
+          targetTele = 0.40 - 0.35 * alpha;
         }
+
+        const j2 = startJ[1] + (targetJ2 - startJ[1]) * p;
+        const j3 = startJ[2] + (targetJ3 - startJ[2]) * p;
+        const j4 = startJ[3] + (0 - startJ[3]) * p;
+        const j5 = startJ[4] + (targetJ5 - startJ[4]) * p;
+        const j6 = startJ[5] + (0 - startJ[5]) * p;
+        const tele = startTele + (targetTele - startTele) * p;
 
         robot.setJointAngles([j1, j2, j3, j4, j5, j6]);
         robot.setTelescope(tele);
