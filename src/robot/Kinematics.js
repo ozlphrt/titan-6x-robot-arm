@@ -207,7 +207,7 @@ export class Kinematics {
     if (!applyImmediately) {
       // Restore physical robot angles so servo motors can smoothly drive them without teleporting
       this.robot.angles = [...initialAngles];
-      this.robot.telescopeExtension = initialTelescope;
+      this.robot.setTelescope(initialTelescope);
       this.robot.setTargetJointAngles(solvedAngles);
       this.robot.setTargetTelescope(solvedTelescope);
       this.robot.applyJointAngles();

@@ -917,13 +917,17 @@ export class BallInterceptor {
       // Check stuck status for all opponent balls in this arm's zone
       for (let i = 0; i < this.balls.length; i++) {
         const b = this.balls[i];
-        if (!b || !b.mesh || b.isHeld || (now < (b.lastPushTime || 0))) continue;
+        if (!b || !b.mesh || b.isHeld) continue;
         const pos = b.mesh.position;
 
         const isOwnColor = (b.teamId === armTeam);
         const dxBase = pos.x - basePos.x;
         const dzBase = pos.z - basePos.z;
         const distBase = Math.hypot(dxBase, dzBase);
+        const isAlienInBase = (!isOwnColor && distBase <= 1.45);
+
+        // Alien balls in territory ignore residual cooldown timers to ensure immediate action
+        if (!isAlienInBase && (now < (b.lastPushTime || 0))) continue;
 
         // Instant stuck detection: opponent ball lingering in circle without leaving
         if (!isOwnColor && distBase <= 1.45) {
@@ -934,8 +938,8 @@ export class BallInterceptor {
             b.stuckTime = Math.max(0, (b.stuckTime || 0) - deltaTime * 0.8);
           }
 
-          // If ball has been stuck for > 0.08s, immediately initiate Grab & Catapult Eject
-          if (b.stuckTime > 0.08 && ap.throwState === 'IDLE') {
+          // If ball has been stuck for > 0.05s, immediately initiate Grab & Catapult Eject
+          if (b.stuckTime > 0.05 && ap.throwState === 'IDLE') {
             ap.throwState = 'APPROACH';
             ap.throwMode = 'EJECT';
             ap.throwBall = b;
@@ -948,9 +952,9 @@ export class BallInterceptor {
         // --- Active Direct Grasp Trigger on Approach for Intruder Balls ---
         if (ap.throwState === 'IDLE') {
           const distToTcp = pos.distanceTo(tcpPos);
-          const isDirectContact = (distToTcp <= b.radius + 0.12);
+          const isDirectContact = (distToTcp <= b.radius + 0.16);
 
-          if (isDirectContact && pos.y >= 0.02 && (now - (b.lastPushTime || 0)) > 60) {
+          if (isDirectContact && pos.y >= 0.02) {
             const isOwnColor = (b.teamId === armTeam);
             const hDistBase = Math.hypot(pos.x - basePos.x, pos.z - basePos.z);
 
@@ -961,7 +965,7 @@ export class BallInterceptor {
               ap.throwBall = b;
               ap.throwTimer = 0;
               robot.setGripper(0.0);
-            } else if (isOwnColor && hDistBase > 1.35 && hDistBase <= 2.15) {
+            } else if (isOwnColor && hDistBase > 1.35 && hDistBase <= 2.15 && (now - (b.lastPushTime || 0)) > 60) {
               // Initiate Grab & Retrieve for outside own ball
               ap.throwState = 'APPROACH';
               ap.throwMode = 'RETRIEVE_CARRY';
@@ -1024,8 +1028,11 @@ export class BallInterceptor {
         robot.setGripper(0.0); // Open wide!
         ap.throwTimer += deltaTime;
 
+        const isAlienInBase = ap.throwBall && ap.throwBall.teamId !== armTeam && Math.hypot(ap.throwBall.mesh.position.x - basePos.x, ap.throwBall.mesh.position.z - basePos.z) <= 1.45;
+        const isPushCooling = (now < (ap.throwBall?.lastPushTime || 0)) && !isAlienInBase;
+
         // Failsafe timeout or target invalidation (including balls currently in ballistic flight)
-        if (!ap.throwBall || !ap.throwBall.mesh || (ap.throwBall.isHeld && ap.heldBall !== ap.throwBall) || (now < (ap.throwBall.lastPushTime || 0))) {
+        if (!ap.throwBall || !ap.throwBall.mesh || (ap.throwBall.isHeld && ap.heldBall !== ap.throwBall) || isPushCooling) {
           ap.throwBall = null;
           ap.centerTargetBall = null;
           ap.throwMode = 'EJECT';
@@ -1038,9 +1045,9 @@ export class BallInterceptor {
           ap.pursuitTarget.set(ballPos.x, targetY, ballPos.z);
 
           const distToBall = tcpPos.distanceTo(ballPos);
-          const graspThreshold = ap.throwBall.radius + 0.24; // Immediate generous reach for open jaws
+          const graspThreshold = ap.throwBall.radius + 0.28; // Immediate generous reach for open jaws
 
-          if (distToBall <= graspThreshold && now > (ap.throwBall.lastPushTime || 0)) {
+          if (distToBall <= graspThreshold) {
             // Initiate Smooth Clamping Phase (0.06s progressive jaw closure)
             ap.throwState = 'CLAMPING';
             ap.clampDuration = 0.06;
@@ -1122,12 +1129,12 @@ export class BallInterceptor {
               robot.setTargetTelescope(savedTele);
               robot.setTelescope(savedTele);
             }
-          } else if (distToBall <= 0.38 && ap.throwTimer > 0.6) {
-            // CORNER / EDGE RAKE: Close enough but blocked from full clamping
+          } else if (distToBall <= 0.42 && ap.throwTimer > 0.35) {
+            // CORNER / EDGE RAKE: Close enough but blocked from full clamping - perform instant kinetic swat
             if (ap.throwMode === 'RETRIEVE_CARRY') {
               const pushDir = new THREE.Vector3(ap.basePos.x - ballPos.x, 0, ap.basePos.z - ballPos.z).normalize();
               ap.throwBall.velocity.set(pushDir.x * 4.5, 0.85, pushDir.z * 4.5);
-              ap.throwBall.lastPushTime = now + 100;
+              ap.throwBall.lastPushTime = now + 80;
               ap.throwBall.isHeld = false;
               this.audio.playPneumatic(false);
               if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.2);
@@ -1137,7 +1144,7 @@ export class BallInterceptor {
               if (pushDir.lengthSq() < 0.001) pushDir.set(ballPos.x - ap.basePos.x, 0, ballPos.z - ap.basePos.z).normalize();
 
               ap.throwBall.velocity.set(pushDir.x * 6.5, 1.35, pushDir.z * 6.5);
-              ap.throwBall.lastPushTime = now + 100;
+              ap.throwBall.lastPushTime = now + 80;
               ap.throwBall.isHeld = false;
               this.audio.playPneumatic(false);
               if (typeof this.audio.playArmSwat === 'function') this.audio.playArmSwat(1.3);
@@ -1152,10 +1159,10 @@ export class BallInterceptor {
             ap.centerTargetBall = null;
             ap.throwMode = 'EJECT';
             ap.throwState = 'IDLE';
-          } else if (ap.throwTimer > 1.2) {
-            // Rapid 1.2s timeout for maximum reach extension
-            if (ap.throwBall) {
-              ap.throwBall.lastPushTime = now + 100;
+          } else if (ap.throwTimer > 0.75) {
+            // Rapid 0.75s timeout to re-acquire target without stalling
+            if (ap.throwBall && !isAlienInBase) {
+              ap.throwBall.lastPushTime = now + 80;
             }
             robot.getTCPWorldPosition(tcpPos);
             ap.pursuitPos.copy(tcpPos);
@@ -1565,7 +1572,7 @@ export class BallInterceptor {
         const basePos = ap.basePos;
         for (let i = 0; i < this.balls.length; i++) {
           const b = this.balls[i];
-          if (!b || !b.mesh || b.isHeld || b.teamId === armTeam || (now < (b.lastPushTime || 0))) continue;
+          if (!b || !b.mesh || b.isHeld || b.teamId === armTeam) continue;
           const pos = b.mesh.position;
           const hDist = Math.hypot(pos.x - basePos.x, pos.z - basePos.z);
           if (hDist <= 1.35 && pos.y >= 0.02 && pos.y <= 1.85) {
@@ -1592,14 +1599,16 @@ export class BallInterceptor {
 
         for (let i = 0; i < this.balls.length; i++) {
           const b = this.balls[i];
-          if (!b || !b.mesh || b.isHeld || (now < (b.lastPushTime || 0))) continue;
+          if (!b || !b.mesh || b.isHeld) continue;
+          const isOwnColor = (b.teamId === armTeam);
           const pos = b.mesh.position;
           const hDist = Math.hypot(pos.x - basePos.x, pos.z - basePos.z);
+          const isAlienInBase = (!isOwnColor && hDist <= 1.35);
+
+          if (!isAlienInBase && (now < (b.lastPushTime || 0))) continue;
 
           // Full extended reach envelope covering defense station and boundary corridors (r <= 2.15m)
           if (hDist > 2.15 || pos.y < 0.02) continue;
-
-          const isOwnColor = (b.teamId === armTeam);
 
           // ABSOLUTE DEFENSE RULE: While ANY alien intruder ball is inside the circle (r <= 1.35), clear intruder first
           if (hasAlienBallsInBase && isOwnColor) {

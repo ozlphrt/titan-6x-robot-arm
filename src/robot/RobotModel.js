@@ -86,10 +86,10 @@ export class RobotModel {
     // Joint Angle Limits in Degrees (Wide Industrial Range to Reach All Ground Circles)
     this.limits = [
       { min: -180, max: 180 }, // J1: Base Yaw (Full 360° rotation)
-      { min: -145, max: 65 },  // J2: Shoulder Pitch (Deep forward & downward reach)
-      { min: -165, max: 85 },  // J3: Elbow Pitch (Deep folding for inner circles + extended reaching)
+      { min: -155, max: 85 },  // J2: Shoulder Pitch (Deep forward & downward reach)
+      { min: -175, max: 155 }, // J3: Elbow Pitch (Deep folding for inner circles + extended reaching)
       { min: -180, max: 180 }, // J4: Forearm Roll (Full 360° axial roll)
-      { min: -145, max: 145 }, // J5: Wrist Pitch (Perpendicular ground alignment)
+      { min: -155, max: 155 }, // J5: Wrist Pitch (Perpendicular ground alignment)
       { min: -360, max: 360 }  // J6: Tool Roll (Continuous flange spin)
     ];
 
@@ -851,48 +851,9 @@ export class RobotModel {
   }
 
   /**
-   * Enforces physical solid body non-penetration constraints:
-   * Prevents upper arm, elbow, forearm, or wrist from passing through the solid base pedestal core or floor.
+   * Enforces physical solid body mechanical limits across all 6 axes.
    */
   enforceSolidArmPhysics(angles) {
-    // 1. Clamp to mechanical limits
-    for (let i = 0; i < 6; i++) {
-      const limit = this.limits[i];
-      const minRad = THREE.MathUtils.degToRad(limit.min);
-      const maxRad = THREE.MathUtils.degToRad(limit.max);
-      angles[i] = Math.max(minRad, Math.min(maxRad, angles[i]));
-    }
-
-    // 2. Solid Base Turntable & Ground Clearance Enforcement
-    const shoulderY = 0.48; // Base height + shoulder yoke height
-    const j2 = angles[1];
-    const j3 = angles[2];
-
-    const upperLen = this.dimensions.upperArmLength;
-    const rElbow = -Math.sin(j2) * upperLen;
-    const yElbow = shoulderY + Math.cos(j2) * upperLen;
-
-    const foreLen = this.dimensions.forearmLength;
-    const armAngle2 = j2 + j3;
-    const rWrist = rElbow - Math.sin(armAngle2) * foreLen;
-    const yWrist = yElbow + Math.cos(armAngle2) * foreLen;
-
-    // Solid Floor Clearance (allow reaching directly onto base plate circles at y=0.003)
-    if (yWrist < 0.012) {
-      const deficit = 0.012 - yWrist;
-      angles[1] -= deficit * 0.25;
-    }
-
-    // Solid Base Turntable Core (Radius <= 0.23m, Height <= 0.38m)
-    const baseCoreRadius = 0.23;
-    const baseCoreHeight = 0.38;
-    if (Math.abs(rWrist) < baseCoreRadius && yWrist < baseCoreHeight) {
-      if (angles[1] > -0.15) {
-        angles[1] = -0.15;
-      }
-    }
-
-    // Re-clamp to limits
     for (let i = 0; i < 6; i++) {
       const limit = this.limits[i];
       const minRad = THREE.MathUtils.degToRad(limit.min);
