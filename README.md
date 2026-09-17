@@ -1,6 +1,21 @@
-# 🦾 TITAN-6X | Industrial 3D Robot Arm Digital Twin
+# 🦾 TITAN-6X | Outward Circle Defense & Ball Pushing Mechanics
 
-A high-fidelity, interactive 6-DOF industrial robot arm simulation with **telescoping forearm extension**, **3D Boids flocking aerodynamics**, **autonomous mid-air catch AI**, **physical arm body collision deflections**, and a **multi-schema acoustic engine** built with Three.js and Vite.
+## Summary of Changes
+1. **New Game Rule & Outward Circle Defense Mechanics**:
+   - Transitioned gameplay from "catching and bursting balls on contact" to **active outward circle defense**.
+   - Each robot arm actively protects its $1.35\text{m}$ radius perimeter base station.
+   - When a ball enters or approaches an arm's circle zone, the arm calculates an outward strike vector ($\mathbf{v}_{\text{out}}$) radiating away from its base station, positions its TCP slightly behind the ball, and drives outward to swat/push the ball away toward the arena center or neighboring stations.
+   - Applied physical push impulses with uplifting arc trajectories ($v_{\text{push}} \approx 2.1 - 2.8\text{ m/s}, v_y \approx 0.50 - 0.85\text{ m/s}$), elastic squashing, and bounce dynamics.
+   - Added dynamic outward spark bursts and expanding shockwave ripple rings at contact points.
+   - Robot arm link colliders also deflect incoming balls outward away from station bases.
+2. **UI & HUD Updates**:
+   - Updated top bar button and score chip: `Push AI: ON` / `PUSHED: [count]`.
+   - Updated control panel drawer section: **Circle Defense & Push AI**, **DEFENSE SCORE**, and **BALLS PUSHED**.
+   - Updated shortcut hints and description text across the interface.
+
+## Verification
+- Project built cleanly with `npm run build` (0 errors).
+- All changes committed and pushed to `main` at `https://github.com/ozlphrt/titan-6x-robot-arm`.
 
 ---
 
