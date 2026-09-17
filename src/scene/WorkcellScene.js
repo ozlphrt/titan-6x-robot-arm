@@ -113,18 +113,18 @@ export class WorkcellScene {
       this.sweeperMeshes.push(sweeper);
     });
 
-    // 5. Central Shared Interaction Arena - Smooth Concave Dish
-    this.createCenterConcaveDish();
+    // 5. Central Shared Interaction Arena - Smooth Convex Dome
+    this.createCenterConvexDome();
 
     this.scene.add(this.ringsGroup);
   }
 
-  createCenterConcaveDish() {
-    const bowlRadius = 0.82;
-    const bowlDepth = 0.038;
+  createCenterConvexDome() {
+    const domeRadius = 0.82;
+    const domeHeight = 0.038;
 
-    // Create smooth high-tessellation concave dish geometry
-    const geom = new THREE.PlaneGeometry(bowlRadius * 2, bowlRadius * 2, 72, 72);
+    // Create smooth high-tessellation convex dome geometry
+    const geom = new THREE.PlaneGeometry(domeRadius * 2, domeRadius * 2, 72, 72);
     geom.rotateX(-Math.PI / 2);
 
     const posAttr = geom.attributes.position;
@@ -133,9 +133,9 @@ export class WorkcellScene {
       const z = posAttr.getZ(i);
       const r = Math.hypot(x, z);
 
-      if (r <= bowlRadius) {
-        // Smooth C1 cosine concave depression
-        const y = -(bowlDepth / 2) * (1 + Math.cos((Math.PI * r) / bowlRadius));
+      if (r <= domeRadius) {
+        // Smooth C1 cosine convex dome elevation
+        const y = (domeHeight / 2) * (1 + Math.cos((Math.PI * r) / domeRadius));
         posAttr.setY(i, y);
       } else {
         posAttr.setY(i, 0);
@@ -154,7 +154,7 @@ export class WorkcellScene {
     this.centerDishMesh.receiveShadow = true;
     this.ringsGroup.add(this.centerDishMesh);
 
-    // Decorative Concentric Contour Elevation Rings indicating concave depth
+    // Decorative Concentric Contour Elevation Rings indicating convex elevation
     const contourRadii = [0.25, 0.50, 0.75, 0.82];
     this.contourRings = [];
 
@@ -162,7 +162,7 @@ export class WorkcellScene {
       const ringGeo = new THREE.RingGeometry(r - 0.007, r + 0.007, 64);
       ringGeo.rotateX(-Math.PI / 2);
 
-      const y = -(bowlDepth / 2) * (1 + Math.cos((Math.PI * r) / bowlRadius)) + 0.0015;
+      const y = (domeHeight / 2) * (1 + Math.cos((Math.PI * r) / domeRadius)) + 0.0015;
 
       const ringMat = new THREE.MeshBasicMaterial({
         color: 0x0284c7,

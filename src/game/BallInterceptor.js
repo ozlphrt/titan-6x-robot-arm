@@ -288,20 +288,22 @@ export class BallInterceptor {
 
   /**
    * Returns precise floor elevation and surface normal across the arena,
-   * including the smooth concave center dish (r <= 0.82m, depth = 0.038m).
+   * including the smooth convex center dome (r <= 0.82m, height = 0.038m).
    */
   getFloorInfo(x, z) {
     const r = Math.hypot(x, z);
-    const bowlRadius = 0.82;
-    const bowlDepth = 0.038;
+    const domeRadius = 0.82;
+    const domeHeight = 0.038;
 
-    if (r <= bowlRadius) {
-      const angle = (Math.PI * r) / bowlRadius;
-      const yFloor = -(bowlDepth / 2) * (1 + Math.cos(angle));
-      // Radial slope dy/dr
-      const slope = (bowlDepth * Math.PI) / (2 * bowlRadius) * Math.sin(angle);
-      const nx = r > 0.0001 ? -(slope * x / r) : 0;
-      const nz = r > 0.0001 ? -(slope * z / r) : 0;
+    if (r <= domeRadius) {
+      const angle = (Math.PI * r) / domeRadius;
+      // Convex mound profile: y = +(domeHeight / 2) * (1 + cos(angle))
+      const yFloor = (domeHeight / 2) * (1 + Math.cos(angle));
+      // Radial slope magnitude
+      const slope = (domeHeight * Math.PI) / (2 * domeRadius) * Math.sin(angle);
+      // For a convex dome, outward slope tilts outward away from center (+x, +z)
+      const nx = r > 0.0001 ? (slope * x / r) : 0;
+      const nz = r > 0.0001 ? (slope * z / r) : 0;
       const ny = 1.0;
       const len = Math.hypot(nx, ny, nz);
 
@@ -309,7 +311,7 @@ export class BallInterceptor {
         y: yFloor,
         normal: new THREE.Vector3(nx / len, ny / len, nz / len),
         slope: slope,
-        inBowl: true,
+        inDome: true,
         r: r
       };
     }
@@ -318,13 +320,13 @@ export class BallInterceptor {
       y: 0.0,
       normal: new THREE.Vector3(0, 1, 0),
       slope: 0,
-      inBowl: false,
+      inDome: false,
       r: r
     };
   }
 
   /**
-   * Fast, Optimized 80-Ball Bouncing Physics with True Spherical Integrity & Concave Center Bowl
+   * Fast, Optimized 80-Ball Bouncing Physics with True Spherical Integrity & Convex Center Dome
    */
   updateBallPhysics(deltaTime) {
     const numBalls = this.balls.length;
@@ -349,17 +351,17 @@ export class BallInterceptor {
         // Integrate Position
         pos.addScaledVector(b.velocity, dt);
 
-        // Floor Elevation & Concave Surface Evaluation
+        // Floor Elevation & Convex Surface Evaluation
         const floor = this.getFloorInfo(pos.x, pos.z);
         const contactY = floor.y + b.radius;
 
-        // Concave Bowl Gravitational Inward Roll Acceleration
-        if (floor.inBowl && floor.r > 0.001) {
-          const inwardDirX = -pos.x / floor.r;
-          const inwardDirZ = -pos.z / floor.r;
-          const aInward = Math.abs(this.gravity) * floor.slope * 1.30;
-          b.velocity.x += inwardDirX * aInward * dt;
-          b.velocity.z += inwardDirZ * aInward * dt;
+        // Convex Dome Gravitational Outward Roll Acceleration
+        if (floor.inDome && floor.r > 0.001) {
+          const outwardDirX = pos.x / floor.r;
+          const outwardDirZ = pos.z / floor.r;
+          const aOutward = Math.abs(this.gravity) * floor.slope * 1.30;
+          b.velocity.x += outwardDirX * aOutward * dt;
+          b.velocity.z += outwardDirZ * aOutward * dt;
         }
 
         // Floor Contact & Damped Rubbery Bouncing
