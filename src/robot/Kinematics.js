@@ -95,10 +95,13 @@ export class Kinematics {
     const dy = localTarget.y - shoulderLocalY;
     const targetDist = Math.sqrt(hDist * hDist + dy * dy);
 
-    // 3. Adaptive Telescoping Extension
-    const baseArmReach = 0.65;
-    const maxArmReach = 2.10;
-    const desiredExt = Math.max(0, Math.min(1.0, (targetDist - baseArmReach) / (maxArmReach - baseArmReach)));
+    // 3. Adaptive Telescoping Extension (Retracted by default; only extends for long-distance boundary reaching)
+    const baseArmReach = 1.15;
+    const maxTelescopeExt = this.robot.dimensions.maxTelescopeExtension || 0.26;
+    let desiredExt = 0.0;
+    if (targetDist > baseArmReach) {
+      desiredExt = Math.max(0, Math.min(1.0, (targetDist - baseArmReach) / maxTelescopeExt));
+    }
     const currentExt = this.robot.getTelescope();
     const newExt = currentExt + (desiredExt - currentExt) * 0.75;
     this.robot.setTelescope(newExt);

@@ -80,8 +80,8 @@ export class RobotModel {
     this.targetAngles = [0, 0, 0, 0, 0, 0];
     // Joint angular velocities for smooth critically damped motion
     this.jointVelocities = [0, 0, 0, 0, 0, 0];
-    // Max angular speeds (rad/s) for high-performance industrial robotic tracking [J1..J6]
-    this.jointSpeeds = [4.5, 3.8, 4.5, 6.0, 6.0, 8.0]; // Realistic high-speed industrial servo cap
+    // Max angular speeds (rad/s) for smooth, high-precision industrial robotic tracking [J1..J6]
+    this.jointSpeeds = [2.2, 1.8, 2.2, 3.0, 3.0, 4.0];
 
     // Joint Angle Limits in Degrees (Wide Industrial Range to Reach All Ground Circles)
     this.limits = [
@@ -101,7 +101,7 @@ export class RobotModel {
       elbowOffset: 0.08,
       baseForearmLength: 0.44,
       forearmLength: 0.44,
-      maxTelescopeExtension: 0.72,
+      maxTelescopeExtension: 0.26,
       wristLength: 0.13,
       flangeLength: 0.05
     };
@@ -449,9 +449,9 @@ export class RobotModel {
     this.telescopeStage1 = new THREE.Group();
     this.telescopeStage1.name = 'Telescope_Stage1_Outer';
 
-    const stage1BarrelGeo = new THREE.CylinderGeometry(0.073, 0.080, 0.28, 32);
+    const stage1BarrelGeo = new THREE.CylinderGeometry(0.073, 0.080, 0.38, 32);
     const stage1Barrel = new THREE.Mesh(stage1BarrelGeo, this.materials.primaryPaint);
-    stage1Barrel.position.y = 0.15;
+    stage1Barrel.position.y = 0.20;
     stage1Barrel.castShadow = true;
     this.telescopeStage1.add(stage1Barrel);
 
@@ -460,7 +460,7 @@ export class RobotModel {
       new THREE.CylinderGeometry(0.082, 0.078, 0.025, 32),
       this.materials.jointBezel
     );
-    stage1Collar.position.y = 0.28;
+    stage1Collar.position.y = 0.39;
     this.telescopeStage1.add(stage1Collar);
 
     const stage1BezelTorus = new THREE.Mesh(
@@ -468,7 +468,7 @@ export class RobotModel {
       this.materials.primaryPaint
     );
     stage1BezelTorus.rotateX(Math.PI / 2);
-    stage1BezelTorus.position.y = 0.28;
+    stage1BezelTorus.position.y = 0.39;
     this.telescopeStage1.add(stage1BezelTorus);
 
     // External Linear Guide Rails & Hydraulic Booster Housings
@@ -476,28 +476,28 @@ export class RobotModel {
     [-0.086, 0.086].forEach(x => {
       // Guide rail spine on side of Stage 1
       const railMesh = new THREE.Mesh(
-        createRoundedBoxGeometry(0.018, 0.22, 0.02, 0.004, 2),
+        createRoundedBoxGeometry(0.018, 0.28, 0.02, 0.004, 2),
         this.materials.darkMetal
       );
-      railMesh.position.set(x, 0.12, 0);
+      railMesh.position.set(x, 0.16, 0);
       railMesh.castShadow = true;
       this.telescopeStage1.add(railMesh);
 
       // Hydraulic Actuator Cylinder Housing
       const cylMesh = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.013, 0.013, 0.20, 16),
+        new THREE.CylinderGeometry(0.013, 0.013, 0.26, 16),
         this.materials.darkMetal
       );
-      cylMesh.position.set(x * 1.05, 0.11, 0);
+      cylMesh.position.set(x * 1.05, 0.15, 0);
       cylMesh.castShadow = true;
       this.telescopeStage1.add(cylMesh);
 
       // Dynamic Extension Piston Rod inside side actuator
       const rodMesh = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.007, 0.007, 0.22, 16),
+        new THREE.CylinderGeometry(0.007, 0.007, 0.26, 16),
         this.materials.chromePiston
       );
-      rodMesh.position.set(x * 1.05, 0.13, 0);
+      rodMesh.position.set(x * 1.05, 0.17, 0);
       rodMesh.castShadow = true;
       this.telescopeStage1.add(rodMesh);
       this.sidePistonRods.push(rodMesh);
@@ -510,7 +510,7 @@ export class RobotModel {
     this.telescopeStage2.name = 'Telescope_Stage2_Mid';
     this.telescopeStage2.position.y = 0.0;
 
-    const stage2BarrelGeo = new THREE.CylinderGeometry(0.063, 0.066, 0.30, 32);
+    const stage2BarrelGeo = new THREE.CylinderGeometry(0.063, 0.066, 0.36, 32);
     const stage2Barrel = new THREE.Mesh(stage2BarrelGeo, this.materials.primaryPaint);
     stage2Barrel.position.y = 0.22;
     stage2Barrel.castShadow = true;
@@ -521,7 +521,7 @@ export class RobotModel {
       new THREE.CylinderGeometry(0.069, 0.066, 0.02, 32),
       this.materials.jointBezel
     );
-    stage2Collar.position.y = 0.37;
+    stage2Collar.position.y = 0.40;
     this.telescopeStage2.add(stage2Collar);
 
     // Metric laser etched stroke ring markers
@@ -531,7 +531,7 @@ export class RobotModel {
         this.materials.jointBezel
       );
       ring.rotateX(Math.PI / 2);
-      ring.position.y = 0.12 + m * 0.065;
+      ring.position.y = 0.14 + m * 0.065;
       this.telescopeStage2.add(ring);
     }
 
@@ -543,9 +543,9 @@ export class RobotModel {
     this.telescopeStage3.position.y = 0.0;
 
     // Mirror polished chrome / titanium telescoping inner shaft
-    const stage3RodGeo = new THREE.CylinderGeometry(0.052, 0.054, 0.36, 32);
+    const stage3RodGeo = new THREE.CylinderGeometry(0.052, 0.054, 0.38, 32);
     const stage3Rod = new THREE.Mesh(stage3RodGeo, this.materials.chromePiston);
-    stage3Rod.position.y = 0.30;
+    stage3Rod.position.y = 0.25;
     stage3Rod.castShadow = true;
     this.telescopeStage3.add(stage3Rod);
 
@@ -554,7 +554,7 @@ export class RobotModel {
       new THREE.CylinderGeometry(0.058, 0.054, 0.025, 32),
       this.materials.jointBezel
     );
-    stage3Neck.position.y = 0.47;
+    stage3Neck.position.y = 0.44;
     this.telescopeStage3.add(stage3Neck);
 
     this.j4.add(this.telescopeStage3);
@@ -822,12 +822,12 @@ export class RobotModel {
     // Dynamically update total forearm length
     this.dimensions.forearmLength = this.dimensions.baseForearmLength + ext * maxExt;
 
-    // Stage 2 (Mid Sleeve) extends outward
+    // Stage 2 (Mid Sleeve) extends outward with solid overlap
     if (this.telescopeStage2) {
-      this.telescopeStage2.position.y = ext * (maxExt * 0.48);
+      this.telescopeStage2.position.y = ext * (maxExt * 0.50);
     }
 
-    // Stage 3 (Inner Piston) extends full stroke
+    // Stage 3 (Inner Piston) extends full stroke with solid overlap
     if (this.telescopeStage3) {
       this.telescopeStage3.position.y = ext * maxExt;
     }
@@ -835,8 +835,8 @@ export class RobotModel {
     // Dynamic side booster actuator rods
     if (this.sidePistonRods) {
       this.sidePistonRods.forEach(rod => {
-        rod.scale.y = 1.0 + ext * 1.5;
-        rod.position.y = 0.10 + ext * (maxExt * 0.45);
+        rod.scale.y = 1.0 + ext * 0.5;
+        rod.position.y = 0.17 + ext * (maxExt * 0.45);
       });
     }
 
@@ -918,7 +918,7 @@ export class RobotModel {
    * using critically damped robotic servo motor dynamics (no teleportation/snapping).
    */
   updateServoMotors(deltaTime) {
-    const smoothTime = 0.055; // Smooth realistic industrial servo response time
+    const smoothTime = 0.080; // Smooth realistic industrial servo response time
     const omega = 2.0 / Math.max(0.01, smoothTime);
     const x = omega * deltaTime;
     const exp = 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x);
@@ -963,7 +963,7 @@ export class RobotModel {
     // 2. Smooth Telescopic Forearm Piston Motor
     const currentTele = this.telescopeExtension;
     const targetTele = this.targetTelescopeExtension;
-    const maxTeleSpeed = 3.2; // Realistic telescopic stroke rate
+    const maxTeleSpeed = 1.0; // Smooth realistic hydraulic telescopic stroke rate
 
     let teleChange = currentTele - targetTele;
     const teleMaxChange = maxTeleSpeed * smoothTime;
