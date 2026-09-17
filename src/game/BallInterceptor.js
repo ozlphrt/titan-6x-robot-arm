@@ -82,6 +82,7 @@ export class BallInterceptor {
 
     // Multi-Arm Pursuit & Defense States for all 4 Robot Arms
     this.armPursuits = this.robots.map((r, idx) => {
+      r.group.updateMatrixWorld(true);
       const basePos = new THREE.Vector3();
       r.group.getWorldPosition(basePos);
       const dirToCenter = new THREE.Vector3(-basePos.x, 0, -basePos.z).normalize();

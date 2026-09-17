@@ -86,6 +86,7 @@ class RobotApp {
     ];
 
     this.robots = armConfigs.map(cfg => new RobotModel(this.scene, cfg));
+    this.scene.updateMatrixWorld(true);
     this.kinematicsList = this.robots.map(r => new Kinematics(r));
     this.grippers = this.robots.map(r => new GripperController(r, this.workcell, this.audio));
     this.telemetries = this.robots.map((r, i) => new TelemetryManager(r, this.kinematicsList[i]));
@@ -1183,8 +1184,8 @@ class RobotApp {
         this.updateJointUI();
       }
 
-      // 1. Smooth IK Mouse Tracking with Critically Damped Ease-In and Ease-Out
-      if (this.isRightClickDragging || (this.ikCurrentPos && this.ikCurrentPos.distanceTo(this.ikTargetPos) > 0.001) || this.ikVelocity.lengthSq() > 0.0001) {
+      // 1. Smooth IK Mouse Tracking with Critically Damped Ease-In and Ease-Out (Only when in IK mode or right-click dragging)
+      if (this.isRightClickDragging || ((this.sequencer.currentMode === 'ik' || this.syncAllMode) && ((this.ikCurrentPos && this.ikCurrentPos.distanceTo(this.ikTargetPos) > 0.001) || this.ikVelocity.lengthSq() > 0.0001))) {
         const smoothTime = 0.22;
         const maxSpeed = 1.1;
 
